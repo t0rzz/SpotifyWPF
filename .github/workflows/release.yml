@@ -2,8 +2,16 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+      - master
+    paths:
+      - 'SpotifyWPF/SpotifyWPF.csproj'
+      - 'SpotifyWPF/app.manifest'
+      - 'SpotifyWPF.MSIX/Package.appxmanifest'
+
+permissions:
+  contents: write
 
 jobs:
   build-and-release:
@@ -22,6 +30,18 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Extract version
+        id: version
+        run: |
+          $csproj = Get-Content './SpotifyWPF/SpotifyWPF.csproj'
+          $m = Select-String -InputObject $csproj -Pattern '<Version>([^<]+)</Version>' -AllMatches
+          if (-not $m.Matches.Success) { Write-Error 'Version element not found in csproj.' }
+          $version = $m.Matches[0].Groups[1].Value.Trim()
+          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Detected version: $version"
+        shell: pwsh
+
       - name: Restore
         run: dotnet restore .\SpotifyWPF.sln
         shell: pwsh
@@ -32,8 +52,7 @@ jobs:
 
       - name: Create ZIP of Release binaries
         run: |
-          $tag = "$env:GITHUB_REF_NAME"
-          $zipName = "SpotifyWPF-$tag.zip"
+          $zipName = "SpotifyWPF-$env:VERSION.zip"
           $src = "${{ github.workspace }}\SpotifyWPF\bin\Release\net8.0-windows\*"
           $dst = "${{ github.workspace }}\$zipName"
           If (Test-Path $dst) { Remove-Item $dst -Force }
@@ -46,7 +65,7 @@ jobs:
           $out = "${{ github.workspace }}\artifacts\portable\win-x64"
           dotnet publish .\SpotifyWPF\SpotifyWPF.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o $out
           $exe = Join-Path $out 'SpotifyWPF.exe'
-          $dest = "${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}-portable-win-x64.exe"
+          $dest = "${{ github.workspace }}\SpotifyWPF-$env:VERSION-portable-win-x64.exe"
           Copy-Item $exe $dest -Force
           Write-Host "Portable EXE: $dest"
         shell: pwsh
@@ -59,7 +78,7 @@ jobs:
             /p:UapAppxPackageBuildMode=SideLoadOnly /p:AppxBundle=Never /p:AppxPackageSigningEnabled=false /p:AppxPackageDir="$out\"
           $msix = Get-ChildItem $out -Filter *.msix -Recurse | Select-Object -First 1
           if (-not $msix) { Write-Error 'MSIX package not found.' }
-          $dest = "${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.msix"
+          $dest = "${{ github.workspace }}\SpotifyWPF-$env:VERSION.msix"
           Copy-Item $msix.FullName $dest -Force
           Write-Host "MSIX: $dest"
         shell: pwsh
@@ -69,20 +88,21 @@ jobs:
         with:
           name: release-artifacts
           path: |
-            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.zip
-            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}-portable-win-x64.exe
-            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.msix
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.zip
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.msix
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref_name }}
-          name: SpotifyWPF ${{ github.ref_name }}
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: SpotifyWPF v${{ env.VERSION }}
           draft: false
           prerelease: false
           files: |
-            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.zip
-            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}-portable-win-x64.exe
-            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.msix
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.zip
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.msix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
