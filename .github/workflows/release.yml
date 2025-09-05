@@ -9,6 +9,7 @@ on:
       - 'SpotifyWPF/SpotifyWPF.csproj'
       - 'SpotifyWPF/app.manifest'
       - 'SpotifyWPF.MSIX/Package.appxmanifest'
+      - '.github/workflows/release.yml'
 
 permissions:
   contents: write
