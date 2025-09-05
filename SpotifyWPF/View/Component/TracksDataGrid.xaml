@@ -25,7 +25,6 @@
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   HeadersVisibility="Column"
-                  AlternatingRowBackground="WhiteSmoke"
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto"
                   extension:DataGridExtensions.VisibleChangedCommand="{Binding UpdateVisibilityCommand}"
@@ -33,12 +32,9 @@
 
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
-                <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists, Converter={StaticResource ArtistsToStringConverter}}"/>
-                <DataGridTextColumn Header="Album" Binding="{Binding Album.Name}"/>
-                <DataGridTextColumn Header="Disc #" Binding="{Binding DiscNumber}"/>
-                <DataGridTextColumn Header="Track #" Binding="{Binding TrackNumber}"/>
-                <DataGridTextColumn Header="Duration" Binding="{Binding DurationMs}"/>
-                <DataGridTextColumn Header="Popularity" Binding="{Binding Popularity}"/>
+                <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}"/>
+                <DataGridTextColumn Header="Album" Binding="{Binding AlbumName}"/>
+                <DataGridTextColumn Header="Duration (ms)" Binding="{Binding DurationMs}"/>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

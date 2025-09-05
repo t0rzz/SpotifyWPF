@@ -19,15 +19,12 @@
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   HeadersVisibility="Column"
-                  AlternatingRowBackground="WhiteSmoke"
                   viewExtension:DataGridExtensions.VisibleChangedCommand="{Binding UpdateVisibilityCommand}"
                   viewExtension:DataGridExtensions.ScrollChangedCommand="{Binding UpdateScrollCommand}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
-                <DataGridTextColumn Header="Collaborative" Binding="{Binding Collaborative}"/>
-                <DataGridTextColumn Header="Public" Binding="{Binding Public}"/>
-                <DataGridTextColumn Header="Owner" Binding="{Binding Owner.DisplayName}"/>
-                <DataGridTextColumn Header="# Tracks" Binding="{Binding Tracks.Total}"/>
+                <DataGridTextColumn Header="Created By" Binding="{Binding OwnerName}"/>
+                <DataGridTextColumn Header="# Tracks" Binding="{Binding TracksTotal}"/>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

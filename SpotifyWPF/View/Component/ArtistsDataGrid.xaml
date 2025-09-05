@@ -25,7 +25,6 @@
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   HeadersVisibility="Column"
-                  AlternatingRowBackground="WhiteSmoke"
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto"
                   viewExtension:DataGridExtensions.VisibleChangedCommand="{Binding UpdateVisibilityCommand}"
@@ -33,9 +32,7 @@
 
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" />
-                <DataGridTextColumn Header="Genre(s)"
-                                    Binding="{Binding Genres, Converter={StaticResource StringListToStringConverter}}" />
-                <DataGridTextColumn Header="Followers" Binding="{Binding Followers.Total}" />
+                <DataGridTextColumn Header="Followers" Binding="{Binding FollowersTotal}" />
                 <DataGridTextColumn Header="Popularity" Binding="{Binding Popularity}" />
             </DataGrid.Columns>
         </DataGrid>

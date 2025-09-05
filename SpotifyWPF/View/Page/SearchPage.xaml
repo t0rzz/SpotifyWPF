@@ -9,7 +9,7 @@
              DataContext="{Binding Search, Source={StaticResource Locator}}"    
              d:DesignHeight="450" d:DesignWidth="800">
 
-    <DockPanel>
+    <DockPanel LastChildFill="True">
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBar.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -22,22 +22,22 @@
                 </ItemsPanelTemplate>
             </StatusBar.ItemsPanel>
             <StatusBarItem>
-                <Label Content="{Binding Status}"/>
+                <TextBlock Text="{Binding Status}"/>
             </StatusBarItem>
             <StatusBarItem Grid.Column="1" HorizontalContentAlignment="Stretch">
-                <ProgressBar IsIndeterminate="True" Height="10" Visibility="{Binding ProgressVisibility}"/>
+                <ProgressBar IsIndeterminate="True" Visibility="{Binding ProgressVisibility}"/>
             </StatusBarItem>
         </StatusBar>
 
         <GroupBox DockPanel.Dock="Top" Header="Search Filters">
-            <WrapPanel>
-                <Label Content="Search keyword(s):"/>
-                <TextBox Text="{Binding SearchTerms, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,2,0" VerticalContentAlignment="Center" Width="200"/>
+            <WrapPanel VerticalAlignment="Center" Margin="2">
+                <TextBlock Text="Search keyword(s):" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding SearchTerms, UpdateSourceTrigger=PropertyChanged}" Width="280" VerticalContentAlignment="Center"/>
                 <Button Content="Search" Command="{Binding SearchCommand}"/>
             </WrapPanel>
         </GroupBox>
 
-        <Grid>
+        <Grid Margin="6">
             <TabControl SelectedIndex="{Binding SelectedTab}">
                 <TabItem Header="{Binding TracksResultsTitle}">
                    <component:TracksDataGrid DataContext="{Binding TracksDataGridViewModel}"/>

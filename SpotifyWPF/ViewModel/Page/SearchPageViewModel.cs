@@ -18,7 +18,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         private Visibility _progressVisibility = Visibility.Hidden;
 
-        private string _searchTerms;
+        private string _searchTerms = string.Empty;
 
         private string _status = "Ready";
 
@@ -61,7 +61,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
-        private string _playlistsResultsTitle = "PlaylistsPage";
+        private string _playlistsResultsTitle = "Playlists";
 
         public string PlaylistsResultsTitle
         {
@@ -173,24 +173,34 @@ namespace SpotifyWPF.ViewModel.Page
         {
             Status = "Searching...";
 
-            var searchItem = await _spotify.Api.Search.Item(new SearchRequest(SearchRequest.Types.All, SearchTerms));
+            // Autenticazione e soppressione nullability su Api
+            await _spotify.EnsureAuthenticatedAsync();
+            var req = new SearchRequest(SearchRequest.Types.All, SearchTerms);
+            var searchItem = await _spotify.Api!.Search.Item(req);
 
-            await TracksDataGridViewModel.InitializeAsync(SearchTerms, searchItem.Tracks);
-            await ArtistsDataGridViewModel.InitializeAsync(SearchTerms, searchItem.Artists);
-            await AlbumsDataGridViewModel.InitializeAsync(SearchTerms, searchItem.Albums);
-            await PlaylistsDataGridViewModel.InitializeAsync(SearchTerms, searchItem.Playlists);
+            var tracksDto = await _spotify.SearchTracksPageAsync(SearchTerms, 0, 20);
+            await TracksDataGridViewModel.InitializeAsync(SearchTerms, tracksDto);
+
+            var artistsDto = await _spotify.SearchArtistsPageAsync(SearchTerms, 0, 20);
+            await ArtistsDataGridViewModel.InitializeAsync(SearchTerms, artistsDto);
+
+            var albumsDto = await _spotify.SearchAlbumsPageAsync(SearchTerms, 0, 20);
+            await AlbumsDataGridViewModel.InitializeAsync(SearchTerms, albumsDto);
+
+            var playlistsDto = await _spotify.SearchPlaylistsPageAsync(SearchTerms, 0, 20);
+            await PlaylistsDataGridViewModel.InitializeAsync(SearchTerms, playlistsDto);
 
             await _tabs[SelectedTab].MaybeLoadUntilScrollable();
 
-            await Application.Current.Dispatcher.BeginInvoke((Action) (() =>
+            await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
             {
                 Status = "Ready";
             }));
         }
 
-        private void TabItemPropertyChanged(object sender, PropertyChangedEventArgs args)
+        private void TabItemPropertyChanged(object? sender, PropertyChangedEventArgs args)
         {
-            if (!(sender is IDataGridViewModel dataGridViewModel)) return;
+            if (sender is not IDataGridViewModel dataGridViewModel) return;
 
             if (args.PropertyName == "Loading")
             {

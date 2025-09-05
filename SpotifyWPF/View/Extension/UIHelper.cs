@@ -35,7 +35,8 @@ namespace SpotifyWPF.View.Extension
                 return FindParent<T>(parent);
             }
 
-            return null;
+            // Non trovato: sopprime avviso nullable, comportamento precedente era null
+            return null!;
         }
     }
 }

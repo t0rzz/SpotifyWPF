@@ -25,14 +25,12 @@
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   HeadersVisibility="Column"
-                  AlternatingRowBackground="WhiteSmoke"
                   Visibility="{Binding IsVisible}"
                   viewExtension:DataGridExtensions.VisibleChangedCommand="{Binding UpdateVisibilityCommand}"
                   viewExtension:DataGridExtensions.ScrollChangedCommand="{Binding UpdateScrollCommand}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
-                <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists, Converter={StaticResource ArtistsToStringConverter}}"/>
-                <DataGridTextColumn Header="Type" Binding="{Binding AlbumType}"/>
+                <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}"/>
                 <DataGridTextColumn Header="Release Date" Binding="{Binding ReleaseDate}"/>
                 <DataGridTextColumn Header="# Tracks" Binding="{Binding TotalTracks}"/>
             </DataGrid.Columns>

@@ -8,12 +8,12 @@
 
   <Identity
     Name="779637e0-8d50-400b-8dc3-136b1ab8a5be"
-    Publisher="CN=ncsoftworks.com"
+    Publisher="CN=YourCompany"
     Version="1.0.1.0" />
 
   <Properties>
     <DisplayName>SpotifyWPF</DisplayName>
-    <PublisherDisplayName>ncsoftworks.com</PublisherDisplayName>
+    <PublisherDisplayName>Your Company</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
@@ -32,7 +32,7 @@
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
         DisplayName="SpotifyWPF"
-        Description="An unofficial, simple tools application for Spotify (https://github.com/MrPnut/SpotifyWPF)"
+        Description="An unofficial, simple tools application for Spotify"
         BackgroundColor="transparent"
         Square150x150Logo="Images\Square150x150Logo.png"
         Square44x44Logo="Images\Square44x44Logo.png">

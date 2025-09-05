@@ -9,7 +9,7 @@ namespace SpotifyWPF.Converter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return !(value is IList<string>) ? null : string.Join("\n", ((IList<string>) value));
+            return value is IList<string> list ? string.Join("\n", list) : Binding.DoNothing;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

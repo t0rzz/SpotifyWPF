@@ -8,12 +8,12 @@ namespace SpotifyWPF.Converter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return (string)parameter == (string)value;
+            return parameter is string p && value is string s && p == s;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return value != null && (bool) value ? parameter : null;
+            return value is bool b && b ? parameter! : Binding.DoNothing;
         }
     }
 }

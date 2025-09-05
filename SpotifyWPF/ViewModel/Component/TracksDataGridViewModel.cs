@@ -1,10 +1,11 @@
 ﻿using System.Threading.Tasks;
-using SpotifyAPI.Web;
+using SpotifyWPF.Model.Dto;
 using SpotifyWPF.Service;
+using SpotifyWPF.ViewModel;
 
 namespace SpotifyWPF.ViewModel.Component
 {
-    public class TracksDataGridViewModel : DataGridViewModelBase<FullTrack>
+    public class TracksDataGridViewModel : DataGridViewModelBaseDto<TrackDto>
     {
         private readonly ISpotify _spotify;
 
@@ -13,17 +14,9 @@ namespace SpotifyWPF.ViewModel.Component
             _spotify = spotify;
         }
 
-        private protected override async Task<Paging<FullTrack, SearchResponse>> FetchPageInternalAsync()
+        private protected override async Task<PagingDto<TrackDto>> FetchPageInternalAsync()
         {
-            var req = new SearchRequest(SearchRequest.Types.Track, Query)
-            {
-                Limit = 20,
-                Offset = Items.Count
-            };
-
-            var resp = await _spotify.Api.Search.Item(req);
-
-            return resp.Tracks;
+            return await _spotify.SearchTracksPageAsync(Query, Items.Count, 20);
         }
     }
 }

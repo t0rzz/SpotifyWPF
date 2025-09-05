@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    name: Build and create GitHub Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore
+        run: dotnet restore .\SpotifyWPF.sln
+        shell: pwsh
+
+      - name: Build (Release)
+        run: dotnet build .\SpotifyWPF\SpotifyWPF.csproj -c Release --no-restore
+        shell: pwsh
+
+      - name: Create ZIP of Release binaries
+        run: |
+          $tag = "$env:GITHUB_REF_NAME"
+          $zipName = "SpotifyWPF-$tag.zip"
+          $src = "${{ github.workspace }}\SpotifyWPF\bin\Release\net8.0-windows\*"
+          $dst = "${{ github.workspace }}\$zipName"
+          If (Test-Path $dst) { Remove-Item $dst -Force }
+          Compress-Archive -Path $src -DestinationPath $dst -Force
+          Write-Host "Created archive: $dst"
+        shell: pwsh
+
+      - name: Build portable single-file EXE (win-x64)
+        run: |
+          $out = "${{ github.workspace }}\artifacts\portable\win-x64"
+          dotnet publish .\SpotifyWPF\SpotifyWPF.csproj -c Release -r win-x64 -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o $out
+          $exe = Join-Path $out 'SpotifyWPF.exe'
+          $dest = "${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}-portable-win-x64.exe"
+          Copy-Item $exe $dest -Force
+          Write-Host "Portable EXE: $dest"
+        shell: pwsh
+
+      - name: Build MSIX (unsigned) via WAP project
+        run: |
+          $out = "${{ github.workspace }}\artifacts\msix"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          msbuild .\SpotifyWPF.MSIX\SpotifyWPF.MSIX.wapproj /t:Restore,Rebuild /p:Configuration=Release \
+            /p:UapAppxPackageBuildMode=SideLoadOnly /p:AppxBundle=Never /p:AppxPackageSigningEnabled=false /p:AppxPackageDir="$out\"
+          $msix = Get-ChildItem $out -Filter *.msix -Recurse | Select-Object -First 1
+          if (-not $msix) { Write-Error 'MSIX package not found.' }
+          $dest = "${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.msix"
+          Copy-Item $msix.FullName $dest -Force
+          Write-Host "MSIX: $dest"
+        shell: pwsh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.zip
+            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}-portable-win-x64.exe
+            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.msix
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: SpotifyWPF ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.zip
+            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}-portable-win-x64.exe
+            ${{ github.workspace }}\SpotifyWPF-${{ github.ref_name }}.msix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

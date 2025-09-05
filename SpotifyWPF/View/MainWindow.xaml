@@ -9,8 +9,8 @@
         xmlns:vm1="clr-namespace:SpotifyWPF.ViewModel.Page"
         xmlns:component="clr-namespace:SpotifyWPF.ViewModel.Component"
         mc:Ignorable="d"
-        DataContext="{Binding Main, Source={StaticResource Locator}}"
-        Title="Spotify WPF" Height="800" Width="800" WindowStartupLocation="CenterScreen" WindowState="Maximized">
+        Title="Spotify WPF" Height="800" Width="1100" WindowStartupLocation="CenterScreen" WindowState="Maximized"
+        Background="{DynamicResource AppBackgroundBrush}" FontFamily="Segoe UI" FontSize="13" SnapsToDevicePixels="True" UseLayoutRounding="True">
 
     <Window.Resources>
         <DataTemplate DataType="{x:Type vm1:LoginPageViewModel}">
@@ -31,12 +31,32 @@
                     <Setter Property="Command" Value="{Binding Command}"/>
                     <Setter Property="CommandParameter" Value="{Binding}"/>
                     <Setter Property="IsChecked" Value="{Binding IsChecked}"/>
+                    <!-- Foreground per default: chiaro (barra menu) -->
+                    <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                    <Style.Triggers>
+                        <!-- Top level: barra menu (testo chiaro su sfondo scuro) -->
+                        <Trigger Property="Role" Value="TopLevelHeader">
+                            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="TopLevelItem">
+                            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                        </Trigger>
+                        <!-- Sottomenu: popup chiaro di sistema => testo scuro esplicito -->
+                        <Trigger Property="Role" Value="SubmenuItem">
+                            <Setter Property="Foreground" Value="#222222"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter Property="Foreground" Value="#222222"/>
+                        </Trigger>
+                    </Style.Triggers>
                 </Style>
             </Menu.ItemContainerStyle>
 
             <Menu.ItemTemplate>
                 <HierarchicalDataTemplate DataType="{x:Type component:MenuItemViewModel}" ItemsSource="{Binding Path=MenuItems}">
-                    <TextBlock Text="{Binding Header}"/>
+                    <!-- Il Foreground del testo segue quello del MenuItem (definito sopra) -->
+                    <TextBlock Text="{Binding Header}"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=MenuItem}}"/>
                 </HierarchicalDataTemplate>
             </Menu.ItemTemplate>
         </Menu>

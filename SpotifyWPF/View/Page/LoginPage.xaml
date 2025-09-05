@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:i="http://schemas.microsoft.com/expression/2010/interactivity"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
 
@@ -14,6 +14,24 @@
     </i:Interaction.Triggers>
 
     <Grid>
-        <Label Content="Waiting for Spotify user to login.  See browser window." HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <Border Background="{DynamicResource CardBrush}"
+                BorderBrush="{DynamicResource ControlBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="24"
+                Width="520"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <StackPanel>
+                <TextBlock Text="Connect your Spotify account"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="A browser window will open for authentication. Please confirm access to continue."
+                           Foreground="{DynamicResource SubtleForegroundBrush}"
+                           Margin="0,0,0,12"/>
+                <ProgressBar IsIndeterminate="True" Height="6"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

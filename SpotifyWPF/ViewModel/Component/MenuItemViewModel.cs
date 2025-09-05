@@ -1,7 +1,7 @@
 ﻿using System.Collections.ObjectModel;
 using System.Windows.Input;
 using GalaSoft.MvvmLight;
-using GalaSoft.MvvmLight.CommandWpf;
+using GalaSoft.MvvmLight.Command;
 
 namespace SpotifyWPF.ViewModel.Component
 {
@@ -12,10 +12,11 @@ namespace SpotifyWPF.ViewModel.Component
 
         public MenuItemViewModel(string header) : this(header, null) { }
 
-        public MenuItemViewModel(string header, ICommand command)
+        public MenuItemViewModel(string header, ICommand? command)
         {
             _header = header;
-            Command = command ?? new RelayCommand(() => {});
+            Command = command ?? new RelayCommand(() => { });
+            MenuItems = new ObservableCollection<MenuItemViewModel>();
         }
 
         public string Header

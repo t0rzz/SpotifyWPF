@@ -1,29 +1,22 @@
 ﻿using System.Threading.Tasks;
-using SpotifyAPI.Web;
+using SpotifyWPF.Model.Dto;
 using SpotifyWPF.Service;
+using SpotifyWPF.ViewModel;
 
 namespace SpotifyWPF.ViewModel.Component
 {
-    public class ArtistsDataGridViewModel : DataGridViewModelBase<FullArtist>
+    public class ArtistsDataGridViewModel : DataGridViewModelBaseDto<ArtistDto>
     {
         private readonly ISpotify _spotify;
-        
+
         public ArtistsDataGridViewModel(ISpotify spotify)
         {
             _spotify = spotify;
         }
 
-        private protected override async Task<Paging<FullArtist, SearchResponse>> FetchPageInternalAsync()
+        private protected override async Task<PagingDto<ArtistDto>> FetchPageInternalAsync()
         {
-            var req = new SearchRequest(SearchRequest.Types.Artist, Query)
-            {
-                Limit = 20,
-                Offset = Items.Count
-            };
-
-            var resp = await _spotify.Api.Search.Item(req);
-
-            return resp.Artists;
+            return await _spotify.SearchArtistsPageAsync(Query, Items.Count, 20);
         }
     }
 }

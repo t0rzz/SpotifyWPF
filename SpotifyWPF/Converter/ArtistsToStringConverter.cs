@@ -12,8 +12,9 @@ namespace SpotifyWPF.Converter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return !(value is IList<SimpleArtist>) ? null : 
-                string.Join(",", ((IList<SimpleArtist>) value).Select(a => a.Name).ToList());
+            return value is IList<SimpleArtist> list
+                ? string.Join(",", list.Select(a => a.Name))
+                : Binding.DoNothing;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

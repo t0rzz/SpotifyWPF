@@ -1,10 +1,11 @@
 ﻿using System.Threading.Tasks;
-using SpotifyAPI.Web;
+using SpotifyWPF.Model.Dto;
 using SpotifyWPF.Service;
+using SpotifyWPF.ViewModel;
 
 namespace SpotifyWPF.ViewModel.Component
 {
-    public class PlaylistsDataGridViewModel : DataGridViewModelBase<SimplePlaylist>
+    public class PlaylistsDataGridViewModel : DataGridViewModelBaseDto<PlaylistDto>
     {
         private readonly ISpotify _spotify;
 
@@ -13,17 +14,11 @@ namespace SpotifyWPF.ViewModel.Component
             _spotify = spotify;
         }
 
-        private protected override async Task<Paging<SimplePlaylist, SearchResponse>> FetchPageInternalAsync()
+        private protected override async Task<PagingDto<PlaylistDto>> FetchPageInternalAsync()
         {
-            var req = new SearchRequest(SearchRequest.Types.Playlist, Query)
-            {
-                Limit = 20,
-                Offset = Items.Count
-            };
-
-            var resp = await _spotify.Api.Search.Item(req);
-
-            return resp.Playlists;
+            // Usa il service decoupled per effettuare la ricerca e tornare DTO
+            // Query è gestita dal base DTO
+            return await _spotify.SearchPlaylistsPageAsync(Query, Items.Count, 20);
         }
     }
 }

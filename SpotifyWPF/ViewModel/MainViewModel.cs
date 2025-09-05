@@ -14,7 +14,7 @@ namespace SpotifyWPF.ViewModel
         private readonly SearchPageViewModel _searchPageViewModel;
         private readonly PlaylistsPageViewModel _playlistsPageViewModel;
 
-        private ViewModelBase _currentPage;
+        private ViewModelBase? _currentPage;
 
         public MainViewModel(LoginPageViewModel loginPageViewModel,
             PlaylistsPageViewModel playlistsPageViewModel,
@@ -51,10 +51,9 @@ namespace SpotifyWPF.ViewModel
 
         public ObservableCollection<MenuItemViewModel> MenuItems { get; set; }
 
-        public ViewModelBase CurrentPage
+        public ViewModelBase? CurrentPage
         {
             get => _currentPage;
-
             set
             {
                 _currentPage = value;

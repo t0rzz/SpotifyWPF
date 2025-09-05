@@ -1,33 +1,90 @@
 # SpotifyWPF
-An unofficial, simple tools application for Spotify
 
-This application was born out of a community ask to delete multiple playlists at a time (they had thousands of them).  With that said,
-that's the only feature this application supports currently.
+Unofficial WPF application that provides Spotify “power tools” (e.g., bulk playlist deletion, viewing information not shown in the official client, etc.).
 
-The idea is for this to be a sort of "power tools" application for Spotify.  Stuff that you can't do in the app (but can with the public APIs)
-will be considered for addition to this app.  Things that you can do in the Spotify app, but cumbersone to perform, will be considersed as
-well.
+Note: This repository is a fork of the original project by MrPnut: https://github.com/MrPnut/SpotifyWPF. Our fork lives at https://github.com/t0rzz/SpotifyWPF and continues development from there. This fork starts at version 1.1.0.
 
-For example:
-* Adding all of an artist's tracks to a playlist
-* Mass deletion (technically unfollow) of playlists
-* Displaying information from the API that the Spotify client doesn't show
+This version includes improvements to playlist loading, Start/Stop buttons, and version metadata 1.0.0.
 
-If you have any feature ideas, you can either add it as an issue to this repo, or post it on the Spotify Community.  I'll keep a lookout
-for any asks I see that the official app doesn't support.
 
-# Installation
+## Requirements to build locally
+- Windows 10/11 x64
+- .NET SDK 8.0 or later
+- Visual Studio 2022 (17.8+) with workloads:
+  - .NET desktop development
+  - optional: MSIX Packaging Tools (if you want to generate an installer)
+- Spotify account (required for OAuth authentication)
 
-If you want to use the [installer](https://mrpnut.github.io/SpotifyWPF/SpotifyWPF.appinstaller), then you need to install my self signed certificate to your computer's trusted certificate authorities.
-To do that easily, run the following in an Administrator PowerShell command prompt.  After that, run the installer.
 
+## Clone the repository
+Open PowerShell and run:
+
+```powershell
+git clone https://github.com/t0rzz/SpotifyWPF.git
+cd SpotifyWPF
 ```
-Invoke-WebRequest -Uri "https://mrpnut.github.io/SpotifyWPF/SpotifyWPF.cer" -OutFile "$env:temp\SpotifyWPF.cer"; Import-Certificate -FilePath "$env:temp\SpotifyWPF.cer" -CertStoreLocation Cert:\LocalMachine\Root
-```
 
-If you don't want to use the installer, you can pick one of the Github releases to extract to a folder and run.
-Using the installer will keep SpotifyWPF up to date.
+If you are working with this repository locally, make sure you are in the root folder containing the `SpotifyWPF.sln` solution file.
 
-# Running
 
-After installation, you can just search for "SpotifyWPF" in your start menu if you used the installer.
+## Build and run
+You can use Visual Studio or the .NET CLI.
+
+- Visual Studio:
+  1. Open `SpotifyWPF.sln`.
+  2. Set the startup project to `SpotifyWPF`.
+  3. Select configuration `Debug` x `Any CPU`.
+  4. Press F5 to run.
+
+- .NET CLI:
+  ```powershell
+  dotnet restore
+  dotnet build .\SpotifyWPF\SpotifyWPF.csproj -c Debug
+  dotnet run --project .\SpotifyWPF\SpotifyWPF.csproj -c Debug
+  ```
+
+Target Framework: `net8.0-windows` with WPF enabled.
+
+
+## Spotify authentication
+On the first operation that requires the API, the app will open your browser for Spotify login and request the required permissions.
+
+Tips:
+- If you need to develop against the APIs with your own Spotify app, create one at https://developer.spotify.com/dashboard and configure a Redirect URI (e.g., `http://localhost:5000/callback`).
+- This solution uses SpotifyAPI.Web/Auth. The login flow is automatic; you do not need to manually enter a Client Secret in the app for standard usage.
+- If you encounter redirect issues, verify that the port/URI configured in your Spotify app matches the one used locally by the authentication flow.
+
+
+## Key features (excerpt)
+- Playlist loading with pagination and logging.
+- Start/Stop buttons to start/interrupt loading.
+- Displays “Created By” and “# Tracks” fields.
+- Unfollow (delete) multiple playlists in parallel (with retries and rate limiting handling).
+
+
+## Packaging (optional)
+The repository includes the `SpotifyWPF.MSIX` project for distribution as an installer.
+
+- Open the solution in Visual Studio.
+- Select the `SpotifyWPF.MSIX` project and generate the package (Store/SideLoad depending on configuration).
+- For signed installations, use a trusted certificate or sign the package with your certificate.
+
+
+
+
+## Troubleshooting
+- Rate limit (HTTP 429): the code implements backoff and respects Retry-After. Try again in a few minutes.
+- Expired token: the app attempts automatic renewal. If the browser does not open, close and reopen the app.
+- Build fails: make sure you have .NET 8 SDK installed and the correct Visual Studio workloads.
+
+
+## Project structure (overview)
+- `SpotifyWPF/` main WPF application.
+- `SpotifyWPF.MSIX/` MSIX packaging project.
+- `Service/` integration with Spotify API (wrappers and calls).
+- `ViewModel/` presentation logic (MVVM).
+- `View/` XAML views and components.
+
+
+## License
+This project is provided “as is.” Check the LICENSE file if present in the repository or add one before publishing.
