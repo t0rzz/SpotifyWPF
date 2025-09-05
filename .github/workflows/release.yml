@@ -101,8 +101,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.zip
-            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
-            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.msix
+            SpotifyWPF-${{ env.VERSION }}.zip
+            SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
+            SpotifyWPF-${{ env.VERSION }}.msix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
