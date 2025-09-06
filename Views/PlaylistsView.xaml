@@ -1,0 +1,49 @@
+<!-- ...existing code... -->
+<ContextMenu>
+	<ContextMenu.Resources>
+		<!-- Collapse the icon placeholder when no Icon is set to avoid an empty vertical gutter -->
+		<Style TargetType="MenuItem">
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="MenuItem">
+						<Grid>
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="Auto"/>
+								<ColumnDefinition Width="*"/>
+							</Grid.ColumnDefinitions>
+
+							<!-- Icon presenter: will be collapsed when Icon is null -->
+							<ContentPresenter x:Name="IconPresenter"
+											  ContentSource="Icon"
+											  VerticalAlignment="Center"
+											  Margin="6,0,8,0"/>
+
+							<!-- Header area -->
+							<Border Grid.Column="1"
+									Background="{TemplateBinding Background}"
+									Padding="{TemplateBinding Padding}">
+								<ContentPresenter ContentSource="Header"
+												  RecognizesAccessKey="True"
+												  VerticalAlignment="Center"/>
+							</Border>
+						</Grid>
+
+						<ControlTemplate.Triggers>
+							<Trigger Property="Icon" Value="{x:Null}">
+								<Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/>
+							</Trigger>
+							<!-- keep other visual states if needed; minimal template to preserve look -->
+						</ControlTemplate.Triggers>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+		</Style>
+	</ContextMenu.Resources>
+
+	<!-- ...existing ContextMenu items... -->
+	<MenuItem Header="Play" />
+	<MenuItem Header="Add to Queue" />
+	<MenuItem Header="Remove" />
+	<!-- ...existing ContextMenu items... -->
+</ContextMenu>
+<!-- ...existing code... -->

@@ -1,0 +1,61 @@
+```xml
+<Application xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 x:Class="SpotifyWPF.App">
+	<Application.Resources>
+		<!-- Stili globali e risorse dell'applicazione -->
+
+		<!-- Stile globale per MenuItem: riduci la colonna icona quando non ci sono icone, usa uno sfondo trasparente per l'icona quando presente -->
+		<Style TargetType="MenuItem" x:Key="MenuItem_NoEmptyIconGutter">
+			<Setter Property="Padding" Value="8,4"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="MenuItem">
+						<Grid>
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition x:Name="IconColumn" Width="Auto"/>
+								<ColumnDefinition Width="*"/>
+							</Grid.ColumnDefinitions>
+
+							<Border x:Name="IconHost"
+									Width="24" Height="24"
+									Background="Transparent"
+									HorizontalAlignment="Center"
+									VerticalAlignment="Center"
+									Visibility="Visible"
+									ToolTipService.IsEnabled="False">
+								<ContentPresenter x:Name="IconPresenter"
+												  ContentSource="Icon"
+												  HorizontalAlignment="Center"
+												  VerticalAlignment="Center"/>
+							</Border>
+
+							<Border Grid.Column="1"
+									Background="{TemplateBinding Background}"
+									Padding="{TemplateBinding Padding}">
+								<ContentPresenter ContentSource="Header"
+												  RecognizesAccessKey="True"
+												  VerticalAlignment="Center"/>
+							</Border>
+						</Grid>
+
+						<ControlTemplate.Triggers>
+							<Trigger Property="Icon" Value="{x:Null}">
+								<Setter TargetName="IconHost" Property="Visibility" Value="Collapsed"/>
+								<Setter TargetName="IconColumn" Property="Width" Value="0"/>
+							</Trigger>
+						</ControlTemplate.Triggers>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+		</Style>
+
+		<!-- Optionale: applica automaticamente lo style ai MenuItem dentro i ContextMenu -->
+		<Style TargetType="ContextMenu">
+			<Setter Property="ItemContainerStyle" Value="{StaticResource MenuItem_NoEmptyIconGutter}" />
+		</Style>
+
+		<!-- ...altre risorse e stili esistenti... -->
+	</Application.Resources>
+</Application>
+```
