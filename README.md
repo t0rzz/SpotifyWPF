@@ -4,7 +4,7 @@ Unofficial WPF application that provides Spotify “power tools” (e.g., bulk p
 
 Note: This repository is a fork of the original project by MrPnut: https://github.com/MrPnut/SpotifyWPF. Our fork lives at https://github.com/t0rzz/SpotifyWPF and continues development from there. This fork starts at version 1.1.0.
 
-This version includes improvements to playlist loading, Start/Stop buttons, and version metadata 1.0.0.
+This version includes improvements to playlist loading, Start/Stop buttons, and version metadata 1.1.0.
 
 
 ## Requirements to build locally
