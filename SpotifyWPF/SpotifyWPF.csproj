@@ -15,12 +15,15 @@
     <!-- Metadati assembly centralizzati -->
     <Company>SpotifyWPF</Company>
     <Product>SpotifyWPF</Product>
-    <AssemblyVersion>1.1.1.0</AssemblyVersion>
-    <FileVersion>1.1.1.0</FileVersion>
-    <Version>1.1.1</Version>
+  <AssemblyVersion>1.1.2.0</AssemblyVersion>
+  <FileVersion>1.1.2.0</FileVersion>
+  <Version>1.1.2</Version>
     <Authors>SpotifyWPF</Authors>
     <!-- Riattiva generazione attributi per evitare assembly info duplicati manuali -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- Add versioned title and informational version so the running app can show version in its title -->
+    <AssemblyTitle>$(AssemblyName) v$(Version)</AssemblyTitle>
+    <AssemblyInformationalVersion>$(Version)</AssemblyInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

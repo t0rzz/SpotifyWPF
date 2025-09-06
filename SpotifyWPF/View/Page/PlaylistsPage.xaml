@@ -9,6 +9,73 @@
              DataContext="{Binding PlaylistsPage, Source={StaticResource Locator}}"    
              d:DesignHeight="450" d:DesignWidth="800">
 
+    <UserControl.Resources>
+        <ContextMenu x:Key="PlaylistsContextMenu" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}">
+            <ContextMenu.Template>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ItemsPresenter />
+                    </Border>
+                </ControlTemplate>
+            </ContextMenu.Template>
+            <ContextMenu.Resources>
+                <!-- Keyed style to avoid merging with any implicit/global MenuItem style -->
+                <Style x:Key="MenuItemPlain" TargetType="MenuItem" BasedOn="{x:Null}">
+                    <Setter Property="OverridesDefaultStyle" Value="True"/>
+                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                    <Setter Property="Padding" Value="8,6"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="MenuItem">
+                                <Border x:Name="Border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter ContentSource="Header"
+                                                      RecognizesAccessKey="True"
+                                                      VerticalAlignment="Center"
+                                                      TextBlock.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsHighlighted" Value="True">
+                                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource ControlHighlightBrush}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ControlHighlightForegroundBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Opacity" Value="0.6"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <!-- Implicit style so only MenuItem gets the template; Separator is unaffected -->
+                <Style TargetType="MenuItem" BasedOn="{StaticResource MenuItemPlain}"/>
+            </ContextMenu.Resources>
+            <!-- Removed ItemContainerStyle to avoid applying a MenuItem style to Separator -->
+
+            <!-- Items -->
+            <MenuItem Header="Load Tracks"
+                      Command="{Binding PlacementTarget.Tag.LoadTracksCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+            <Separator/>
+            <MenuItem Header="Open in Spotify"
+                      Command="{Binding PlacementTarget.Tag.OpenInSpotifyCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+            <MenuItem Header="Copy Link"
+                      Command="{Binding PlacementTarget.Tag.CopyPlaylistLinkCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+            <Separator/>
+            <MenuItem Header="Unfollow (Delete)"
+                      Foreground="{DynamicResource DangerBrush}"
+                      Command="{Binding PlacementTarget.Tag.UnfollowPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+        </ContextMenu>
+    </UserControl.Resources>
+
     <UserControl.InputBindings>
         <KeyBinding Key="F5" Command="{Binding LoadPlaylistsCommand}" />
     </UserControl.InputBindings>
@@ -72,29 +139,7 @@
                         <Style TargetType="DataGridRow">
                             <!-- Expose the page ViewModel via Tag so the ContextMenu can bind to it -->
                             <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
-                            <!-- Expose the DataGrid's SelectedItems via ToolTip for context menu binding -->
-                            <Setter Property="ToolTip" Value="{Binding SelectedItems, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
-                            <Setter Property="ContextMenu">
-                                <Setter.Value>
-                                    <ContextMenu>
-                                        <MenuItem Header="Load Tracks"
-                                                  Command="{Binding PlacementTarget.Tag.LoadTracksCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                        <Separator/>
-                                        <MenuItem Header="Open in Spotify"
-                                                  Command="{Binding PlacementTarget.Tag.OpenInSpotifyCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                        <MenuItem Header="Copy Link"
-                                                  Command="{Binding PlacementTarget.Tag.CopyPlaylistLinkCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                        <Separator/>
-                                        <MenuItem Header="Unfollow (Delete)"
-                                                  Foreground="{DynamicResource DangerBrush}"
-                                                  Command="{Binding PlacementTarget.Tag.DeletePlaylistsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                  CommandParameter="{Binding PlacementTarget.ToolTip, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                    </ContextMenu>
-                                </Setter.Value>
-                            </Setter>
+                            <Setter Property="ContextMenu" Value="{StaticResource PlaylistsContextMenu}"/>
                         </Style>
                     </DataGrid.RowStyle>
 

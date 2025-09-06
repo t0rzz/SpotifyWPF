@@ -48,7 +48,12 @@
   <PropertyGroup>
     <WapProjPath Condition="'$(WapProjPath)'==''">$(MSBuildExtensionsPath)\Microsoft\DesktopBridge\</WapProjPath>
   </PropertyGroup>
-  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" />
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.props')" />
+  <!-- Fallback TFN for machines without DesktopBridge tooling so NuGet restore sees a valid framework identifier -->
+  <PropertyGroup Condition="!Exists('$(WapProjPath)\Microsoft.DesktopBridge.props')">
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformVersion>10.0.19041.0</TargetPlatformVersion>
+  </PropertyGroup>
   <PropertyGroup>
     <ProjectGuid>fd111bce-11db-4a42-b15f-2649404098c2</ProjectGuid>
     <TargetPlatformVersion>10.0.19041.0</TargetPlatformVersion>
@@ -119,7 +124,17 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" />
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.targets')" />
+
+  <!-- Define dummy targets if the Desktop Bridge SDK is not present -->
+  <PropertyGroup Condition="!Exists('$(WapProjPath)\Microsoft.DesktopBridge.targets')">
+    <WapProjWithoutDesktopBridge>true</WapProjWithoutDesktopBridge>
+  </PropertyGroup>
+  <Target Name="Clean" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
+  <Target Name="Build" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
+  <Target Name="Rebuild" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
+  <Target Name="Publish" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22000.194" PrivateAssets="all" />
   </ItemGroup>
