@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 x:Class="SpotifyWPF.Views.PlaylistsView">
+	<!-- ...existing code... -->
+
+	<DataGrid x:Name="PlaylistsGrid" AutoGenerateColumns="False" ItemsSource="{Binding Playlists}">
+		<DataGrid.Columns>
+			<DataGridTemplateColumn Header="Name">
+				<DataGridTemplateColumn.CellTemplate>
+					<DataTemplate>
+						<TextBlock Text="{Binding Name}" ToolTip="{Binding Name}" />
+					</DataTemplate>
+				</DataGridTemplateColumn.CellTemplate>
+			</DataGridTemplateColumn>
+		</DataGrid.Columns>
+		<DataGrid.ContextMenu>
+			<ContextMenu>
+				<!-- MenuItem senza icona: stile per rimuovere gutter -->
+				<MenuItem Header="Copy Link" Command="{Binding CopyLinkCommand}" Style="{StaticResource MenuItem_NoEmptyIconGutter}" />
+				<Separator/>
+				<!-- MenuItem con icona: template di default -->
+				<MenuItem Header="Play" Command="{Binding PlayCommand}">
+					<MenuItem.Icon>
+						<Viewbox Width="16" Height="16">
+							<Canvas Width="16" Height="16">
+								<Path Data="M4,3 L13,8 L4,13 Z" Fill="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
+							</Canvas>
+						</Viewbox>
+					</MenuItem.Icon>
+				</MenuItem>
+				<MenuItem Header="Add to Queue" Command="{Binding AddToQueueCommand}">
+					<MenuItem.Icon>
+						<Viewbox Width="16" Height="16">
+							<Canvas Width="16" Height="16">
+								<Path Data="M2,8 L6,8 M6,8 L6,4 M6,8 L10,8 M10,8 L10,12" Stroke="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+							</Canvas>
+						</Viewbox>
+					</MenuItem.Icon>
+				</MenuItem>
+				<MenuItem Header="Open in Spotify" Command="{Binding OpenInSpotifyCommand}">
+					<MenuItem.Icon>
+						<Viewbox Width="16" Height="16">
+							<Canvas Width="16" Height="16">
+								<Path Data="M4,9 C5,7 7,6 9,6 C11,6 13,7 14,9" Stroke="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" StrokeThickness="1.4" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+								<Path Data="M4,11 C5,13 7,14 9,14 C11,14 13,13 14,11" Stroke="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" StrokeThickness="1.2" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+							</Canvas>
+						</Viewbox>
+					</MenuItem.Icon>
+				</MenuItem>
+				<MenuItem Header="Unfollow (Delete)" Command="{Binding DeleteCommand}">
+					<MenuItem.Icon>
+						<Viewbox Width="16" Height="16">
+							<Canvas Width="16" Height="16">
+								<Path Data="M5,5 L11,5 M6,5 L6,12 M8,5 L8,12 M10,5 L10,12" Stroke="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+								<Path Data="M4,5 L12,5 L11,13 L5,13 Z" Stroke="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" StrokeThickness="1" Fill="Transparent"/>
+							</Canvas>
+						</Viewbox>
+					</MenuItem.Icon>
+				</MenuItem>
+			</ContextMenu>
+		</DataGrid.ContextMenu>
+	</DataGrid>
+
+	<!-- ...existing code... -->
+</UserControl>
