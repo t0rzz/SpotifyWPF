@@ -135,15 +135,19 @@ jobs:
             $manifestPath = Join-Path $stage 'AppxManifest.xml'
             $xml.Save($manifestPath)
             # Locate makeappx
-            $make = $null
+            $makePath = $null
             $kits = 'C:\Program Files (x86)\Windows Kits\10\bin'
             if (Test-Path $kits) {
-              $make = Get-ChildItem $kits -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+              $found = Get-ChildItem -Path $kits -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+              if ($found) { $makePath = $found.FullName }
             }
-            if (-not $make) { $make = Get-Command makeappx.exe -ErrorAction SilentlyContinue }
-            if (-not $make) { Write-Error 'MakeAppx.exe not found on runner.' }
+            if (-not $makePath) {
+              $cmd = Get-Command makeappx.exe -ErrorAction SilentlyContinue
+              if ($cmd) { $makePath = $cmd.Path }
+            }
+            if (-not $makePath) { Write-Error 'MakeAppx.exe not found on runner.' }
             $dest = "${{ github.workspace }}\SpotifyWPF-$env:VERSION.msix"
-            & $make.Source pack /d $stage /p $dest /o
+            & "$makePath" pack /d "$stage" /p "$dest" /o
             if ($LASTEXITCODE -ne 0 -or -not (Test-Path $dest)) { Write-Error 'MakeAppx packaging failed.' }
             $msixFinal = $dest
           }
