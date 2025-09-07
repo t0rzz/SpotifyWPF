@@ -60,8 +60,14 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <DefaultLanguage>en-US</DefaultLanguage>
     <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
-    <NoWarn>$(NoWarn);NU1702</NoWarn>
+  <NoWarn>$(NoWarn);NU1701;NU1702</NoWarn>
     <EntryPointProjectUniqueName>..\SpotifyWPF\SpotifyWPF.csproj</EntryPointProjectUniqueName>
+  <!-- Ensure CI produces an MSIX package on build -->
+  <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+  <!-- Put packages in a deterministic folder for CI pickup -->
+  <AppxPackageDir>$(MSBuildThisFileDirectory)AppPackages\</AppxPackageDir>
+  <!-- Build simple .msix (not bundle) to simplify artifact naming -->
+  <AppxBundle>Never</AppxBundle>
   </PropertyGroup>
   <ItemGroup>
     <AppxManifest Include="Package.appxmanifest">
