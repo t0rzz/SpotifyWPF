@@ -31,27 +31,14 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Ensure MSIX tooling (UWP workload + MSIX Packaging Tools)
-        run: |
-          $vsInstaller = Join-Path "$env:ProgramFiles(x86)" 'Microsoft Visual Studio\Installer\vs_installer.exe'
-          $vsWhere = Join-Path "$env:ProgramFiles(x86)" 'Microsoft Visual Studio\Installer\vswhere.exe'
-          if (-not (Test-Path $vsInstaller)) { Write-Error "vs_installer.exe not found." }
-          if (-not (Test-Path $vsWhere)) { Write-Error "vswhere.exe not found." }
-          $installPath = & $vsWhere -latest -products * -property installationPath
-          if (-not $installPath) { Write-Error "Visual Studio installation not found." }
-          Write-Host "VS installation: $installPath"
-          $args = @(
-            'modify',
-            "--installPath", "$installPath",
-            '--add', 'Microsoft.VisualStudio.Workload.Universal',
-            '--add', 'Microsoft.VisualStudio.ComponentGroup.MSIX.PackagingTool',
-            '--includeRecommended',
-            '--passive', '--norestart'
-          )
-          $p = Start-Process -FilePath $vsInstaller -ArgumentList $args -NoNewWindow -Wait -PassThru
-          Write-Host "VS Installer exited with code $($p.ExitCode)"
-          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "VS Installer failed: $($p.ExitCode)" }
-        shell: pwsh
+      - name: Setup Visual Studio components (UWP + MSIX Packaging Tools)
+        uses: microsoft/setup-visualstudio@v1
+        with:
+          vs-version: 'latest'
+          components: >-
+            Microsoft.VisualStudio.Workload.Universal
+            Microsoft.VisualStudio.ComponentGroup.MSIX.PackagingTool
+            Microsoft.VisualStudio.Component.Windows11SDK.22621
 
       - name: Extract version
         id: version
