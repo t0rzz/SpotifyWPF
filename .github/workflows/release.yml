@@ -107,4 +107,3 @@ jobs:
             SpotifyWPF-${{ env.VERSION }}.msix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
