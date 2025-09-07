@@ -112,26 +112,47 @@ jobs:
             Copy-Item "$bin\*" $stage -Recurse -Force
             # Add assets
             Copy-Item .\SpotifyWPF.MSIX\Images $stage -Recurse -Force
-            # Prepare manifest
+            # Prepare manifest with desktop extension
             [xml]$xml = Get-Content .\SpotifyWPF.MSIX\Package.appxmanifest
             $ver = $env:VERSION
             if ($ver -notmatch '^\d+\.\d+\.\d+\.\d+$') { $ver = "$ver.0" }
-            $xml.Package.Identity.Version = $ver
-            $appNode = $xml.Package.Applications.Application
-            $appNode.Executable = 'SpotifyWPF.exe'
-            $appNode.EntryPoint = 'Windows.FullTrustApplication'
-            $uapNs = 'http://schemas.microsoft.com/appx/manifest/uap/windows10'
+            $nsF = 'http://schemas.microsoft.com/appx/manifest/foundation/windows10'
+            $nsU = 'http://schemas.microsoft.com/appx/manifest/uap/windows10'
+            $nsD = 'http://schemas.microsoft.com/appx/manifest/desktop/windows10'
             $nsm = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
-            $nsm.AddNamespace('uap',$uapNs)
-            $exts = $appNode.SelectSingleNode('uap:Extensions',$nsm)
+            $nsm.AddNamespace('f',$nsF)
+            $nsm.AddNamespace('uap',$nsU)
+            $nsm.AddNamespace('desktop',$nsD)
+            # Ensure 'desktop' namespace declaration exists and is listed as ignorable
+            $root = $xml.SelectSingleNode('/f:Package',$nsm)
+            if (-not $root) { $root = $xml.Package }
+            if ($root.GetAttribute('xmlns:desktop') -eq $null -or $root.GetAttribute('xmlns:desktop') -eq '') {
+              $root.SetAttribute('xmlns:desktop', $nsD)
+            }
+            $ign = $xml.Package.IgnorableNamespaces
+            if ([string]::IsNullOrEmpty($ign)) { $ign = 'uap rescap desktop' } else { if (-not ($ign -match '(?<!\S)desktop(?!\S)')) { $ign = "$ign desktop" } }
+            $xml.Package.SetAttribute('IgnorableNamespaces',$ign.Trim())
+            # Version
+            $xml.Package.Identity.Version = $ver
+            # Select Application node with namespace awareness
+            $appNode = $xml.SelectSingleNode('//f:Package/f:Applications/f:Application',$nsm)
+            if (-not $appNode) { Write-Error 'Could not locate Application node in manifest.' }
+            $appNode.SetAttribute('Executable','SpotifyWPF.exe')
+            $appNode.SetAttribute('EntryPoint','Windows.FullTrustApplication')
+            # Find or create Extensions container (no namespace)
+            $exts = $appNode.SelectSingleNode('f:Extensions',$nsm)
             if (-not $exts) {
-              $exts = $xml.CreateElement('uap','Extensions',$uapNs)
+              $exts = $xml.CreateElement('Extensions', $nsF)
               [void]$appNode.AppendChild($exts)
             }
-            $ext = $xml.CreateElement('uap','Extension',$uapNs)
-            $null = $ext.SetAttribute('Category','windows.fullTrustProcess')
-            $null = $ext.SetAttribute('Executable','SpotifyWPF.exe')
-            [void]$exts.AppendChild($ext)
+            # Add desktop:Extension windows.fullTrustProcess if missing
+            $existing = $exts.SelectSingleNode('desktop:Extension[@Category="windows.fullTrustProcess"]',$nsm)
+            if (-not $existing) {
+              $ext = $xml.CreateElement('Extension',$nsD)
+              $null = $ext.SetAttribute('Category','windows.fullTrustProcess')
+              $null = $ext.SetAttribute('Executable','SpotifyWPF.exe')
+              [void]$exts.AppendChild($ext)
+            }
             $manifestPath = Join-Path $stage 'AppxManifest.xml'
             $xml.Save($manifestPath)
             # Locate makeappx
