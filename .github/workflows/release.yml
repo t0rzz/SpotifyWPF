@@ -23,8 +23,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-  # Removed VS component setup to avoid unknown action errors. We'll fallback to manual MakeAppx if Desktop Bridge isn't present.
-
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -42,8 +40,6 @@ jobs:
           $version = $m.Matches[0].Groups[1].Value.Trim()
           echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           echo "TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          echo "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          echo "tag=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "Detected version: $version"
         shell: pwsh
 
@@ -76,7 +72,6 @@ jobs:
         shell: pwsh
 
       - name: Build MSIX (unsigned) via WAP project
-        id: msix
         run: |
           $out = "${{ github.workspace }}\artifacts\msix"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -86,44 +81,30 @@ jobs:
           if (-not $msix) { Write-Error 'MSIX package not found.' }
           $dest = "${{ github.workspace }}\SpotifyWPF-$env:VERSION.msix"
           Copy-Item $msix.FullName $dest -Force
-          "MSIX_PATH=$dest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "MSIX: $dest"
         shell: pwsh
 
-      - name: Upload ZIP and portable EXE
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts
           path: |
-            ${{ github.workspace }}\SpotifyWPF-${{ steps.version.outputs.version }}.zip
-            ${{ github.workspace }}\SpotifyWPF-${{ steps.version.outputs.version }}-portable-win-x64.exe
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.zip
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
+            ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.msix
 
-      - name: Upload MSIX artifact
-        if: ${{ steps.msix.outputs.MSIX_PATH != '' }}
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: release-msix
-          path: ${{ steps.msix.outputs.MSIX_PATH }}
-
-      - name: Create GitHub Release (zip + exe)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
-          name: SpotifyWPF v${{ steps.version.outputs.version }}
+          name: SpotifyWPF v${{ env.VERSION }}
           draft: false
           prerelease: false
           files: |
-            SpotifyWPF-${{ steps.version.outputs.version }}.zip
-            SpotifyWPF-${{ steps.version.outputs.version }}-portable-win-x64.exe
+            SpotifyWPF-${{ env.VERSION }}.zip
+            SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
+            SpotifyWPF-${{ env.VERSION }}.msix
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Attach MSIX to Release (if present)
-        if: ${{ steps.msix.outputs.MSIX_PATH != '' }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          files: ${{ steps.msix.outputs.MSIX_PATH }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
