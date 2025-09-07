@@ -80,101 +80,14 @@ jobs:
         run: |
           $out = "${{ github.workspace }}\artifacts\msix"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          $msixFinal = $null
-          $wapBuilt = $false
-          Write-Host 'Attempting WAP build (Desktop Bridge)…'
-          try {
-            msbuild .\SpotifyWPF.MSIX\SpotifyWPF.MSIX.wapproj /t:Restore,Rebuild /p:Configuration=Release /p:Platform=x64 `
-              /p:GenerateAppxPackageOnBuild=true /p:UapAppxPackageBuildMode=SideLoadOnly /p:AppxBundle=Never `
-              /p:AppxPackageSigningEnabled=false /p:AppxSymbolPackageEnabled=false /p:AppxPackageDir="$out" | Out-Host
-            $wapBuilt = $true
-          } catch {
-            Write-Warning "WAP build failed: $($_.Exception.Message)"
-          }
-          $msix = Get-ChildItem $out -Include *.msix,*.appx,*.msixbundle -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $msix) {
-            $fallback = Join-Path "${{ github.workspace }}" 'SpotifyWPF.MSIX\AppPackages'
-            if (Test-Path $fallback) {
-              $msix = Get-ChildItem $fallback -Include *.msix,*.appx,*.msixbundle -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            }
-          }
-          if ($msix) {
-            $msixFinal = $msix.FullName
-          } else {
-            Write-Host 'No MSIX produced by WAP. Falling back to manual MakeAppx packaging.'
-            # Build app binaries first
-            dotnet build .\SpotifyWPF\SpotifyWPF.csproj -c Release --no-restore
-            $bin = "${{ github.workspace }}\SpotifyWPF\bin\Release\net8.0-windows"
-            $stage = Join-Path $env:RUNNER_TEMP 'msix_stage'
-            if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path $stage | Out-Null
-            # Copy app files
-            Copy-Item "$bin\*" $stage -Recurse -Force
-            # Add assets
-            Copy-Item .\SpotifyWPF.MSIX\Images $stage -Recurse -Force
-            # Prepare manifest with desktop extension
-            [xml]$xml = Get-Content .\SpotifyWPF.MSIX\Package.appxmanifest
-            $ver = $env:VERSION
-            if ($ver -notmatch '^\d+\.\d+\.\d+\.\d+$') { $ver = "$ver.0" }
-            $nsF = 'http://schemas.microsoft.com/appx/manifest/foundation/windows10'
-            $nsU = 'http://schemas.microsoft.com/appx/manifest/uap/windows10'
-            $nsD = 'http://schemas.microsoft.com/appx/manifest/desktop/windows10'
-            $nsm = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
-            $nsm.AddNamespace('f',$nsF)
-            $nsm.AddNamespace('uap',$nsU)
-            $nsm.AddNamespace('desktop',$nsD)
-            # Ensure 'desktop' namespace declaration exists and is listed as ignorable
-            $root = $xml.SelectSingleNode('/f:Package',$nsm)
-            if (-not $root) { $root = $xml.Package }
-            if ($root.GetAttribute('xmlns:desktop') -eq $null -or $root.GetAttribute('xmlns:desktop') -eq '') {
-              $root.SetAttribute('xmlns:desktop', $nsD)
-            }
-            $ign = $xml.Package.IgnorableNamespaces
-            if ([string]::IsNullOrEmpty($ign)) { $ign = 'uap rescap desktop' } else { if (-not ($ign -match '(?<!\S)desktop(?!\S)')) { $ign = "$ign desktop" } }
-            $xml.Package.SetAttribute('IgnorableNamespaces',$ign.Trim())
-            # Version
-            $xml.Package.Identity.Version = $ver
-            # Select Application node with namespace awareness
-            $appNode = $xml.SelectSingleNode('//f:Package/f:Applications/f:Application',$nsm)
-            if (-not $appNode) { Write-Error 'Could not locate Application node in manifest.' }
-            $appNode.SetAttribute('Executable','SpotifyWPF.exe')
-            $appNode.SetAttribute('EntryPoint','Windows.FullTrustApplication')
-            # Find or create Extensions container (no namespace)
-            $exts = $appNode.SelectSingleNode('f:Extensions',$nsm)
-            if (-not $exts) {
-              $exts = $xml.CreateElement('Extensions', $nsF)
-              [void]$appNode.AppendChild($exts)
-            }
-            # Add desktop:Extension windows.fullTrustProcess if missing
-            $existing = $exts.SelectSingleNode('desktop:Extension[@Category="windows.fullTrustProcess"]',$nsm)
-            if (-not $existing) {
-              $ext = $xml.CreateElement('Extension',$nsD)
-              $null = $ext.SetAttribute('Category','windows.fullTrustProcess')
-              $null = $ext.SetAttribute('Executable','SpotifyWPF.exe')
-              [void]$exts.AppendChild($ext)
-            }
-            $manifestPath = Join-Path $stage 'AppxManifest.xml'
-            $xml.Save($manifestPath)
-            # Locate makeappx
-            $makePath = $null
-            $kits = 'C:\Program Files (x86)\Windows Kits\10\bin'
-            if (Test-Path $kits) {
-              $found = Get-ChildItem -Path $kits -Recurse -Filter makeappx.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
-              if ($found) { $makePath = $found.FullName }
-            }
-            if (-not $makePath) {
-              $cmd = Get-Command makeappx.exe -ErrorAction SilentlyContinue
-              if ($cmd) { $makePath = $cmd.Path }
-            }
-            if (-not $makePath) { Write-Error 'MakeAppx.exe not found on runner.' }
-            $dest = "${{ github.workspace }}\SpotifyWPF-$env:VERSION.msix"
-            & "$makePath" pack /d "$stage" /p "$dest" /o
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $dest)) { Write-Error 'MakeAppx packaging failed.' }
-            $msixFinal = $dest
-          }
-          if (-not $msixFinal) { Write-Error 'MSIX package not found.' }
-          "MSIX_PATH=$msixFinal" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "MSIX: $msixFinal"
+          msbuild .\SpotifyWPF.MSIX\SpotifyWPF.MSIX.wapproj /t:Restore,Rebuild /p:Configuration=Release `
+            /p:UapAppxPackageBuildMode=SideLoadOnly /p:AppxBundle=Never /p:AppxPackageSigningEnabled=false /p:AppxPackageDir="$out"
+          $msix = Get-ChildItem $out -Filter *.msix -Recurse | Select-Object -First 1
+          if (-not $msix) { Write-Error 'MSIX package not found.' }
+          $dest = "${{ github.workspace }}\SpotifyWPF-$env:VERSION.msix"
+          Copy-Item $msix.FullName $dest -Force
+          "MSIX_PATH=$dest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "MSIX: $dest"
         shell: pwsh
 
       - name: Upload ZIP and portable EXE
