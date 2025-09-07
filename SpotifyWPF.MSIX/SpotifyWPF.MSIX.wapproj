@@ -46,7 +46,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup>
-    <WapProjPath Condition="'$(WapProjPath)'==''">$(MSBuildExtensionsPath)\Microsoft\DesktopBridge\</WapProjPath>
+    <WapProjPath32>$(MSBuildExtensionsPath32)\Microsoft\DesktopBridge</WapProjPath32>
+    <WapProjPath64>$(MSBuildExtensionsPath)\Microsoft\DesktopBridge</WapProjPath64>
+    <WapProjPath Condition="Exists('$(WapProjPath32)\Microsoft.DesktopBridge.props')">$(WapProjPath32)</WapProjPath>
+    <WapProjPath Condition="'$(WapProjPath)'=='' and Exists('$(WapProjPath64)\Microsoft.DesktopBridge.props')">$(WapProjPath64)</WapProjPath>
   </PropertyGroup>
   <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.props')" />
   <!-- Fallback TFN for machines without DesktopBridge tooling so NuGet restore sees a valid framework identifier -->
@@ -62,11 +65,7 @@
     <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
   <NoWarn>$(NoWarn);NU1701;NU1702</NoWarn>
     <EntryPointProjectUniqueName>..\SpotifyWPF\SpotifyWPF.csproj</EntryPointProjectUniqueName>
-  <!-- Ensure CI produces an MSIX package on build -->
   <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
-  <!-- Put packages in a deterministic folder for CI pickup -->
-  <AppxPackageDir>$(MSBuildThisFileDirectory)AppPackages\</AppxPackageDir>
-  <!-- Build simple .msix (not bundle) to simplify artifact naming -->
   <AppxBundle>Never</AppxBundle>
   </PropertyGroup>
   <ItemGroup>
@@ -131,15 +130,6 @@
     </Content>
   </ItemGroup>
   <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.targets')" />
-
-  <!-- Define dummy targets if the Desktop Bridge SDK is not present -->
-  <PropertyGroup Condition="!Exists('$(WapProjPath)\Microsoft.DesktopBridge.targets')">
-    <WapProjWithoutDesktopBridge>true</WapProjWithoutDesktopBridge>
-  </PropertyGroup>
-  <Target Name="Clean" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
-  <Target Name="Build" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
-  <Target Name="Rebuild" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
-  <Target Name="Publish" Condition="'$(WapProjWithoutDesktopBridge)' == 'true'" />
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22000.194" PrivateAssets="all" />
