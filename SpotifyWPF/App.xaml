@@ -4,7 +4,7 @@
       <!-- Assicura che 'Locator' sia disponibile prima del caricamento delle finestre -->
       <vm:ViewModelLocator x:Key="Locator" d:IsDataSource="True" />
       <ResourceDictionary.MergedDictionaries>
-  <ResourceDictionary Source="Views/Styles/ModernTheme.xaml"/>
+        <ResourceDictionary Source="Views/Styles/ModernTheme.xaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

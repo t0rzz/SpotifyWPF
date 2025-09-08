@@ -13,6 +13,8 @@ namespace SpotifyWPF.Model
             var config = new MapperConfiguration(cfg =>
             {
                 cfg.CreateMap<PlaylistTrack<IPlayableItem>, Track>()
+                    .ForMember(dest => dest.Id,
+                        act => act.MapFrom((src, dest) => (src.Track as FullTrack)?.Id ?? string.Empty))
                     .ForMember(dest => dest.TrackName,
                         act => act.MapFrom((src, dest) => (src.Track as FullTrack)?.Name))
                     .ForMember(dest => dest.Artists, act => act.MapFrom((src, dest) =>

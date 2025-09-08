@@ -10,6 +10,9 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using System.Windows;
 using SpotifyWPF.Model.Dto;
+using System.Linq;
+using System.IO;
+using System.Security.Cryptography;
 
 namespace SpotifyWPF.Service
 {
@@ -103,8 +106,17 @@ namespace SpotifyWPF.Service
                 CodeChallengeMethod = "S256",
                 Scope = new List<string>
                 {
-                    Scopes.UserReadPrivate, Scopes.PlaylistModifyPrivate, Scopes.PlaylistModifyPublic,
-                    Scopes.PlaylistReadCollaborative, Scopes.PlaylistReadPrivate
+                    Scopes.UserReadPrivate,
+                    Scopes.PlaylistModifyPrivate,
+                    Scopes.PlaylistModifyPublic,
+                    Scopes.PlaylistReadCollaborative,
+                    Scopes.PlaylistReadPrivate,
+                    // Required for devices and playback control
+                    Scopes.UserReadPlaybackState,
+                    Scopes.UserModifyPlaybackState,
+                    // Required for followed artists read/modify
+                    "user-follow-read",
+                    "user-follow-modify"
                 }
             };
 
@@ -198,6 +210,72 @@ namespace SpotifyWPF.Service
             }
         }
 
+        // Returns the current user's display name if available (cached in memory once per session)
+        public async Task<string?> GetUserDisplayNameAsync()
+        {
+            var me = await GetPrivateProfileAsync().ConfigureAwait(false);
+            return me?.DisplayName ?? me?.Id;
+        }
+
+        // Returns a local cached file path to the user's profile image. Downloads once and caches under LocalAppData/SpotifyWPF/cache
+        public async Task<string?> GetProfileImageCachedPathAsync()
+        {
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false)) return null;
+            var me = await GetPrivateProfileAsync().ConfigureAwait(false);
+            if (me == null) return null;
+
+            var img = me.Images != null ? me.Images.OrderByDescending(i => (i?.Width ?? 0) * (i?.Height ?? 0)).FirstOrDefault() : null;
+            var url = img?.Url;
+            if (string.IsNullOrWhiteSpace(url)) return null;
+
+            // Build cache path
+            var cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotifyWPF", "cache");
+            Directory.CreateDirectory(cacheDir);
+
+            // Hash URL to create a stable filename even if URL changes between sessions
+            var hash = Sha1(url);
+            var ext = ".jpg";
+            try
+            {
+                var uri = new Uri(url);
+                var lastSeg = Path.GetFileName(uri.AbsolutePath);
+                var guessedExt = Path.GetExtension(lastSeg);
+                if (!string.IsNullOrWhiteSpace(guessedExt)) ext = guessedExt;
+            }
+            catch { /* fallback to .jpg */ }
+
+            var fileName = $"profile_{me.Id}_{hash}{ext}";
+            var filePath = Path.Combine(cacheDir, fileName);
+
+            if (!File.Exists(filePath))
+            {
+                // Download once
+                try
+                {
+                    using var resp = await _http.GetAsync(url).ConfigureAwait(false);
+                    resp.EnsureSuccessStatusCode();
+                    await using var fs = File.Open(filePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                    await resp.Content.CopyToAsync(fs).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // On failure, don't throw; just return null
+                    try { if (File.Exists(filePath)) File.Delete(filePath); } catch { }
+                    return null;
+                }
+            }
+
+            return filePath;
+        }
+
+        private static string Sha1(string input)
+        {
+            using var sha = SHA1.Create();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+            var hash = sha.ComputeHash(bytes);
+            return string.Concat(hash.Select(b => b.ToString("x2")));
+        }
+
         // Metodo pubblico usato per verificare/ripristinare l'autenticazione basandosi sul token salvato
         public async Task<bool> EnsureAuthenticatedAsync()
         {
@@ -278,6 +356,18 @@ namespace SpotifyWPF.Service
         async Task<bool> ISpotify.EnsureAuthenticatedAsync()
         {
             return await EnsureAuthenticatedAsync().ConfigureAwait(false);
+        }
+
+        public void Logout()
+        {
+            try
+            {
+                _tokenStorage.Clear();
+                _currentToken = null;
+                _privateProfile = null;
+                Api = null;
+            }
+            catch { }
         }
 
         private static readonly HttpClient _http = new HttpClient();
@@ -423,6 +513,159 @@ namespace SpotifyWPF.Service
             }
             result.Items = items;
             return result;
+        }
+
+        // ====== Devices / Playback ======
+        public async Task<IReadOnlyList<Device>> GetDevicesAsync()
+        {
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return Array.Empty<Device>();
+            }
+            var devices = await Api.Player.GetAvailableDevices().ConfigureAwait(false);
+            if (devices?.Devices != null) return devices.Devices;
+            return Array.Empty<Device>();
+        }
+
+        public async Task<CurrentlyPlayingContext?> GetCurrentPlaybackAsync()
+        {
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return null;
+            }
+            var ctx = await Api.Player.GetCurrentPlayback().ConfigureAwait(false);
+            return ctx;
+        }
+
+        public async Task TransferPlaybackAsync(IEnumerable<string> deviceIds, bool play)
+        {
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return;
+            }
+
+            var ids = (deviceIds ?? Array.Empty<string>()).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+            if (ids.Count == 0) return;
+
+            var req = new PlayerTransferPlaybackRequest(ids) { Play = play };
+            try
+            {
+                await Api.Player.TransferPlayback(req).ConfigureAwait(false);
+            }
+            catch (APIException)
+            {
+                // Rilancia: verrà gestito dal chiamante per mostrare un messaggio user-friendly
+                throw;
+            }
+            catch (Exception)
+            {
+                // Rilancia generica per caller handling
+                throw;
+            }
+        }
+
+        public async Task<bool> PlayTrackOnDeviceAsync(string deviceId, string trackId)
+        {
+            if (string.IsNullOrWhiteSpace(trackId)) return false;
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false)) return false;
+            if (_currentToken?.AccessToken is not string accessToken || string.IsNullOrWhiteSpace(accessToken)) return false;
+
+            var url = string.IsNullOrWhiteSpace(deviceId)
+                ? "https://api.spotify.com/v1/me/player/play"
+                : $"https://api.spotify.com/v1/me/player/play?device_id={Uri.EscapeDataString(deviceId)}";
+
+            var payload = new
+            {
+                uris = new[] { $"spotify:track:{trackId}" }
+            };
+
+            using var req = new HttpRequestMessage(HttpMethod.Put, url)
+            {
+                Content = new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(payload))
+            };
+            req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            using var res = await _http.SendAsync(req).ConfigureAwait(false);
+            if (res.StatusCode == HttpStatusCode.NoContent) return true;
+            if (res.IsSuccessStatusCode) return true;
+            return false;
+        }
+
+        public async Task<SpotifyWPF.Model.Dto.FollowedArtistsPage> GetFollowedArtistsPageAsync(string? after, int limit)
+        {
+            var result = new SpotifyWPF.Model.Dto.FollowedArtistsPage();
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false)) return result;
+            if (_currentToken?.AccessToken is not string accessToken || string.IsNullOrWhiteSpace(accessToken)) return result;
+
+            var url = $"https://api.spotify.com/v1/me/following?type=artist&limit={limit}";
+            if (!string.IsNullOrWhiteSpace(after)) url += $"&after={Uri.EscapeDataString(after)}";
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            using var res = await _http.SendAsync(req).ConfigureAwait(false);
+            res.EnsureSuccessStatusCode();
+            var json = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            var jo = Newtonsoft.Json.Linq.JObject.Parse(json);
+            var artistsObj = jo["artists"] as Newtonsoft.Json.Linq.JObject;
+            var page = new SpotifyWPF.Model.Dto.PagingDto<SpotifyWPF.Model.Dto.ArtistDto>();
+            if (artistsObj != null)
+            {
+                page.Href = artistsObj.Value<string>("href");
+                page.Limit = artistsObj.Value<int?>("limit") ?? limit;
+                page.Offset = 0;
+                page.Total = artistsObj.Value<int?>("total") ?? 0;
+                page.Next = artistsObj.Value<string>("next");
+                page.Previous = null;
+
+                var items = artistsObj["items"] as Newtonsoft.Json.Linq.JArray;
+                if (items != null)
+                {
+                    foreach (var item in items)
+                    {
+                        var id = item.Value<string>("id");
+                        if (string.IsNullOrWhiteSpace(id)) continue;
+                        var name = item.Value<string>("name");
+                        var followers = item["followers"]?.Value<int?>("total") ?? 0;
+                        var popularity = item.Value<int?>("popularity") ?? 0;
+                        var href = item.Value<string>("href");
+                        page.Items.Add(new SpotifyWPF.Model.Dto.ArtistDto
+                        {
+                            Id = id,
+                            Name = name,
+                            FollowersTotal = followers,
+                            Popularity = popularity,
+                            Href = href
+                        });
+                    }
+                }
+
+                var cursors = artistsObj["cursors"] as Newtonsoft.Json.Linq.JObject;
+                result.NextAfter = cursors?.Value<string>("after");
+            }
+
+            result.Page = page;
+            return result;
+        }
+
+        public async Task UnfollowArtistsAsync(IEnumerable<string> artistIds)
+        {
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return;
+            }
+            var ids = artistIds?.Where(id => !string.IsNullOrWhiteSpace(id)).ToList() ?? new List<string>();
+            if (ids.Count == 0) return;
+
+            // Spotify API allows up to 50 ids per request
+            const int batchSize = 50;
+            for (var i = 0; i < ids.Count; i += batchSize)
+            {
+                var chunk = ids.Skip(i).Take(batchSize).ToList();
+                var request = new UnfollowRequest(UnfollowRequest.Type.Artist, chunk);
+                await Api.Follow.Unfollow(request).ConfigureAwait(false);
+            }
         }
 
         public async Task<PagingDto<AlbumDto>> SearchAlbumsPageAsync(string query, int offset, int limit)

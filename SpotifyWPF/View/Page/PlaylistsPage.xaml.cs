@@ -27,6 +27,15 @@ namespace SpotifyWPF.View.Page
             {
                 vm.LoadPlaylistsCommand.Execute(null);
             }
+
+            // Wire up submenu event for tracks context menu
+            WireUpPlayToSubmenuEvent();
+        }
+
+        private void WireUpPlayToSubmenuEvent()
+        {
+            // The MenuItem is deep inside DataGrid row styles, we need to handle it differently
+            // We'll handle this via the ContextMenu.Opened event instead
         }
     }
 }

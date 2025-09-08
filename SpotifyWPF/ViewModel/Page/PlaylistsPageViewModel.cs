@@ -36,7 +36,9 @@ namespace SpotifyWPF.ViewModel.Page
 
         private string _status = "Ready";
 
-        private bool _isLoadingPlaylists;
+    private bool _isLoadingPlaylists;
+    private bool _isLoadingArtists;
+    private int _selectedTabIndex;
 
         public PlaylistsPageViewModel(ISpotify spotify, IMapper mapper, IMessageBoxService messageBoxService)
         {
@@ -99,6 +101,23 @@ namespace SpotifyWPF.ViewModel.Page
                 () => CanStop
             );
 
+            // F5 refresh current tab
+            RefreshCurrentTabCommand = new RelayCommand(
+                async () =>
+                {
+                    // 0 = Playlists tab, 1 = Users/Artists tab
+                    if (SelectedTabIndex == 0)
+                    {
+                        await LoadPlaylistsAsync();
+                    }
+                    else
+                    {
+                        await StartLoadFollowedArtistsAsync();
+                    }
+                },
+                () => _busyCount == 0 && !_isLoadingPlaylists && !_isLoadingArtists && !_isDeletingPlaylists
+            );
+
             // Context menu commands
             OpenInSpotifyCommand = new RelayCommand<PlaylistDto>(
                 p =>
@@ -133,6 +152,20 @@ namespace SpotifyWPF.ViewModel.Page
                 p => p != null && !string.IsNullOrWhiteSpace(p.Id) && !_isDeletingPlaylists
             );
 
+            // Users/Artists tab
+            LoadFollowedArtistsCommand = new RelayCommand(async () => await StartLoadFollowedArtistsAsync(), () => !_isLoadingArtists);
+            StopLoadFollowedArtistsCommand = new RelayCommand(() => _loadArtistsCts?.Cancel(), () => _isLoadingArtists);
+            UnfollowArtistsCommand = new RelayCommand<IList>(
+                async items => await UnfollowArtistsAsync(items),
+                items => items != null && items.Count > 0
+            );
+            OpenInSpotifyArtistCommand = new RelayCommand<ArtistDto>(
+                a => { var url = BuildArtistWebUrl(a); if (!string.IsNullOrWhiteSpace(url)) TryOpenUrl(url); },
+                a => a != null && !string.IsNullOrWhiteSpace(a.Id));
+            CopyArtistLinkCommand = new RelayCommand<ArtistDto>(
+                a => { var url = BuildArtistWebUrl(a); if (!string.IsNullOrWhiteSpace(url)) TryCopyToClipboard(url); },
+                a => a != null && !string.IsNullOrWhiteSpace(a.Id));
+
             // Timer per flush del log in batch
             _logFlushTimer = new DispatcherTimer
             {
@@ -145,6 +178,39 @@ namespace SpotifyWPF.ViewModel.Page
         public ObservableCollection<PlaylistDto> Playlists { get; } = new ObservableCollection<PlaylistDto>();
 
         public ObservableCollection<Track> Tracks { get; } = new ObservableCollection<Track>();
+
+    // Users/Artists tab collections
+    public ObservableCollection<ArtistDto> FollowedArtists { get; } = new ObservableCollection<ArtistDto>();
+
+        // Greeting and profile
+        private string _greetingText = string.Empty;
+        public string GreetingText
+        {
+            get => _greetingText;
+            set { _greetingText = value; RaisePropertyChanged(); }
+        }
+
+        private string? _profileImagePath;
+        public string? ProfileImagePath
+        {
+            get => _profileImagePath;
+            set { _profileImagePath = value; RaisePropertyChanged(); }
+        }
+
+        public async Task LoadGreetingAsync()
+        {
+            try
+            {
+                var name = await _spotify.GetUserDisplayNameAsync().ConfigureAwait(false);
+                var imgPath = await _spotify.GetProfileImageCachedPathAsync().ConfigureAwait(false);
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    GreetingText = string.IsNullOrWhiteSpace(name) ? "Hey there" : $"Hey {name}";
+                    ProfileImagePath = imgPath;
+                });
+            }
+            catch { }
+        }
 
         // Tracciamo gli ID già caricati per evitare duplicati tra tentativi
         private readonly HashSet<string> _playlistIds = new HashSet<string>();
@@ -190,6 +256,12 @@ namespace SpotifyWPF.ViewModel.Page
         private const int LogFlushIntervalMs = 100;     // ogni quanti ms flushare
         private const int LogMaxChars = 300000;         // cap per il testo nel box
 
+    // Devices for "Play to" context menus
+    public ObservableCollection<SpotifyAPI.Web.Device> Devices { get; } = new ObservableCollection<SpotifyAPI.Web.Device>();
+        public RelayCommand<string> PlayToDeviceCommand => new RelayCommand<string>(async param => await PlayToDeviceAsync(param));
+
+    // Removed obsolete Submenu track-id plumbing (now done via BindingProxy+MultiBinding in XAML)
+
         public RelayCommand<PlaylistDto> LoadTracksCommand { get; }
 
         public RelayCommand<IList> DeletePlaylistsCommand { get; }
@@ -199,6 +271,21 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand StartLoadPlaylistsCommand { get; }
 
         public RelayCommand StopLoadPlaylistsCommand { get; }
+
+    // F5: refresh according to selected tab
+    public RelayCommand RefreshCurrentTabCommand { get; }
+
+    // Users/Artists commands
+        public RelayCommand LoadFollowedArtistsCommand { get; }
+        public RelayCommand StopLoadFollowedArtistsCommand { get; }
+    public RelayCommand<IList> UnfollowArtistsCommand { get; }
+        public RelayCommand<ArtistDto> OpenInSpotifyArtistCommand { get; }
+        public RelayCommand<ArtistDto> CopyArtistLinkCommand { get; }
+        public RelayCommand<ArtistDto> UnfollowArtistCommand => new RelayCommand<ArtistDto>(async a =>
+        {
+            if (a == null || string.IsNullOrWhiteSpace(a.Id)) return;
+            await UnfollowArtistsAsync(new[] { a });
+        });
 
         // Context menu commands
         public RelayCommand<PlaylistDto> OpenInSpotifyCommand { get; }
@@ -220,13 +307,29 @@ namespace SpotifyWPF.ViewModel.Page
         private void UpdateLoadingUiState()
         {
             LoadPlaylistsCommand?.RaiseCanExecuteChanged();
+            LoadFollowedArtistsCommand?.RaiseCanExecuteChanged();
+            StopLoadFollowedArtistsCommand?.RaiseCanExecuteChanged();
             StartLoadPlaylistsCommand?.RaiseCanExecuteChanged();
             StopLoadPlaylistsCommand?.RaiseCanExecuteChanged();
             OpenInSpotifyCommand?.RaiseCanExecuteChanged();
             CopyPlaylistLinkCommand?.RaiseCanExecuteChanged();
             UnfollowPlaylistCommand?.RaiseCanExecuteChanged();
+            UnfollowArtistsCommand?.RaiseCanExecuteChanged();
+            RefreshCurrentTabCommand?.RaiseCanExecuteChanged();
             RaisePropertyChanged(nameof(CanStart));
             RaisePropertyChanged(nameof(CanStop));
+        }
+
+        public int SelectedTabIndex
+        {
+            get => _selectedTabIndex;
+            set
+            {
+                if (_selectedTabIndex == value) return;
+                _selectedTabIndex = value;
+                RaisePropertyChanged();
+                RefreshCurrentTabCommand?.RaiseCanExecuteChanged();
+            }
         }
 
         private void StartBusy(String initialStatus)
@@ -266,6 +369,82 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     UpdateLoadingUiState();
                 }));
+            }
+        }
+
+        public async Task RefreshDevicesForTracksMenuAsync()
+        {
+            try
+            {
+                var list = await _spotify.GetDevicesAsync().ConfigureAwait(false);
+                await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                {
+                    Devices.Clear();
+                    foreach (var d in list)
+                    {
+                        if (d != null && !string.IsNullOrWhiteSpace(d.Id)) 
+                        {
+                            Devices.Add(d);
+                            AppendLog($"[PlaylistsPage] Device: {d.Name} (ID: {d.Id}) - Active: {d.IsActive}");
+                        }
+                    }
+                    AppendLog($"[PlaylistsPage] Refreshed {Devices.Count} devices in Play To submenu");
+                }));
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[PlaylistsPage] Error refreshing devices: {ex.Message}");
+            }
+        }
+
+        private async Task PlayToDeviceAsync(string? param)
+        {
+            try
+            {
+                AppendLog($"[PlaylistsPage] PlayToDeviceAsync called with param: {param ?? "NULL"}");
+                
+                // Add debug output to check what's in the MultiBinding
+                AppendLog($"[PlaylistsPage] DEBUG: MultiBinding expects deviceId|trackId format");
+                
+                if (string.IsNullOrWhiteSpace(param)) 
+                {
+                    AppendLog($"[PlaylistsPage] PlayToDeviceAsync: param is null or empty, returning");
+                    AppendLog($"[PlaylistsPage] HINT: Check if MultiBinding is working - deviceId from Device.Id and trackId from PlacementTarget.DataContext.Id");
+                    return;
+                }
+                
+                var parts = param.Split('|');
+                if (parts.Length != 2) 
+                {
+                    AppendLog($"[PlaylistsPage] PlayToDeviceAsync: param does not contain exactly 2 parts, found {parts.Length}");
+                    return;
+                }
+                
+                var deviceId = parts[0];
+                var trackId = parts[1];
+                if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(trackId)) 
+                {
+                    AppendLog($"[PlaylistsPage] PlayToDeviceAsync: deviceId or trackId is null/empty. Device: '{deviceId}', Track: '{trackId}'");
+                    return;
+                }
+                
+                AppendLog($"[PlaylistsPage] Playing track {trackId} on device {deviceId}");
+                var ok = await _spotify.PlayTrackOnDeviceAsync(deviceId, trackId);
+                AppendLog(ok
+                    ? $"Playing track {trackId} on device {deviceId}."
+                    : $"Failed to start playback on device {deviceId}.");
+                
+                // Wait a moment for Spotify to update the active device state
+                AppendLog($"[PlaylistsPage] Waiting for Spotify to update device state...");
+                await Task.Delay(1000);
+                
+                // Refresh devices list to update active device checkmarks
+                AppendLog($"[PlaylistsPage] Refreshing devices list after Play To command");
+                await RefreshDevicesForTracksMenuAsync();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Error starting playback: {ex.Message}");
             }
         }
 
@@ -648,10 +827,169 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        // ===== Users/Artists (followed) =====
+        private string? _artistsCursorAfter;
+        private CancellationTokenSource? _loadArtistsCts;
+
+        private async Task StartLoadFollowedArtistsAsync()
+        {
+            if (_isLoadingArtists) return;
+            _loadArtistsCts = new CancellationTokenSource();
+            _isLoadingArtists = true;
+            UpdateLoadingUiState();
+            try
+            {
+                StartBusy("Loading followed artists...");
+                FollowedArtists.Clear();
+                await LoadFollowedArtistsAsync(_loadArtistsCts.Token);
+            }
+            finally
+            {
+                _loadArtistsCts?.Dispose();
+                _loadArtistsCts = null;
+                _isLoadingArtists = false;
+                UpdateLoadingUiState();
+                EndBusy();
+            }
+        }
+
+        private async Task LoadFollowedArtistsAsync(CancellationToken cancellationToken)
+        {
+            const int limit = 50;
+            _artistsCursorAfter = null;
+            var total = 0;
+
+            // Primo fetch (per total e primo blocco)
+            var first = await _spotify.GetFollowedArtistsPageAsync(_artistsCursorAfter, limit);
+            // Log dell'output dell'API (redacted)
+            try
+            {
+                var json = BuildArtistsPageApiOutput(first?.Page);
+                AppendLog("Spotify API response (followed artists first page) [redacted]:");
+                foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                {
+                    AppendLog("  " + line);
+                }
+            }
+            catch { /* ignore logging issues */ }
+            if (first?.Page?.Items != null)
+            {
+                foreach (var a in first.Page.Items) FollowedArtists.Add(a);
+                total = first.Page.Total;
+            }
+            _artistsCursorAfter = first?.NextAfter;
+
+            if (cancellationToken.IsCancellationRequested) return;
+            if (total <= 0 || FollowedArtists.Count >= total) return;
+
+            // Cache cursori
+            var cursors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            while (!string.IsNullOrWhiteSpace(_artistsCursorAfter))
+            {
+                cursors.Enqueue(_artistsCursorAfter);
+                var next = await _spotify.GetFollowedArtistsPageAsync(_artistsCursorAfter, limit);
+                _artistsCursorAfter = next?.NextAfter;
+                if (cancellationToken.IsCancellationRequested) return;
+                if (string.IsNullOrWhiteSpace(_artistsCursorAfter)) break;
+            }
+
+            var workersCount = ComputeWorkerCount(total, 2000);
+            var workers = new List<Task>();
+            var dispatcher = Application.Current?.Dispatcher;
+
+            for (var w = 0; w < workersCount; w++)
+            {
+                workers.Add(Task.Run(async () =>
+                {
+                    while (!cancellationToken.IsCancellationRequested && cursors.TryDequeue(out var after))
+                    {
+                        try
+                        {
+                            var page = await _spotify.GetFollowedArtistsPageAsync(after, limit);
+                            // Log dell'output (redacted)
+                            try
+                            {
+                                var json = BuildArtistsPageApiOutput(page?.Page);
+                                AppendLog($"Spotify API response (followed artists after '{after}') [redacted]:");
+                                foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                                {
+                                    AppendLog("  " + line);
+                                }
+                            }
+                            catch { }
+                            if (page?.Page?.Items != null)
+                            {
+                                if (dispatcher != null)
+                                {
+                                    await dispatcher.BeginInvoke((Action)(() =>
+                                    {
+                                        foreach (var a in page.Page.Items) FollowedArtists.Add(a);
+                                    }));
+                                }
+                                else
+                                {
+                                    foreach (var a in page.Page.Items) FollowedArtists.Add(a);
+                                }
+                            }
+                        }
+                        catch (APIException apiEx)
+                        {
+                            AppendLog($"Followed artists page fetch failed: {apiEx.Message}");
+                        }
+                        catch (Exception ex)
+                        {
+                            AppendLog($"Followed artists page fetch failed: {ex.Message}");
+                        }
+                    }
+                }));
+            }
+
+            await Task.WhenAll(workers);
+            Status = $"Loaded {FollowedArtists.Count} followed artist(s).";
+        }
+
+        private async Task UnfollowArtistsAsync(IList items)
+        {
+            if (items == null) return;
+            var artists = items.Cast<ArtistDto>().ToList();
+            if (!artists.Any()) return;
+
+            var msg = artists.Count == 1
+                ? $"Are you sure you want to delete artist '{artists[0].Name}'? (Unfollow)"
+                : $"Are you sure you want to delete these {artists.Count} artists? (Unfollow)";
+            var res = _messageBoxService.ShowMessageBox(msg, "Confirm", MessageBoxButton.YesNo, MessageBoxIcon.Exclamation);
+            if (res != MessageBoxResult.Yes) return;
+
+            try
+            {
+                StartBusy($"Unfollowing {artists.Count} artist(s)...");
+                await _spotify.UnfollowArtistsAsync(artists.Select(a => a.Id));
+                foreach (var a in artists)
+                {
+                    FollowedArtists.Remove(a);
+                }
+                AppendLog($"Unfollowed {artists.Count} artist(s).");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Error unfollowing artists: {ex.Message}");
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
         private void AppendLog(string line)
         {
             var stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
             _logQueue.Enqueue(stamped);
+        }
+
+        // Public entrypoint so other ViewModels can add to the output log (e.g., device actions)
+        public void AddOutput(string line)
+        {
+            AppendLog(line);
         }
 
         private void FlushLogTick()
@@ -726,6 +1064,25 @@ namespace SpotifyWPF.ViewModel.Page
                 ["next"] = page.Next,
                 ["previous"] = page.Previous,
                 // Non includiamo l'array items per evitare i nomi delle playlist
+                ["itemsCount"] = page.Items != null ? page.Items.Count : 0
+            };
+
+            return jo.ToString(Newtonsoft.Json.Formatting.Indented);
+        }
+
+        private string BuildArtistsPageApiOutput(PagingDto<ArtistDto>? page)
+        {
+            if (page == null) return "{ \"nullPage\": true }";
+
+            var jo = new JObject
+            {
+                ["href"] = page.Href,
+                ["limit"] = page.Limit,
+                ["offset"] = page.Offset,
+                ["total"] = page.Total,
+                ["next"] = page.Next,
+                ["previous"] = page.Previous,
+                // Non includiamo l'array items per evitare i nomi
                 ["itemsCount"] = page.Items != null ? page.Items.Count : 0
             };
 
@@ -960,6 +1317,14 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 AppendLog($"Failed to copy to clipboard: {ex.Message}");
             }
+        }
+
+        private string BuildArtistWebUrl(ArtistDto? artist)
+        {
+            if (artist == null) return string.Empty;
+            var id = artist.Id;
+            if (string.IsNullOrWhiteSpace(id)) return string.Empty;
+            return $"https://open.spotify.com/artist/{id}";
         }
     }
 }

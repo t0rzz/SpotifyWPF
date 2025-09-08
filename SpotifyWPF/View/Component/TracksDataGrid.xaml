@@ -3,8 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:localConverter="clr-namespace:SpotifyWPF.Converter"
+             xmlns:conv="clr-namespace:SpotifyWPF.View.Converters"
              xmlns:extension="clr-namespace:SpotifyWPF.View.Extension"
+             xmlns:view="clr-namespace:SpotifyWPF.View"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800">
 
@@ -29,6 +32,159 @@
                   VerticalScrollBarVisibility="Auto"
                   extension:DataGridExtensions.VisibleChangedCommand="{Binding UpdateVisibilityCommand}"
                   extension:DataGridExtensions.ScrollChangedCommand="{Binding UpdateScrollCommand}">
+
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <!-- Forward the DataGrid's DataContext (viewmodel) via Tag for use inside ContextMenu -->
+                    <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                    <Setter Property="ContextMenu">
+                        <Setter.Value>
+                            <ContextMenu Background="{DynamicResource CardBrush}"
+                                        BorderBrush="{DynamicResource ControlBorderBrush}"
+                                        BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}"
+                                        DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                <ContextMenu.Template>
+                                    <ControlTemplate TargetType="ContextMenu">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                Padding="{TemplateBinding Padding}"
+                                                SnapsToDevicePixels="True">
+                                            <ItemsPresenter />
+                                        </Border>
+                                    </ControlTemplate>
+                                </ContextMenu.Template>
+                                <ContextMenu.Resources>
+                                    <!-- Proxy to expose the row's DataContext (track dto) within this ContextMenu -->
+                                    <view:BindingProxy x:Key="RowProxy" Data="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    <conv:MultiJoinConverter x:Key="MultiJoin"/>
+                                    <Style x:Key="MenuItemParent" TargetType="MenuItem" BasedOn="{x:Null}">
+                                        <Setter Property="OverridesDefaultStyle" Value="True"/>
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                                        <Setter Property="Padding" Value="8,6,4,6"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="MenuItem">
+                                                    <Border x:Name="Border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <ContentPresenter Grid.Column="0" ContentSource="Header"
+                                                                              RecognizesAccessKey="True"
+                                                                              VerticalAlignment="Center"
+                                                                              TextBlock.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                                            <Path Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" Width="8" Height="10"
+                                                                  Stretch="Fill" StrokeThickness="2"
+                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                  Data="M0,0 L6,5 L0,10"/>
+                                                            <Popup x:Name="PART_Popup" Placement="Right" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                                                <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                                                        Effect="{DynamicResource DropShadowEffect}">
+                                                                    <ItemsPresenter/>
+                                                                </Border>
+                                                            </Popup>
+                                                        </Grid>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsHighlighted" Value="True">
+                                                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource ControlHighlightBrush}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource ControlHighlightForegroundBrush}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter Property="Opacity" Value="0.6"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                    <Style x:Key="MenuItemPlain" TargetType="MenuItem" BasedOn="{x:Null}">
+                                        <Setter Property="OverridesDefaultStyle" Value="True"/>
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                                        <Setter Property="Padding" Value="8,6"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="MenuItem">
+                                                    <Border x:Name="Border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="18"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock x:Name="CheckGlyph" Grid.Column="0" Text="✓" FontSize="12"
+                                                                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                                       Visibility="Collapsed"
+                                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                                            <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                                                              RecognizesAccessKey="True"
+                                                                              VerticalAlignment="Center"
+                                                                              TextBlock.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                                        </Grid>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsHighlighted" Value="True">
+                                                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource ControlHighlightBrush}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource ControlHighlightForegroundBrush}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter Property="Opacity" Value="0.6"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ContextMenu.Resources>
+                                <MenuItem StaysOpenOnClick="False" x:Name="PlayToMenuItem" Header="Play to" Style="{StaticResource MenuItemParent}">
+                                    <i:Interaction.Triggers>
+                                        <i:EventTrigger EventName="SubmenuOpened">
+                                            <i:InvokeCommandAction Command="{Binding PlacementTarget.Tag.RefreshDevicesCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </i:EventTrigger>
+                                    </i:Interaction.Triggers>
+                                    <MenuItem.ItemsSource>
+                                        <Binding RelativeSource="{RelativeSource AncestorType=ContextMenu}" Path="PlacementTarget.Tag.Devices"/>
+                                    </MenuItem.ItemsSource>
+                                    <MenuItem.ItemContainerStyle>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource MenuItemPlain}">
+                                            <Setter Property="IsCheckable" Value="True"/>
+                                            <Setter Property="IsChecked" Value="{Binding IsActive}"/>
+                                            <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+                                            <Setter Property="Header" Value="{Binding Name, StringFormat=Play to {0}}"/>
+                                            <Setter Property="Command" Value="{Binding PlacementTarget.Tag.PlayToDeviceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <!-- No tooltip in production -->
+                                            <!-- Build CommandParameter deviceId|trackId via converter -->
+                                            <Setter Property="CommandParameter">
+                                                <Setter.Value>
+                                                    <MultiBinding Converter="{StaticResource MultiJoin}" ConverterParameter="|">
+                                                        <Binding Path="Id"/>
+                                                        <Binding Source="{StaticResource RowProxy}" Path="Data.Id"/>
+                                                    </MultiBinding>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsHighlighted" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ControlHighlightBrush}"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource ControlHighlightForegroundBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </MenuItem.ItemContainerStyle>
+                                </MenuItem>
+                            </ContextMenu>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </DataGrid.RowStyle>
 
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>

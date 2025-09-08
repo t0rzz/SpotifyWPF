@@ -25,13 +25,14 @@
     </Window.Resources>
 
     <DockPanel>
-        <Menu DockPanel.Dock="Top" ItemsSource="{Binding MenuItems}">
+    <Menu DockPanel.Dock="Top" ItemsSource="{Binding MenuItems}">
             <Menu.ItemContainerStyle>
                 <Style TargetType="{x:Type MenuItem}">
                     <Setter Property="Command" Value="{Binding Command}"/>
                     <Setter Property="CommandParameter" Value="{Binding}"/>
                     <Setter Property="IsChecked" Value="{Binding IsChecked}"/>
                     <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+            <EventSetter Event="SubmenuOpened" Handler="MenuItem_SubmenuOpened"/>
                     <Style.Triggers>
                         <Trigger Property="Role" Value="TopLevelHeader">
                             <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
