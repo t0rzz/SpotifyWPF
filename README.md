@@ -1,5 +1,7 @@
 # SpotifyWPF
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 Unofficial WPF application that provides Spotify “power tools” (e.g., bulk playlist deletion, quick navigation, and extra metadata not shown in the official client).
 
 Note: This repository is a fork of the original project by MrPnut: https://github.com/MrPnut/SpotifyWPF. Our fork lives at https://github.com/t0rzz/SpotifyWPF and continues development from there (starting at v1.1.0).
@@ -138,4 +140,5 @@ If the MSIX doesn’t appear in CI, ensure the Desktop Bridge toolchain is avail
 
 
 ## License
-This project is provided “as is.” Check the LICENSE file if present in the repository or add one before publishing.
+Licensed under the GNU General Public License v3.0 (GPL-3.0).
+See `LICENSE` for the full text.
