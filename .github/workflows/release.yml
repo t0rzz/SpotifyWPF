@@ -102,6 +102,7 @@ jobs:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
           name: SpotifyWPF v${{ env.VERSION }}
+          generate_release_notes: true
           draft: false
           prerelease: false
           files: |
