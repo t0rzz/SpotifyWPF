@@ -10,6 +10,9 @@ on:
       - 'SpotifyWPF/app.manifest'
       - 'SpotifyWPF.MSIX/Package.appxmanifest'
       - '.github/workflows/release.yml'
+      - 'SpotifyWPF.MSIX/SpotifyWPF.MSIX.wapproj'
+      - 'CHANGELOG.md'
+      - 'README.md'
 
 permissions:
   contents: write
