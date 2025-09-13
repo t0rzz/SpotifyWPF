@@ -2,8 +2,8 @@
 {
     public class SettingsProvider : ISettingsProvider
     {
-        public string SpotifyClientId => Properties.Settings.Default.SpotifyClientId;
+        public string SpotifyClientId => SpotifyWPF.Properties.Settings.Default.SpotifyClientId;
 
-        public string SpotifyRedirectPort => Properties.Settings.Default.SpotifyRedirectPort;
+        public string SpotifyRedirectPort => SpotifyWPF.Properties.Settings.Default.SpotifyRedirectPort;
     }
 }

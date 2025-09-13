@@ -769,15 +769,15 @@ namespace SpotifyWPF.ViewModel
                     track = trackModel;
                     _loggingService.LogDebug("TRACK_CLICK", $"✅ Using existing TrackModel: {track.Title}");
                 }
-                else if (trackObj is Track apiTrack)
+                else if (trackObj is FullTrack apiTrack)
                 {
-                    _loggingService.LogDebug("TRACK_CLICK", $"🔄 Converting SpotifyAPI.Web.Track to TrackModel");
-                    // Convert from SpotifyAPI.Web.Track to TrackModel
+                    _loggingService.LogDebug("TRACK_CLICK", $"🔄 Converting SpotifyAPI.Web.FullTrack to TrackModel");
+                    // Convert from SpotifyAPI.Web.FullTrack to TrackModel
                     track = new TrackModel
                     {
                         Id = apiTrack.Id ?? string.Empty,
-                        Title = apiTrack.TrackName ?? string.Empty,
-                        Artist = apiTrack.Artists ?? string.Empty,
+                        Title = apiTrack.Name ?? string.Empty,
+                        Artist = string.Join(", ", apiTrack.Artists?.Select(a => a.Name) ?? new List<string>()),
                         Uri = apiTrack.Uri ?? string.Empty,
                         DurationMs = apiTrack.DurationMs,
                         AlbumArtUri = null // Will be set later if available

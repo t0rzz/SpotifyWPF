@@ -12,31 +12,31 @@ namespace SpotifyWPF.Model
         {
             var config = new MapperConfiguration(cfg =>
             {
-                cfg.CreateMap<PlaylistTrack<IPlayableItem>, Track>()
+                cfg.CreateMap<PlaylistTrack<IPlayableItem>, TrackModel>()
                     .ForMember(dest => dest.Id,
                         act => act.MapFrom((src, dest) => (src.Track as FullTrack)?.Id ?? string.Empty))
                     .ForMember(dest => dest.Uri,
                         act => act.MapFrom((src, dest) => (src.Track as FullTrack)?.Uri ?? string.Empty))
-                    .ForMember(dest => dest.TrackName,
-                        act => act.MapFrom((src, dest) => (src.Track as FullTrack)?.Name))
-                    .ForMember(dest => dest.Artists, act => act.MapFrom((src, dest) =>
+                    .ForMember(dest => dest.Title,
+                        act => act.MapFrom((src, dest) => (src.Track as FullTrack)?.Name ?? string.Empty))
+                    .ForMember(dest => dest.Artist, act => act.MapFrom((src, dest) =>
                     {
                         var fullTrack = src.Track as FullTrack;
-
                         var artists = string.Join(", ",
                             (fullTrack?.Artists ?? new List<SimpleArtist>()).Select(sa => sa.Name));
-
-                        return $"{artists}";
+                        return artists;
                     }))
-                    .ForMember(dest => dest.AlbumName, act => act.MapFrom((src, dest) => 
-                        (src.Track as FullTrack)?.Album?.Name ?? string.Empty))
                     .ForMember(dest => dest.DurationMs, act => act.MapFrom((src, dest) => 
                         (src.Track as FullTrack)?.DurationMs ?? 0))
-                    .ForMember(dest => dest.ImageUrl, act => act.MapFrom((src, dest) => 
+                    .ForMember(dest => dest.AlbumArtUri, act => act.MapFrom((src, dest) => 
                     {
                         var fullTrack = src.Track as FullTrack;
                         var images = fullTrack?.Album?.Images;
-                        return images != null && images.Count > 0 ? images[0].Url : string.Empty;
+                        if (images != null && images.Count > 0)
+                        {
+                            return new Uri(images[0].Url);
+                        }
+                        return null;
                     }));
             });
 

@@ -203,9 +203,8 @@ namespace SpotifyWPF.ViewModel.Page
             var filteredItems = string.IsNullOrWhiteSpace(_tracksFilterText)
                 ? Tracks
                 : Tracks.Where(item =>
-                    (item.TrackName?.Contains(_tracksFilterText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (item.Artists?.Contains(_tracksFilterText, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                    (item.AlbumName?.Contains(_tracksFilterText, StringComparison.OrdinalIgnoreCase) ?? false));
+                    (item.Title?.Contains(_tracksFilterText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (item.Artist?.Contains(_tracksFilterText, StringComparison.OrdinalIgnoreCase) ?? false));
 
             foreach (var item in filteredItems)
             {
@@ -215,11 +214,11 @@ namespace SpotifyWPF.ViewModel.Page
 
         public ObservableCollection<PlaylistDto> Playlists { get; } = new ObservableCollection<PlaylistDto>();
 
-        public ObservableCollection<Track> Tracks { get; } = new ObservableCollection<Track>();
+        public ObservableCollection<TrackModel> Tracks { get; } = new ObservableCollection<TrackModel>();
 
         // Filtered collections for search functionality
         public ObservableCollection<PlaylistDto> FilteredPlaylists { get; } = new ObservableCollection<PlaylistDto>();
-        public ObservableCollection<Track> FilteredTracks { get; } = new ObservableCollection<Track>();
+        public ObservableCollection<TrackModel> FilteredTracks { get; } = new ObservableCollection<TrackModel>();
 
         // Search filter properties
         private string _playlistsFilterText = string.Empty;
@@ -1293,7 +1292,7 @@ namespace SpotifyWPF.ViewModel.Page
 
             foreach (var track in tracks.Items)
             {
-                Tracks.Add(_mapper.Map<Track>(track));
+                Tracks.Add(_mapper.Map<TrackModel>(track));
             }
         }
 
