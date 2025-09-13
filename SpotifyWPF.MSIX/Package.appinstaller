@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AppInstaller Uri="https://example.invalid/SpotifyWPF/SpotifyWPF.appinstaller" Version="1.1.4.0" xmlns="http://schemas.microsoft.com/appx/appinstaller/2018">
+  <MainPackage Name="779637e0-8d50-400b-8dc3-136b1ab8a5be" Version="1.1.4.0" Publisher="CN=YourCompany" Uri="https://example.invalid/SpotifyWPF/SpotifyWPF.msix" />
+  <UpdateSettings>
+    <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="true" />
+  </UpdateSettings>
+</AppInstaller>

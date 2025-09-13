@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Web Playback SDK</title>
+    <meta http-equiv="Feature-Policy" content="autoplay 'self'; fullscreen 'self'">
+    <style>
+        body {
+            margin: 0;
+            padding: 2px;
+            background: transparent;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 8px;
+            color: #ffffff;
+            overflow: hidden;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        
+        #status {
+            padding: 2px;
+            background: rgba(0,0,0,0.1);
+            display: none; /* Hide status for more space */
+            font-size: 7px;
+        }
+        
+        .audio-btn {
+            position: fixed;
+            top: 2px;
+            right: 2px;
+            z-index: 9999;
+            margin: 0;
+            padding: 2px 4px;
+            background: #1DB954;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 7px;
+            font-family: 'Segoe UI', sans-serif;
+            line-height: 1;
+        }
+        
+        .audio-btn:hover {
+            background: #1ed760;
+        }
+    </style>
+</head>
+<body onclick="window.activateAudio && window.activateAudio()">
+    <div id="status">Initializing Web Playback SDK...</div>
+    <button class="audio-btn" onclick="window.activateAudio()">🔊 Activate Audio</button>
+
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <!-- Dynamically inject bridge with cache-busting to avoid stale scripts -->
+    <script>
+        (function() {
+            var cacheBust = Date.now().toString();
+            var s = document.createElement('script');
+            s.src = 'player-bridge.js?v=' + cacheBust;
+            s.async = true;
+            s.onload = function() {
+                console.log('player-bridge.js loaded (v=' + cacheBust + ')');
+                // If SDK became ready before bridge, notify now
+                if (window._sdkReadyFlag && window.playerBridge && typeof window.playerBridge.onSDKReady === 'function') {
+                    try { window.playerBridge.onSDKReady(); } catch(e) { console.error(e); }
+                }
+                // If C# already called initializePlayer, pass the token now
+                if (window._pendingAccessToken && window.playerBridge && typeof window.playerBridge.initialize === 'function') {
+                    try { window.playerBridge.initialize(window._pendingAccessToken); window._pendingAccessToken = null; } catch(e) { console.error(e); }
+                }
+            };
+            s.onerror = function(e) { console.error('Failed to load player-bridge.js', e); };
+            document.head.appendChild(s);
+        })();
+    </script>
+    <script>
+        // Audio activation function for WebView2
+        window.activateAudio = function() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext && !window.audioContextActivated) {
+                    const audioContext = new AudioContext();
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume().then(() => {
+                            console.log('Audio context activated by user interaction');
+                        });
+                    }
+                    window.audioContextActivated = true;
+                }
+            } catch (e) {
+                console.log('Could not activate audio:', e);
+            }
+        };
+        
+        // Global initialization function called from C#
+        window.initializePlayer = function(accessToken) {
+            console.log('initializePlayer called with token:', accessToken.substring(0, 20) + '...');
+            document.getElementById('status').textContent = 'initializePlayer called';
+            
+            if (window.playerBridge && typeof window.playerBridge.initialize === 'function') {
+                console.log('playerBridge found, calling initialize');
+                window.playerBridge.initialize(accessToken);
+            } else {
+                console.warn('Player bridge not yet loaded; deferring initialization');
+                window._pendingAccessToken = accessToken;
+            }
+        };
+
+        // Wait for Spotify SDK to load
+        window.onSpotifyWebPlaybackSDKReady = () => {
+            console.log('Spotify SDK Ready callback fired');
+            document.getElementById('status').textContent = 'Spotify SDK Ready';
+            window._sdkReadyFlag = true;
+            
+            if (window.playerBridge && typeof window.playerBridge.onSDKReady === 'function') {
+                console.log('Calling playerBridge.onSDKReady');
+                window.playerBridge.onSDKReady();
+            } else {
+                console.warn('Bridge not yet loaded; will call on load');
+            }
+        };
+    </script>
+</body>
+</html>

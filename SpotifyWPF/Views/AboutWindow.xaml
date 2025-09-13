@@ -1,0 +1,227 @@
+<Window x:Class="SpotifyWPF.Views.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:SpotifyWPF.Views"
+        mc:Ignorable="d"
+        Title="About SpotifyWPF"
+        Height="500"
+        Width="450"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Icon="/icon.ico">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <!-- Custom styles for About window -->
+            <Style x:Key="SpotifyButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Width" Value="120"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Cursor" Value="Hand"/>
+            </Style>
+
+            <Style x:Key="SpotifyTextBlockStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource ControlForegroundBrush}"/>
+                <Setter Property="FontFamily" Value="Segoe UI"/>
+                <Setter Property="TextWrapping" Value="Wrap"/>
+                <Setter Property="TextAlignment" Value="Center"/>
+            </Style>
+
+            <Style x:Key="TitleTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SpotifyTextBlockStyle}">
+                <Setter Property="FontSize" Value="28"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+                <Setter Property="Margin" Value="0,0,0,8"/>
+            </Style>
+
+            <Style x:Key="SubtitleTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SpotifyTextBlockStyle}">
+                <Setter Property="FontSize" Value="16"/>
+                <Setter Property="Foreground" Value="{StaticResource SubtleForegroundBrush}"/>
+                <Setter Property="Margin" Value="0,0,0,20"/>
+            </Style>
+
+            <Style x:Key="InfoTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SpotifyTextBlockStyle}">
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Foreground" Value="{StaticResource SubtleForegroundBrush}"/>
+                <Setter Property="Margin" Value="0,0,0,8"/>
+            </Style>
+
+            <Style x:Key="LinkTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SpotifyTextBlockStyle}">
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="TextDecorations" Value="Underline"/>
+                <Setter Property="Margin" Value="0,0,0,8"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Background="{StaticResource AppBackgroundBrush}"
+            BorderBrush="{StaticResource ControlBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Margin="20">
+
+        <Grid>
+            <!-- Custom title bar -->
+            <Border Background="{StaticResource SurfaceBrush}"
+                    Height="50"
+                    VerticalAlignment="Top"
+                    CornerRadius="12,12,0,0">
+                <Grid>
+                    <TextBlock Text="About SpotifyWPF"
+                               Foreground="{StaticResource ControlForegroundBrush}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+
+                    <!-- Close button -->
+                    <Button x:Name="CloseButton"
+                            Content="✕"
+                            Width="30"
+                            Height="30"
+                            Background="Transparent"
+                            Foreground="{StaticResource SubtleForegroundBrush}"
+                            BorderThickness="0"
+                            FontSize="14"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,15,0"
+                            Cursor="Hand"
+                            Click="CloseButton_Click">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="15">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource Color.Danger}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Main content -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Margin="0,50,0,80">
+                <StackPanel Margin="30,20,30,20"
+                            HorizontalAlignment="Center">
+
+                    <!-- Spotify logo placeholder -->
+                    <Border Width="80"
+                            Height="80"
+                            Background="{StaticResource PrimaryBrush}"
+                            CornerRadius="40"
+                            Margin="0,0,0,20">
+                        <TextBlock Text="♪"
+                                   FontSize="40"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Title -->
+                    <TextBlock Style="{StaticResource TitleTextStyle}"
+                               Text="SpotifyWPF"/>
+
+                    <!-- Subtitle -->
+                    <TextBlock Style="{StaticResource SubtitleTextStyle}"
+                               Text="Unofficial power tools for Spotify"/>
+
+                    <!-- Version info -->
+                    <TextBlock x:Name="VersionTextBlock"
+                               Style="{StaticResource InfoTextStyle}"/>
+
+                    <!-- Author -->
+                    <TextBlock Style="{StaticResource InfoTextStyle}"
+                               Text="Author: t0rzz (maintainer)"/>
+
+                    <!-- Original project -->
+                    <TextBlock Style="{StaticResource InfoTextStyle}"
+                               Text="Original project: MrPnut/SpotifyWPF"/>
+
+                    <!-- Repository link -->
+                    <TextBlock x:Name="RepositoryLink"
+                               Style="{StaticResource LinkTextStyle}"
+                               Text="GitHub Repository"
+                               MouseLeftButtonDown="RepositoryLink_MouseLeftButtonDown"/>
+
+                    <!-- Disclaimer -->
+                    <Border Background="{StaticResource CardBrush}"
+                            CornerRadius="8"
+                            Padding="15"
+                            Margin="0,20,0,0">
+                        <TextBlock Style="{StaticResource InfoTextStyle}"
+                                   TextAlignment="Center"
+                                   Foreground="{StaticResource SubtleForegroundBrush}"
+                                   FontSize="12">
+                            <Run Text="⚠️ "/>
+                            <Run Text="This is a community project and is not affiliated with Spotify."/>
+                        </TextBlock>
+                    </Border>
+
+                    <!-- Features section -->
+                    <Border Background="{StaticResource CardBrush}"
+                            CornerRadius="8"
+                            Padding="15"
+                            Margin="0,15,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="✨ Features:"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource ControlForegroundBrush}"
+                                       Margin="0,0,0,10"/>
+
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Web Playback SDK integration"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Device transfer support"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Enhanced status bar"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Real-time playback control"
+                                       FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Bottom button area -->
+            <Border Background="{StaticResource SurfaceBrush}"
+                    Height="80"
+                    VerticalAlignment="Bottom"
+                    CornerRadius="0,0,12,12">
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <Button Content="OK"
+                            Style="{StaticResource SpotifyButtonStyle}"
+                            Click="OKButton_Click"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
