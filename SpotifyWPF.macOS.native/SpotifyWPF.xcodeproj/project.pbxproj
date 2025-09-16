@@ -142,7 +142,7 @@ runOnlyForDeploymentPostprocessing = 0;
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-4B2F8A3D2C8F4E5600A1B2C3 /* Debug */ = {
+4B2F8A402C8F4E5600A1B2C3 /* Debug */ = {
 isa = XCBuildConfiguration;
 buildSettings = {
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -164,7 +164,7 @@ SWIFT_VERSION = 5.0;
 };
 name = Debug;
 };
-4B2F8A3E2C8F4E5600A1B2C3 /* Release */ = {
+4B2F8A412C8F4E5600A1B2C3 /* Release */ = {
 isa = XCBuildConfiguration;
 buildSettings = {
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -312,24 +312,24 @@ name = Release;
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-4B2F8A242C8F4E5600A1B2C3 /* Build configuration list for PBXProject 'SpofifyWPF' */ = {
-isa = XCConfigurationList;
-buildConfigurations = (
-4B2F8A502C8F4E5600A1B2C3 /* Debug */,
-4B2F8A512C8F4E5600A1B2C3 /* Release */,
-);
-defaultConfigurationIsVisible = 0;
-defaultConfigurationName = Release;
-};
-4B2F8A3D2C8F4E5600A1B2C3 /* Build configuration list for PBXNativeTarget 'SpofifyWPF' */ = {
-isa = XCConfigurationList;
-buildConfigurations = (
-4B2F8A3D2C8F4E5600A1B2C3 /* Debug */,
-4B2F8A3E2C8F4E5600A1B2C3 /* Release */,
-);
-defaultConfigurationIsVisible = 0;
-defaultConfigurationName = Release;
-};
+		4B2F8A242C8F4E5600A1B2C3 /* Build configuration list for PBXProject "SpofifyWPF" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4B2F8A502C8F4E5600A1B2C3 /* Debug */,
+				4B2F8A512C8F4E5600A1B2C3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4B2F8A3D2C8F4E5600A1B2C3 /* Build configuration list for PBXNativeTarget "SpofifyWPF" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4B2F8A402C8F4E5600A1B2C3 /* Debug */,
+				4B2F8A412C8F4E5600A1B2C3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 };
