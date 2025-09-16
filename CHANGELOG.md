@@ -4,6 +4,68 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.0.0] - 2025-09-16
+### 🎯 Major Release: Cross-Platform Spotify Power Tools
+
+**Breaking Change**: This release transforms the project from a Windows-only application to a **cross-platform Spotify power tools suite** with native implementations for both Windows and macOS.
+
+### ✨ Added
+- **🎵 Spofify (macOS)**: Complete native macOS application with identical feature set to Windows version
+  - Native Swift application with WKWebView for embedded web interface
+  - Custom URL scheme handling (`spofifywpf://callback`) for OAuth authentication
+  - DMG distribution package for easy macOS installation
+  - Native macOS UI with AppKit integration
+- **🔄 Cross-Platform CI/CD**: GitHub Actions workflow now builds both platforms simultaneously
+  - Windows: WPF app, MSIX installer, portable EXE
+  - macOS: Native Swift app, DMG installer
+  - Unified release process with cross-platform artifacts
+- **📱 Unified Device Management**: Identical device discovery and "Play To" functionality across platforms
+  - Dynamic device detection and status tracking
+  - Seamless playback transfer between devices
+  - Context menu integration for device selection
+- **🎨 Consistent UI/UX**: Unified dark theme and interaction patterns across both platforms
+  - Spotify-branded dark interface
+  - Consistent playlist management and bulk operations
+  - Identical OAuth authentication flow
+
+### 🔧 Changed
+- **📦 Distribution Strategy**: Dual-platform releases with platform-specific installers
+  - Windows: MSIX + portable EXE + ZIP
+  - macOS: DMG installer
+- **🏗️ Build System**: Cross-platform build pipeline supporting both .NET and Xcode
+- **📚 Documentation**: Unified README covering both Windows and macOS implementations
+- **🎯 Feature Parity**: All core features now available on both platforms
+  - Bulk playlist operations (delete, unfollow, manage)
+  - Advanced device management and playback transfer
+  - Web Playback SDK integration
+  - Rate limiting and error handling
+- **🏷️ Rebranding**: Project renamed from "SpotifyWPF" to "SpofifyWPF" for consistent cross-platform branding
+  - Windows app: "SpotifyWPF" → "SpofifyWPF"
+  - macOS app: "Spofify" → "SpofifyWPF" (unified naming)
+  - All references updated throughout codebase and documentation
+
+### 🎵 Core Features (Cross-Platform)
+Both SpotifyWPF (Windows) and Spofify (macOS) now provide identical functionality:
+- **Playlist Management**: Bulk operations, sorting, pagination, context menus
+- **Device Integration**: "Play To" functionality, playback transfer, volume control
+- **Authentication**: OAuth 2.0 with secure token management
+- **Web Playback**: Local playback with Spotify Web Playback SDK
+- **Artist Management**: Follow/unfollow operations with bulk support
+- **Search**: Multi-category search with filtering
+- **Modern UI**: Dark theme with responsive design
+
+### 📋 Platform-Specific Implementations
+- **Windows (SpotifyWPF)**: WPF (.NET 8) + WebView2 + MSIX packaging
+- **macOS (Spofify)**: Swift + WKWebView + DMG packaging
+
+### 🚀 Migration Notes
+- **Version Reset**: Both platforms start at v3.0.0 for unified versioning
+- **Feature Parity**: All existing Windows features now available on macOS
+- **Backward Compatibility**: Windows users can continue using existing workflows
+- **New Users**: macOS users now have full access to Spotify power tools
+
+---
+
 ## [2.0.0] - 2025-09-12
 ### Highlights
 - Modern Player UI based on WebView2 hosting the Spotify Web Playback SDK.

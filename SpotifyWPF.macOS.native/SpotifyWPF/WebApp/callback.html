@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Authorization - Callback</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            max-width: 400px;
+            padding: 40px;
+            background-color: #282828;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        .spinner {
+            border: 4px solid #333;
+            border-top: 4px solid #1db954;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .success {
+            color: #1db954;
+        }
+        .error {
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 id="status">Processing authorization...</h2>
+        <div class="spinner" id="spinner"></div>
+        <p id="message">Please wait while we connect your Spotify account.</p>
+    </div>
+
+    <script>
+        // Handle the OAuth callback
+        function handleCallback() {
+            console.log('Callback page loaded');
+            console.log('Current URL:', window.location.href);
+            console.log('URL search params:', window.location.search);
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const authorizationCode = urlParams.get('code');
+            const error = urlParams.get('error');
+
+            console.log('Parsed params:', { authorizationCode: authorizationCode ? 'present' : 'missing', error });
+
+            if (error) {
+                // Handle authorization error
+                console.log('Authorization error:', error);
+                document.getElementById('status').textContent = 'Authorization Failed';
+                document.getElementById('status').className = 'error';
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('message').textContent = `Error: ${error}`;
+
+                // Send error message to parent window
+                if (window.opener) {
+                    console.log('Sending error message to parent');
+                    window.opener.postMessage({
+                        type: 'spotify-auth-error',
+                        error: error
+                    }, '*');
+                } else {
+                    console.log('No window.opener found');
+                }
+
+                // Close window after a delay
+                setTimeout(() => {
+                    window.close();
+                }, 5000);
+
+            } else if (authorizationCode) {
+                // Handle successful authorization - we have a code, now exchange for tokens
+                console.log('Authorization code received, exchanging for tokens');
+                document.getElementById('status').textContent = 'Exchanging authorization code...';
+                document.getElementById('message').textContent = 'Please wait while we complete the authorization.';
+
+                // Send the authorization code to the parent window for token exchange
+                if (window.opener) {
+                    console.log('Sending authorization code to parent for token exchange');
+                    window.opener.postMessage({
+                        type: 'spotify-auth-code',
+                        code: authorizationCode
+                    }, '*');
+                } else {
+                    console.log('No window.opener found');
+                    document.getElementById('status').textContent = 'Connection Error';
+                    document.getElementById('status').className = 'error';
+                    document.getElementById('spinner').style.display = 'none';
+                    document.getElementById('message').textContent = 'Lost connection to main window. Please close this window and try again.';
+                }
+
+            } else {
+                // Handle unexpected state
+                console.log('Unexpected state - no code or error');
+                document.getElementById('status').textContent = 'Unexpected Error';
+                document.getElementById('status').className = 'error';
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('message').textContent = 'Something went wrong. Please try again.';
+
+                // Send error message to parent window
+                if (window.opener) {
+                    console.log('Sending unexpected error message to parent');
+                    window.opener.postMessage({
+                        type: 'spotify-auth-error',
+                        error: 'unexpected_error'
+                    }, '*');
+                } else {
+                    console.log('No window.opener found');
+                }
+
+                // Close window after a delay
+                setTimeout(() => {
+                    window.close();
+                }, 5000);
+            }
+        }
+
+        // Handle the callback when the page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', handleCallback);
+        } else {
+            handleCallback();
+        }
+    </script>
+</body>
+</html>

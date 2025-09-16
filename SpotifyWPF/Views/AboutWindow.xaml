@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SpotifyWPF.Views"
         mc:Ignorable="d"
-        Title="About SpotifyWPF"
+        Title="About SpofifyWPF"
         Height="500"
         Width="450"
         WindowStyle="None"
@@ -75,7 +75,7 @@
                     VerticalAlignment="Top"
                     CornerRadius="12,12,0,0">
                 <Grid>
-                    <TextBlock Text="About SpotifyWPF"
+                    <TextBlock Text="About SpofifyWPF"
                                Foreground="{StaticResource ControlForegroundBrush}"
                                FontSize="16"
                                FontWeight="SemiBold"
@@ -142,7 +142,7 @@
 
                     <!-- Title -->
                     <TextBlock Style="{StaticResource TitleTextStyle}"
-                               Text="SpotifyWPF"/>
+                               Text="SpofifyWPF"/>
 
                     <!-- Subtitle -->
                     <TextBlock Style="{StaticResource SubtitleTextStyle}"

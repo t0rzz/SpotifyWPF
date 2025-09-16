@@ -56,11 +56,11 @@ namespace SpotifyWPF.Views
                 var version = asm.GetName().Version?.ToString() ?? "1.0.0.0";
                 // Remove the build and revision numbers for cleaner display
                 var shortVersion = version.Split('.')[0] + "." + version.Split('.')[1] + "." + version.Split('.')[2];
-                this.Title = $"Spotify WPF v{shortVersion}";
+                this.Title = $"SpofifyWPF v{shortVersion}";
             }
             catch
             {
-                this.Title = "Spotify WPF";
+                this.Title = "SpofifyWPF";
             }
         }
 

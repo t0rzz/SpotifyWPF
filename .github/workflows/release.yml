@@ -11,6 +11,7 @@ on:
       - 'SpotifyWPF.MSIX/Package.appxmanifest'
       - '.github/workflows/release.yml'
       - 'SpotifyWPF.MSIX/SpotifyWPF.MSIX.wapproj'
+      - 'SpotifyWPF.macOS.native/**'
       - 'CHANGELOG.md'
       - 'README.md'
 
@@ -18,8 +19,8 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and create GitHub Release
+  build-windows:
+    name: Build Windows
     runs-on: windows-latest
 
     steps:
@@ -87,14 +88,92 @@ jobs:
           Write-Host "MSIX: $dest"
         shell: pwsh
 
-      - name: Upload artifacts
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
+          name: windows-artifacts
           path: |
             ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.zip
             ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
             ${{ github.workspace }}\SpotifyWPF-${{ env.VERSION }}.msix
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ -f "./SpotifyWPF.macOS.native/SpotifyWPF.xcodeproj/project.pbxproj" ]; then
+            # Try to extract version from Xcode project
+            VERSION=$(grep -o 'MARKETING_VERSION = [0-9.]*' "./SpotifyWPF.macOS.native/SpotifyWPF.xcodeproj/project.pbxproj" | head -1 | cut -d' ' -f3)
+            if [ -z "$VERSION" ]; then
+              VERSION="1.0.0"
+            fi
+          else
+            VERSION="1.0.0"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
+          echo "Detected macOS version: $VERSION"
+
+      - name: Build macOS app
+        run: |
+          cd SpotifyWPF.macOS.native
+          chmod +x build_dmg.sh
+          ./build_dmg.sh
+
+      - name: Rename DMG with version
+        run: |
+          cd SpotifyWPF.macOS.native
+          if [ -f "Spofyfy.dmg" ]; then
+            mv Spofyfy.dmg "../SpotifyWPF-${{ env.VERSION }}-macOS.dmg"
+          fi
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: |
+            SpotifyWPF-${{ env.VERSION }}-macOS.dmg
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifacts
+
+      - name: Extract version for release
+        run: |
+          # Get version from Windows build (assuming same version)
+          VERSION="1.0.0"  # Default fallback
+          if [ -f "SpotifyWPF.csproj" ]; then
+            VERSION=$(grep -o '<Version>[^<]*' SpotifyWPF.csproj | head -1 | sed 's/<Version>//')
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -109,6 +188,7 @@ jobs:
             SpotifyWPF-${{ env.VERSION }}.zip
             SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
             SpotifyWPF-${{ env.VERSION }}.msix
+            SpotifyWPF-${{ env.VERSION }}-macOS.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

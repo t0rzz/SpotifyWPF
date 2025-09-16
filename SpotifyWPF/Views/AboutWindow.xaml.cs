@@ -21,11 +21,11 @@ namespace SpotifyWPF.Views
             try
             {
                 var asm = Assembly.GetExecutingAssembly();
-                var infoVer = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-                               ?? asm.GetName().Version?.ToString()
-                               ?? "1.0.0";
+                var version = asm.GetName().Version?.ToString() ?? "1.0.0.0";
+                // Remove the build and revision numbers for cleaner display
+                var shortVersion = version.Split('.')[0] + "." + version.Split('.')[1] + "." + version.Split('.')[2];
 
-                VersionTextBlock.Text = $"Version: {infoVer}";
+                VersionTextBlock.Text = $"Version: {shortVersion}";
             }
             catch
             {

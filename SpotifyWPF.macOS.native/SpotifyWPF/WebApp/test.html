@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spofyfy Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #121212;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .test-info {
+            background: #282828;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .success {
+            color: #1db954;
+        }
+        .error {
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Spofyfy Test Page</h1>
+    <div class="test-info">
+        <h2>WebView Test</h2>
+        <p>If you can see this page, the WebView is working correctly!</p>
+        <p class="success">✅ WebView loaded successfully</p>
+    </div>
+
+    <div class="test-info">
+        <h2>Next Steps</h2>
+        <p>1. Configure your Spotify API credentials in <code>js/config.js</code></p>
+        <p>2. Set up your Spotify Developer App with redirect URI: <code>spotifywpf://callback</code></p>
+        <p>3. Test the OAuth flow and Spotify integration</p>
+    </div>
+
+    <script>
+        console.log('Test page loaded successfully');
+        console.log('WebView is working correctly');
+    </script>
+</body>
+</html>

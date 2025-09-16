@@ -23,7 +23,7 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <!-- Add versioned title and informational version so the running app can show version in its title -->
     <AssemblyTitle>$(AssemblyName) v$(Version)</AssemblyTitle>
-    <AssemblyInformationalVersion>$(Version)</AssemblyInformationalVersion>
+    <AssemblyInformationalVersion>$(Version)+$(SourceRevisionId)</AssemblyInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
