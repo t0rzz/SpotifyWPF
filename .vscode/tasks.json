@@ -1,0 +1,97 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/SpotifyWPF.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "publish",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "publish",
+                "${workspaceFolder}/SpotifyWPF.sln",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "watch",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "watch",
+                "run",
+                "--project",
+                "${workspaceFolder}/SpotifyWPF.sln"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build-wpf",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "SpotifyWPF/SpotifyWPF.csproj",
+                "-v",
+                "minimal"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Build only the WPF project (avoids MSIX solution errors)"
+        },
+        {
+            "label": "run-wpf",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "run",
+                "--project",
+                "SpotifyWPF/SpotifyWPF.csproj"
+            ],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": [],
+            "detail": "Run the WPF application directly"
+        },
+        {
+            "label": "build-and-run-wpf",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build-wpf",
+                "run-wpf"
+            ],
+            "group": "test",
+            "detail": "Build and run the WPF project in sequence"
+        }
+    ]
+}
