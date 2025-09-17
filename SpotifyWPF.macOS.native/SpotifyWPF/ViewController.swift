@@ -11,7 +11,7 @@ import WebKit
 
 class ViewController: NSViewController {
 
-    @IBOutlet weak var webView: WKWebView!
+    private var webView: WKWebView!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -20,11 +20,6 @@ class ViewController: NSViewController {
         let configuration = WKWebViewConfiguration()
         configuration.preferences.javaScriptEnabled = true
         configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-
-        // Remove existing webView if it exists
-        if let existingWebView = webView {
-            existingWebView.removeFromSuperview()
-        }
 
         // Create new WebView with proper configuration
         webView = WKWebView(frame: view.bounds, configuration: configuration)
