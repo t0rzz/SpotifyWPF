@@ -14,6 +14,7 @@ on:
       - 'SpotifyWPF.macOS.native/**'
       - 'CHANGELOG.md'
       - 'README.md'
+  workflow_dispatch:
 
 permissions:
   contents: write
