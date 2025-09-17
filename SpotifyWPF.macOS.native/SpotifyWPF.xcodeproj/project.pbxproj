@@ -1,7 +1,4 @@
-// !$*UTF8		4B2F8A2F2C8F4E5600A1B2C3 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2E2C8F4E5600A1B2C3 /* ViewController.swift */; };
-		4B2F8A352C8F4E5600A1B2C3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */; };
-		4B2F8A3C2C8F4E5600A1B2C3 /* WebApp in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */; };
-/* End PBXBuildFile section */
+// !$*UTF8*$!
 {
 	archiveVersion = 1;
 	classes = {
@@ -13,6 +10,7 @@
 		4B2F8A2D2C8F4E5600A1B2C3 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2C2C8F4E5600A1B2C3 /* AppDelegate.swift */; };
 		4B2F8A2F2C8F4E5600A1B2C3 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2E2C8F4E5600A1B2C3 /* ViewController.swift */; };
 		4B2F8A352C8F4E5600A1B2C3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */; };
+		4B2F8A3C2C8F4E5600A1B2C3 /* WebApp in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
