@@ -11,26 +11,40 @@ echo "Building Spofyfy for macOS..."
 rm -rf build/
 rm -f Spofyfy.dmg
 
-# Build the Xcode project
-xcodebuild -project SpotifyWPF.xcodeproj -scheme SpotifyWPF -configuration Release build
+# Build the Xcode project with explicit output directory
+echo "Building Xcode project..."
+BUILD_DIR="$(pwd)/build"
+xcodebuild -project SpotifyWPF.xcodeproj -scheme SpotifyWPF -configuration Release -derivedDataPath "$BUILD_DIR/DerivedData" build
 
-# Locate the built .app. Prefer DerivedData Products, then fallback to build/Release.
+# First, check if the build succeeded by looking for any .app files
+echo "Searching for any .app files in the workspace..."
+find . -name "*.app" -type d 2>/dev/null | head -10
+
+# Locate the built .app. Check multiple possible locations
 APP_PATH=""
+
+# Check explicit build directory first
+if [ -d "$BUILD_DIR/DerivedData" ]; then
+	echo "Checking explicit build directory: $BUILD_DIR/DerivedData"
+	APP_PATH=$(find "$BUILD_DIR/DerivedData" -name "*.app" -type d -print -quit 2>/dev/null || true)
+	if [ -n "$APP_PATH" ]; then
+		echo "Found .app in explicit build directory: $APP_PATH"
+	fi
+fi
 
 # Try to discover DerivedData path from xcodebuild output (default location)
 DERIVED_DATA_DIR="$HOME/Library/Developer/Xcode/DerivedData"
-if [ -d "$DERIVED_DATA_DIR" ]; then
+if [ -z "$APP_PATH" ] && [ -d "$DERIVED_DATA_DIR" ]; then
 	echo "Searching DerivedData for built .app under: $DERIVED_DATA_DIR"
 	# look for any matching Products/Release/*.app anywhere under DerivedData
-	# Don't restrict depth here: DerivedData layout can vary. Use -path to focus on Release products.
 	APP_PATH=$(find "$DERIVED_DATA_DIR" -type d -path "*/Build/Products/Release/*.app" -print -quit 2>/dev/null || true)
 	if [ -n "$APP_PATH" ]; then
 		echo "Found .app in DerivedData: $APP_PATH"
 	else
-		echo "No .app found in DerivedData (will try repository-local build/Release)."
-		# For debugging, list up to 10 matching candidates so CI logs show what's present
-		echo "DerivedData candidates (first 10):"
-		find "$DERIVED_DATA_DIR" -type d -path "*/Build/Products/Release/*.app" -print 2>/dev/null | head -n 10 || true
+		echo "No .app found in DerivedData"
+		# For debugging, list all .app files in DerivedData
+		echo "All .app files in DerivedData:"
+		find "$DERIVED_DATA_DIR" -name "*.app" -type d 2>/dev/null | head -10 || true
 	fi
 fi
 
@@ -46,6 +60,20 @@ if [ -z "$APP_PATH" ] && [ -d "$DERIVED_DATA_DIR" ]; then
 	done
 fi
 
+# Check if build actually produced any output
+if [ -z "$APP_PATH" ]; then
+	echo "No .app found in standard locations. Checking build directory..."
+	if [ -d "build" ]; then
+		echo "Contents of build directory:"
+		find build -type f -name "*.app" 2>/dev/null || echo "No .app files in build directory"
+		ls -la build/
+	fi
+	
+	# Check if there are any .app files anywhere in the current directory tree
+	echo "Searching entire workspace for .app files..."
+	find . -name "*.app" -type d 2>/dev/null | head -10 || echo "No .app files found anywhere"
+fi
+
 # Fallback: check repository-local build/Release for common names
 if [ -z "$APP_PATH" ]; then
 	for name in "SpofifyWPF.app" "SpotifyWPF.app"; do
@@ -57,7 +85,17 @@ if [ -z "$APP_PATH" ]; then
 fi
 
 if [ -z "$APP_PATH" ]; then
-	echo "Error: built .app not found. Searched DerivedData and build/Release." >&2
+	echo "Error: built .app not found. Searched all possible locations."
+	echo "Build may have failed or output location is different."
+	echo "Checking if build directory exists and has content..."
+	if [ -d "build" ]; then
+		echo "Build directory contents:"
+		ls -la build/
+		echo "Checking for any build artifacts:"
+		find build -type f 2>/dev/null | head -20 || echo "No files found in build directory"
+	else
+		echo "Build directory does not exist - build likely failed"
+	fi
 	exit 1
 fi
 
@@ -68,6 +106,15 @@ echo "Contents of .app directory:"
 ls -la "$APP_PATH" | head -20
 echo "Size of .app:"
 du -sh "$APP_PATH"
+
+# Check if .app has reasonable content
+APP_SIZE=$(du -sk "$APP_PATH" | cut -f1)
+if [ "$APP_SIZE" -lt 1000 ]; then
+	echo "WARNING: .app bundle is very small (${APP_SIZE}KB). This may indicate missing resources."
+	echo "Detailed contents of .app:"
+	find "$APP_PATH" -type f | head -20
+fi
+
 cp -r "$APP_PATH" build/dmg/
 
 # Check what was copied
