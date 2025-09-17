@@ -123,13 +123,64 @@ ls -la build/dmg/
 echo "Size of copied .app:"
 du -sh build/dmg/*.app 2>/dev/null || echo "No .app found in build/dmg"
 
+# Verify the copied .app has content
+if [ -d "build/dmg/SpofifyWPF.app" ]; then
+	echo "Verifying copied .app bundle contents:"
+	ls -la build/dmg/SpofifyWPF.app/Contents/ 2>/dev/null || echo "Contents directory missing"
+	
+	# Check if executable exists and has size
+	if [ -f "build/dmg/SpofifyWPF.app/Contents/MacOS/SpofifyWPF" ]; then
+		echo "Executable size:"
+		ls -lh build/dmg/SpofifyWPF.app/Contents/MacOS/SpofifyWPF
+	else
+		echo "ERROR: Executable missing!"
+	fi
+	
+	# Check if WebApp resources exist
+	if [ -d "build/dmg/SpofifyWPF.app/Contents/Resources/WebApp" ]; then
+		echo "WebApp resources found:"
+		find build/dmg/SpofifyWPF.app/Contents/Resources/WebApp -name "*.html" -o -name "*.css" -o -name "*.js" | head -10
+	else
+		echo "ERROR: WebApp resources missing!"
+	fi
+else
+	echo "ERROR: .app bundle not found in build/dmg!"
+	exit 1
+fi
+
 # Create Applications symlink
-ln -s /Applications build/dmg/Applications
+echo "Creating Applications symlink..."
+if ln -s /Applications build/dmg/Applications; then
+	echo "Applications symlink created successfully"
+	ls -la build/dmg/
+else
+	echo "WARNING: Failed to create Applications symlink"
+fi
 
 # Create DMG
 echo "Creating DMG..."
+DMG_DIR_SIZE=$(du -sk build/dmg | cut -f1)
+echo "DMG source directory size: ${DMG_DIR_SIZE}KB"
+
 hdiutil create -volname "Spofyfy" -srcfolder build/dmg -ov -format UDZO Spofyfy.dmg
 
 echo "DMG created successfully: Spofyfy.dmg"
 echo "DMG size:"
 ls -lh Spofyfy.dmg
+
+# Verify DMG contents
+echo "Verifying DMG contents..."
+if [ -f "Spofyfy.dmg" ]; then
+	DMG_SIZE=$(ls -l Spofyfy.dmg | awk '{print $5}')
+	DMG_SIZE_KB=$((DMG_SIZE / 1024))
+	echo "DMG file size: ${DMG_SIZE_KB}KB"
+	
+	# Expected size should be reasonable compression of source
+	if [ "$DMG_SIZE_KB" -lt 50 ]; then
+		echo "WARNING: DMG is suspiciously small (${DMG_SIZE_KB}KB). Expected >50KB for a complete app."
+		echo "This may indicate the .app bundle is empty or missing."
+	fi
+else
+	echo "ERROR: DMG file was not created!"
+	exit 1
+fi
