@@ -658,21 +658,30 @@
                         <view key="contentView" wantsLayer="YES" id="EhI-LE-HBj">
                             <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
                             <autoresizingMask key="autoresizingMask"/>
-                            <subviews>
-                                <webView wantsLayer="YES" id="webView" customClass="WebView">
-                                    <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
-                                    <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                    <webPreferences key="preferences" defaultFontSize="12" defaultFixedFontSize="12" minimumFontSize="7" plugInsEnabled="NO" javaEnabled="NO" javaScriptEnabled="YES" javaScriptCanOpenWindowsAutomatically="NO" allowsAnimatedImages="YES" allowsAnimatedImageLooping="YES" loadsImagesAutomatically="YES" shouldPrintBackgrounds="NO" userStyleSheetLocation="file:///Users/runner/work/SpotifyWPF/SpotifyWPF/SpotifyWPF.macOS.native/SpotifyWPF/WebApp/player.html" userStyleSheetEnabled="YES">
-                                        <userStyleSheetLocation key="userStyleSheetLocation" string="file:///Users/runner/work/SpotifyWPF/SpotifyWPF/SpotifyWPF.macOS.native/SpotifyWPF/WebApp/player.html"/>
-                                    </webPreferences>
-                                </webView>
-                            </subviews>
                         </view>
                     </window>
                     <connections>
-                        <outlet property="webView" destination="webView" id="webView-outlet"/>
+                        <segue destination="mainViewController" kind="relationship" relationship="contentViewController" id="contentViewController-segue"/>
                     </connections>
                 </windowController>
+                <viewController id="mainViewController" sceneMemberID="viewController">
+                    <view key="view" wantsLayer="YES" id="mainView">
+                        <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <webView wantsLayer="YES" id="webView" customClass="WebView">
+                                <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                <webPreferences key="preferences" defaultFontSize="12" defaultFixedFontSize="12" minimumFontSize="7" plugInsEnabled="NO" javaEnabled="NO" javaScriptEnabled="YES" javaScriptCanOpenWindowsAutomatically="NO" allowsAnimatedImages="YES" allowsAnimatedImageLooping="YES" loadsImagesAutomatically="YES" shouldPrintBackgrounds="NO" userStyleSheetLocation="file:///Users/runner/work/SpotifyWPF/SpotifyWPF/SpotifyWPF.macOS.native/SpotifyWPF/WebApp/player.html" userStyleSheetEnabled="YES">
+                                    <userStyleSheetLocation key="userStyleSheetLocation" string="file:///Users/runner/work/SpotifyWPF/SpotifyWPF/SpotifyWPF.macOS.native/SpotifyWPF/WebApp/player.html"/>
+                                </webPreferences>
+                            </webView>
+                        </subviews>
+                    </view>
+                    <connections>
+                        <outlet property="webView" destination="webView" id="webView-outlet"/>
+                    </connections>
+                </viewController>
                 <customObject id="Oky-zY-oP4" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="75" y="250"/>
