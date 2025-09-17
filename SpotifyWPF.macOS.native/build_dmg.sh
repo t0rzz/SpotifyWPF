@@ -34,6 +34,18 @@ if [ -d "$DERIVED_DATA_DIR" ]; then
 	fi
 fi
 
+# As an extra fallback, explicitly look for common product names under DerivedData's Products/Release
+if [ -z "$APP_PATH" ] && [ -d "$DERIVED_DATA_DIR" ]; then
+	for name in "SpofifyWPF.app" "SpotifyWPF.app"; do
+		CANDIDATE=$(find "$DERIVED_DATA_DIR" -type d -path "*/Build/Products/Release/$name" -print -quit 2>/dev/null || true)
+		if [ -n "$CANDIDATE" ]; then
+			APP_PATH="$CANDIDATE"
+			echo "Found explicit product name in DerivedData: $APP_PATH"
+			break
+		fi
+	done
+fi
+
 # Fallback: check repository-local build/Release for common names
 if [ -z "$APP_PATH" ]; then
 	for name in "SpofifyWPF.app" "SpotifyWPF.app"; do
