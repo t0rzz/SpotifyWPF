@@ -655,27 +655,24 @@
                         <windowPositionMask key="initialPositionMask" leftStrut="YES" rightStrut="YES" topStrut="YES" bottomStrut="YES"/>
                         <rect key="contentRect" x="196" y="240" width="480" height="270"/>
                         <rect key="screenRect" x="0.0" y="0.0" width="1728" height="1079"/>
-                        <view key="contentView" wantsLayer="YES" id="EhI-LE-HBj">
-                            <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
-                            <autoresizingMask key="autoresizingMask"/>
-                        </view>
                     </window>
                     <connections>
                         <segue destination="mainViewController" kind="relationship" relationship="contentViewController" id="contentViewController-segue"/>
                     </connections>
                 </windowController>
-                <viewController id="mainViewController" sceneMemberID="viewController">
+                <viewController id="mainViewController" customClass="ViewController" customModule="SpofifyWPF" sceneMemberID="viewController">
                     <view key="view" wantsLayer="YES" id="mainView">
                         <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <webView wantsLayer="YES" id="webView" customClass="WebView">
+                            <wkWebView wantsLayer="YES" id="webView" customClass="WKWebView">
                                 <rect key="frame" x="0.0" y="0.0" width="480" height="270"/>
                                 <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                <webPreferences key="preferences" defaultFontSize="12" defaultFixedFontSize="12" minimumFontSize="7" plugInsEnabled="NO" javaEnabled="NO" javaScriptEnabled="YES" javaScriptCanOpenWindowsAutomatically="NO" allowsAnimatedImages="YES" allowsAnimatedImageLooping="YES" loadsImagesAutomatically="YES" shouldPrintBackgrounds="NO" userStyleSheetLocation="file:///Users/runner/work/SpotifyWPF/SpotifyWPF/SpotifyWPF.macOS.native/SpotifyWPF/WebApp/player.html" userStyleSheetEnabled="YES">
-                                    <userStyleSheetLocation key="userStyleSheetLocation" string="file:///Users/runner/work/SpotifyWPF/SpotifyWPF/SpotifyWPF.macOS.native/SpotifyWPF/WebApp/player.html"/>
-                                </webPreferences>
-                            </webView>
+                                <wkWebViewConfiguration key="configuration">
+                                    <audiovisualMediaTypes key="mediaTypesRequiringUserActionForPlayback" none="YES"/>
+                                    <wkPreferences key="preferences" javaScriptEnabled="YES"/>
+                                </wkWebViewConfiguration>
+                            </wkWebView>
                         </subviews>
                     </view>
                     <connections>
