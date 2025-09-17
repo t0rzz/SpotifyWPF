@@ -22,7 +22,7 @@ objects = {
 4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = '<group>'; };
 4B2F8A372C8F4E5600A1B2C3 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = '<group>'; };
 4B2F8A392C8F4E5600A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = '<group>'; };
-4B2F8A3A2C8F4E5600A1B2C3 /* SpofifyWPF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpofifyWPF.entitlements; sourceTree = '<group>'; };
+4B2F8A3A2C8F4E5600A1B2C3 /* SpofifyWPF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpotifyWPF/SpofifyWPF.entitlements; sourceTree = '<group>'; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,7 +52,7 @@ children = (
 name = Products;
 sourceTree = '<group>';
 };
-4B2F8A2B2C8F4E5600A1B2C3 /* SpofifyWPF */ = {
+4B2F8A2B2C8F4E5600A1B2C3 /* SpotifyWPF */ = {
 isa = PBXGroup;
 children = (
 4B2F8A2C2C8F4E5600A1B2C3 /* AppDelegate.swift */,
@@ -63,7 +63,7 @@ children = (
 4B2F8A392C8F4E5600A1B2C3 /* Info.plist */,
 4B2F8A3A2C8F4E5600A1B2C3 /* SpofifyWPF.entitlements */,
 );
-path = SpofifyWPF;
+path = SpotifyWPF;
 sourceTree = '<group>';
 };
 /* End PBXGroup section */
