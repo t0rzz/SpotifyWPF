@@ -2201,18 +2201,6 @@ class SpotifyMacOSApp {
         `;
     }
 
-    showSuccess(message) {
-        // Create and show success notification
-        const notification = document.createElement('div');
-        notification.className = 'success';
-        notification.textContent = message;
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.remove();
-        }, 3000);
-    }
-
     // Device Management Methods
     async loadDevices() {
         try {
