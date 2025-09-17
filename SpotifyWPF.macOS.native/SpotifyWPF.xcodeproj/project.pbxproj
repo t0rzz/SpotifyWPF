@@ -1,4 +1,7 @@
-// !$*UTF8*$!
+// !$*UTF8		4B2F8A2F2C8F4E5600A1B2C3 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2E2C8F4E5600A1B2C3 /* ViewController.swift */; };
+		4B2F8A352C8F4E5600A1B2C3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */; };
+		4B2F8A3C2C8F4E5600A1B2C3 /* WebApp in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */; };
+/* End PBXBuildFile section */
 {
 	archiveVersion = 1;
 	classes = {
@@ -19,6 +22,7 @@
 		4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4B2F8A392C8F4E5600A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4B2F8A3A2C8F4E5600A1B2C3 /* SpofifyWPF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpotifyWPF/SpofifyWPF.entitlements; sourceTree = "<group>"; };
+		4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */ = {isa = PBXFileReference; lastKnownFileType = folder; path = WebApp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +60,7 @@
 				4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */,
 				4B2F8A392C8F4E5600A1B2C3 /* Info.plist */,
 				4B2F8A3A2C8F4E5600A1B2C3 /* SpofifyWPF.entitlements */,
+				4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */,
 			);
 			path = SpotifyWPF;
 			sourceTree = "<group>";
@@ -118,6 +123,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4B2F8A352C8F4E5600A1B2C3 /* Assets.xcassets in Resources */,
+				4B2F8A3C2C8F4E5600A1B2C3 /* WebApp in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -63,13 +63,26 @@ fi
 
 # Create DMG structure and copy the app
 mkdir -p build/dmg
+echo "Copying .app from: $APP_PATH"
+echo "Contents of .app directory:"
+ls -la "$APP_PATH" | head -20
+echo "Size of .app:"
+du -sh "$APP_PATH"
 cp -r "$APP_PATH" build/dmg/
+
+# Check what was copied
+echo "Contents of build/dmg after copy:"
+ls -la build/dmg/
+echo "Size of copied .app:"
+du -sh build/dmg/*.app 2>/dev/null || echo "No .app found in build/dmg"
 
 # Create Applications symlink
 ln -s /Applications build/dmg/Applications
 
 # Create DMG
+echo "Creating DMG..."
 hdiutil create -volname "Spofyfy" -srcfolder build/dmg -ov -format UDZO Spofyfy.dmg
 
 echo "DMG created successfully: Spofyfy.dmg"
-echo "You can now distribute this DMG file for installation on macOS systems."
+echo "DMG size:"
+ls -lh Spofyfy.dmg
