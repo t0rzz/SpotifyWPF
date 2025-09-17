@@ -1,4 +1,4 @@
-// Spofyfy Configuration
+// Spofify Configuration
 // IMPORTANT: Replace these placeholder values with your actual Spotify Developer App credentials
 // Get these from: https://developer.spotify.com/dashboard
 
@@ -38,7 +38,7 @@ const SPOTIFY_CONFIG = {
 window.SPOTIFY_CONFIG = SPOTIFY_CONFIG;
 
 // Quick setup instructions
-console.log('🎵 Spofyfy Setup Instructions:');
+console.log('🎵 Spofify Setup Instructions:');
 console.log('1. Go to https://developer.spotify.com/dashboard');
 console.log('2. Create a new app or use existing one');
 console.log('3. Copy your Client ID');

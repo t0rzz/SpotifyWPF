@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Spofyfy macOS DMG Builder
+# Spofify macOS DMG Builder
 # This script builds the native macOS app and creates a .dmg installer
 
 set -e
 
-echo "Building Spofyfy for macOS..."
+echo "Building Spofify for macOS..."
 
 # Clean previous build
 rm -rf build/
-rm -f Spofyfy.dmg
+rm -f Spofify.dmg
 
 # Build the Xcode project with explicit output directory
 echo "Building Xcode project..."
@@ -162,16 +162,16 @@ echo "Creating DMG..."
 DMG_DIR_SIZE=$(du -sk build/dmg | cut -f1)
 echo "DMG source directory size: ${DMG_DIR_SIZE}KB"
 
-hdiutil create -volname "Spofyfy" -srcfolder build/dmg -ov -format UDZO Spofyfy.dmg
+hdiutil create -volname "Spofify" -srcfolder build/dmg -ov -format UDZO Spofify.dmg
 
-echo "DMG created successfully: Spofyfy.dmg"
+echo "DMG created successfully: Spofify.dmg"
 echo "DMG size:"
-ls -lh Spofyfy.dmg
+ls -lh Spofify.dmg
 
 # Verify DMG contents
 echo "Verifying DMG contents..."
-if [ -f "Spofyfy.dmg" ]; then
-	DMG_SIZE=$(ls -l Spofyfy.dmg | awk '{print $5}')
+if [ -f "Spofify.dmg" ]; then
+	DMG_SIZE=$(ls -l Spofify.dmg | awk '{print $5}')
 	DMG_SIZE_KB=$((DMG_SIZE / 1024))
 	echo "DMG file size: ${DMG_SIZE_KB}KB"
 	

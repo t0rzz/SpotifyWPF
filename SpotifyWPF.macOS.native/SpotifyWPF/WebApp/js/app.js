@@ -1,4 +1,4 @@
-// Spofyfy - Main Application Logic
+// Spofify - Main Application Logic
 class SpotifyMacOSApp {
     constructor() {
         this.currentSection = 'home';
@@ -17,7 +17,7 @@ class SpotifyMacOSApp {
     }
 
     init() {
-        console.log('🚀 Initializing Spofyfy MacOS App...');
+        console.log('🚀 Initializing Spofify MacOS App...');
         console.log('Current URL:', window.location.href);
         console.log('User Agent:', navigator.userAgent);
 
@@ -321,7 +321,7 @@ class SpotifyMacOSApp {
                         <h3>Register Your App</h3>
                         <p>Go to the <a href="https://developer.spotify.com/dashboard" target="_blank">Spotify Developer Dashboard</a> and create a new app.</p>
                         <div class="app-details">
-                            <strong>App Name:</strong> Spofyfy<br>
+                            <strong>App Name:</strong> Spofify<br>
                             <strong>App Description:</strong> A native macOS Spotify client<br>
                             <strong>Redirect URI:</strong> <code>${window.SPOTIFY_CONFIG?.redirectUri || 'spotifywpf://callback'}</code>
                         </div>
@@ -351,7 +351,7 @@ class SpotifyMacOSApp {
                     <div class="step-number">3</div>
                     <div class="step-content">
                         <h3>Authorize the App</h3>
-                        <p>Click the button below to authorize Spofyfy to access your account.</p>
+                        <p>Click the button below to authorize Spofify to access your account.</p>
                         <button id="authorize-btn" class="authorize-button" disabled>
                             <i class="fab fa-spotify"></i>
                             Authorize Spotify
@@ -2181,7 +2181,7 @@ class SpotifyMacOSApp {
         const homeSection = document.getElementById('home-section');
         homeSection.innerHTML = `
             <div class="welcome-section">
-                <h2>Welcome to Spofyfy</h2>
+                <h2>Welcome to Spofify</h2>
                 <p>You're successfully connected! Browse your music, create playlists, and enjoy your favorite tracks.</p>
                 <div class="quick-actions">
                     <button class="quick-action-btn" onclick="window.spotifyApp.switchSection('search')">

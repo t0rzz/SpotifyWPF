@@ -25,7 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         )
 
         window.center()
-        window.title = "Spofyfy"
+        window.title = "Spofify"
         window.minSize = NSSize(width: 800, height: 600)
 
         // Create WebView configuration

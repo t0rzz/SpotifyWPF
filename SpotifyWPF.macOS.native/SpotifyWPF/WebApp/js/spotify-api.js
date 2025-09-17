@@ -1,4 +1,4 @@
-// Spofyfy API - Web API Integration
+// Spofify API - Web API Integration
 class SpotifyAPI {
     constructor() {
         this.baseUrl = 'https://api.spotify.com/v1';

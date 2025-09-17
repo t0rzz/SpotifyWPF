@@ -1,4 +1,4 @@
-# Spofyfy Setup Guide
+# Spofify Setup Guide
 
 ## 🚀 Quick Start
 

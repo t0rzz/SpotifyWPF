@@ -1,4 +1,4 @@
-// Spofyfy Player - Web Playback SDK Integration
+// Spofify Player - Web Playback SDK Integration
 class SpotifyPlayer {
     constructor() {
         this.player = null;
@@ -36,7 +36,7 @@ class SpotifyPlayer {
         }
 
         this.player = new Spotify.Player({
-            name: 'Spofyfy Web Player',
+            name: 'Spofify Web Player',
             getOAuthToken: cb => { cb(token); },
             volume: this.volume
         });
