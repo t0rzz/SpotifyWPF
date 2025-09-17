@@ -540,7 +540,7 @@
                                                                         <menuItem title="Right to Left" id="8Dm-vq-8dz">
                                                                             <modifierMask key="keyEquivalentModifierMask"/>
                                                                             <connections>
-                                                                                <action selector="makeTextWritingDirectionRightToLeft:" target="Ady-hI-5gd" id="8i4-f9-FKE"/>
+                                                                                <action selector="makeTextWritingDirectionRightToLeft:" target="Ady-hI-5gd" id="8i4-f9-FKE-2"/>
                                                                             </connections>
                                                                         </menuItem>
                                                                         <menuItem title="Natural" id="6es-TL-d9o">
@@ -641,7 +641,7 @@
                         </menuItem>
                     </items>
                 </menu>
-                <customObject id="YLy-65-1bz" customClass="NSFontManager"/>
+                <customObject id="YLy-65-1bz-2" customClass="NSFontManager"/>
                 <customObject id="Ady-hI-5gd" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="75" y="0"/>
