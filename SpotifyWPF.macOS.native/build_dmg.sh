@@ -20,8 +20,18 @@ APP_PATH=""
 # Try to discover DerivedData path from xcodebuild output (default location)
 DERIVED_DATA_DIR="$HOME/Library/Developer/Xcode/DerivedData"
 if [ -d "$DERIVED_DATA_DIR" ]; then
-	# look for any matching Products/Release/*.app
-	APP_PATH=$(find "$DERIVED_DATA_DIR" -maxdepth 3 -type d -path "*/Build/Products/Release/*.app" -print -quit 2>/dev/null || true)
+	echo "Searching DerivedData for built .app under: $DERIVED_DATA_DIR"
+	# look for any matching Products/Release/*.app anywhere under DerivedData
+	# Don't restrict depth here: DerivedData layout can vary. Use -path to focus on Release products.
+	APP_PATH=$(find "$DERIVED_DATA_DIR" -type d -path "*/Build/Products/Release/*.app" -print -quit 2>/dev/null || true)
+	if [ -n "$APP_PATH" ]; then
+		echo "Found .app in DerivedData: $APP_PATH"
+	else
+		echo "No .app found in DerivedData (will try repository-local build/Release)."
+		# For debugging, list up to 10 matching candidates so CI logs show what's present
+		echo "DerivedData candidates (first 10):"
+		find "$DERIVED_DATA_DIR" -type d -path "*/Build/Products/Release/*.app" -print 2>/dev/null | head -n 10 || true
+	fi
 fi
 
 # Fallback: check repository-local build/Release for common names
