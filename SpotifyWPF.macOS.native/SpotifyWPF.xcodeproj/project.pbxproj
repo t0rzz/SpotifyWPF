@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 61;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -89,16 +89,16 @@
 		4B2F8A212C8F4E5600A1B2C3 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 1430;
-				LastUpgradeCheck = 1430;
+				LastSwiftUpdateCheck = 1510;
+				LastUpgradeCheck = 1510;
 				TargetAttributes = {
 					4B2F8A282C8F4E5600A1B2C3 = {
-						CreatedOnToolsVersion = 14.3;
+						CreatedOnToolsVersion = 15.1;
 					};
 				};
 			};
 			buildConfigurationList = 4B2F8A242C8F4E5600A1B2C3 /* Build configuration list for PBXProject 'SpotifyWPF' */;
-			compatibilityVersion = "Xcode 14.0";
+			compatibilityVersion = "Xcode 15.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
