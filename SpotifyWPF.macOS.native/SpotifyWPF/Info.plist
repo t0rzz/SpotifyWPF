@@ -34,7 +34,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2025 SpotifyWPF. All rights reserved.</string>
 	<key>NSMainStoryboardFile</key>
-	<string>Main</string>
+	<string></string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsAutomaticTermination</key>
