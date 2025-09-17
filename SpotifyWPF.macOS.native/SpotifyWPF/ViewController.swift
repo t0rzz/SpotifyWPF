@@ -21,16 +21,15 @@ class ViewController: NSViewController {
         configuration.preferences.javaScriptEnabled = true
         configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
 
-        // Create WebView if outlet is not connected
-        if webView == nil {
-            webView = WKWebView(frame: view.bounds, configuration: configuration)
-            webView.autoresizingMask = [.width, .height]
-            view.addSubview(webView)
-        } else {
-            // Configure existing WebView
-            webView.configuration.preferences.javaScriptEnabled = true
-            webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        // Remove existing webView if it exists
+        if let existingWebView = webView {
+            existingWebView.removeFromSuperview()
         }
+
+        // Create new WebView with proper configuration
+        webView = WKWebView(frame: view.bounds, configuration: configuration)
+        webView.autoresizingMask = [.width, .height]
+        view.addSubview(webView)
 
         // Load the HTML file
         loadWebApp()
