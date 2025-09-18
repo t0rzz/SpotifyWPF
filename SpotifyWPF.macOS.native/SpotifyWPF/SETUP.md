@@ -25,7 +25,7 @@ clientId: 'your_client_id_here',  // ← Replace with your actual Client ID
 ### 3. Set Up Redirect URI
 
 In your Spotify app dashboard:
-- Add redirect URI: `spotifywpf://callback`
+- Add redirect URI: `spofifywpf://callback`
 - Save changes
 
 ### 4. Test Connection
@@ -59,7 +59,7 @@ setSpotifyClientId("id")    // Set client ID
 - ✅ Spotify Premium account (for playback)
 - ✅ Spotify Developer App
 - ✅ Client ID from dashboard
-- ✅ Redirect URI: `spotifywpf://callback`
+- ✅ Redirect URI: `spofifywpf://callback`
 
 ## 🎯 Next Steps
 
@@ -70,5 +70,3 @@ Once connected:
 - Use device switching
 
 ---
-
-*Need help? Check the console for detailed error messages.*

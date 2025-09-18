@@ -323,7 +323,7 @@ class SpotifyMacOSApp {
                         <div class="app-details">
                             <strong>App Name:</strong> Spofify<br>
                             <strong>App Description:</strong> A native macOS Spotify client<br>
-                            <strong>Redirect URI:</strong> <code>${window.SPOTIFY_CONFIG?.redirectUri || 'spotifywpf://callback'}</code>
+                            <strong>Redirect URI:</strong> <code>${window.SPOTIFY_CONFIG?.redirectUri || 'spofifywpf://callback'}</code>
                         </div>
                         <button id="copy-redirect-uri" class="copy-button">
                             <i class="fas fa-copy"></i>
@@ -368,7 +368,7 @@ class SpotifyMacOSApp {
     bindSetupEvents() {
         // Copy redirect URI
         document.getElementById('copy-redirect-uri').addEventListener('click', () => {
-            const redirectUri = window.SPOTIFY_CONFIG?.redirectUri || 'spotifywpf://callback';
+            const redirectUri = window.SPOTIFY_CONFIG?.redirectUri || 'spofifywpf://callback';
             navigator.clipboard.writeText(redirectUri).then(() => {
                 this.showSuccess('Redirect URI copied to clipboard!');
             }).catch(() => {

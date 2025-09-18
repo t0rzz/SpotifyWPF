@@ -3,20 +3,19 @@
 //  SpotifyWPF
 //
 //  Created by GitHub Copilot on 2025-09-15.
-//  Simplified to just show HTML page in WebView
+//  Simple macOS app that displays HTML content in WKWebView
 //
 
 import Cocoa
 import WebKit
 
-@main
-class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
-
+class AppDelegate: NSObject, NSApplicationDelegate {
+    
     var window: NSWindow!
     var webView: WKWebView!
-
+    
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        print("Application did finish launching")
+        print("🚀 AppDelegate: Application starting...")
         
         // Create the main window
         window = NSWindow(
@@ -25,180 +24,108 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             backing: .buffered,
             defer: false
         )
-
+        
         window.center()
         window.title = "Spofify"
         window.minSize = NSSize(width: 800, height: 600)
-        print("Window created and centered")
-
-        // Create WebView configuration
+        
+        print("📱 Creating WKWebView...")
+        
+        // Create WKWebView configuration
         let configuration = WKWebViewConfiguration()
-        configuration.preferences.javaScriptEnabled = true
         configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-
-        // Create WebView
+        
+        // Create WKWebView with proper frame (fill the entire window content area)
         webView = WKWebView(frame: window.contentView!.bounds, configuration: configuration)
         webView.autoresizingMask = [.width, .height]
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
-        print("WebView created")
-
-        // Add WebView to window
+        
+        // Add web view to window
         window.contentView?.addSubview(webView)
-        print("WebView added to window")
-
+        
+        print("🌐 Loading HTML content...")
+        
         // Load the HTML file
         loadWebApp()
-
-        // Show the window and activate the app
+        
+        // Show the window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        print("Window made key and front, app activated")
-    }
-
-    func applicationDidBecomeActive(_ notification: Notification) {
-        print("Application became active")
-        // Ensure window is visible when app becomes active
-        if let window = window {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-        }
-    }
-
-    func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
-    }
-
-    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-        return true
-    }
-
-    // MARK: - URL Scheme Handling
-
-    func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
-            handleIncomingURL(url)
-        }
-    }
-
-    func application(_ app: NSApplication, open url: URL) -> Bool {
-        handleIncomingURL(url)
-        return true
-    }
-
-    private func handleIncomingURL(_ url: URL) {
-        print("Received URL: \(url.absoluteString)")
-
-        // Check if this is our OAuth callback
-        if url.scheme == "spofifywpf" && url.host == "callback" {
-            // Extract query parameters
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            var authCode: String?
-            var state: String?
-            var error: String?
-
-            if let queryItems = components?.queryItems {
-                for item in queryItems {
-                    switch item.name {
-                    case "code":
-                        authCode = item.value
-                    case "state":
-                        state = item.value
-                    case "error":
-                        error = item.value
-                    default:
-                        break
-                    }
-                }
-            }
-
-            // Send the OAuth result to the web app
-            sendOAuthResultToWebApp(authCode: authCode, state: state, error: error)
-        }
-    }
-
-    private func sendOAuthResultToWebApp(authCode: String?, state: String?, error: String?) {
-        var script = "window.oauthCallback({"
-
-        if let authCode = authCode {
-            script += "code: '\(authCode)'"
-        }
-
-        if let state = state {
-            if authCode != nil { script += ", " }
-            script += "state: '\(state)'"
-        }
-
-        if let error = error {
-            if authCode != nil || state != nil { script += ", " }
-            script += "error: '\(error)'"
-        }
-
-        script += "});"
-
-        // Execute JavaScript in the web view
-        DispatchQueue.main.async {
-            self.webView.evaluateJavaScript(script) { (result, error) in
-                if let error = error {
-                    print("JavaScript execution error: \(error.localizedDescription)")
-                } else {
-                    print("OAuth callback sent to web app successfully")
-                }
-            }
-        }
-    }
-
-    private func loadWebApp() {
-        print("Loading WebApp...")
         
-        // Get the path to the web app files
-        guard let webAppPath = Bundle.main.path(forResource: "index", ofType: "html", inDirectory: "WebApp") else {
-            print("Error: Could not find web app files at path: index.html in WebApp directory")
-            print("Bundle main path: \(Bundle.main.bundlePath)")
-            print("Available resources in bundle:")
-            if let resources = try? FileManager.default.contentsOfDirectory(atPath: Bundle.main.bundlePath + "/Contents/Resources") {
-                print("Resources: \(resources)")
-            }
-            return
-        }
-
-        print("Found WebApp at: \(webAppPath)")
-        let webAppURL = URL(fileURLWithPath: webAppPath)
-        print("Loading URL: \(webAppURL)")
-        webView.loadFileURL(webAppURL, allowingReadAccessTo: webAppURL.deletingLastPathComponent())
-        print("WebView load initiated")
+        print("✅ Window should now be visible with web content")
     }
-
-    // MARK: - WKNavigationDelegate
-
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if let url = navigationAction.request.url {
-            // Handle OAuth URLs by opening in external browser
-            if url.scheme == "https" && (url.host?.contains("accounts.spotify.com") == true || url.host?.contains("spotify.com") == true) {
-                NSWorkspace.shared.open(url)
-                decisionHandler(.cancel)
-                return
+    
+    private func loadWebApp() {
+        // Try to find and load the HTML file
+        if let htmlPath = Bundle.main.path(forResource: "index", ofType: "html", inDirectory: "WebApp") {
+            let htmlURL = URL(fileURLWithPath: htmlPath)
+            print("📁 Found HTML file at: \(htmlPath)")
+            
+            webView.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+            print("🔄 Loading HTML from: \(htmlURL)")
+        } else {
+            print("❌ Could not find index.html in WebApp directory")
+            
+            // Try fallback location
+            let webAppURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/WebApp/index.html")
+            if FileManager.default.fileExists(atPath: webAppURL.path) {
+                print("📁 Found HTML file at fallback location: \(webAppURL.path)")
+                webView.loadFileURL(webAppURL, allowingReadAccessTo: webAppURL.deletingLastPathComponent())
+            } else {
+                print("❌ HTML file not found at any location")
+                loadFallbackHTML()
             }
         }
-
-        decisionHandler(.allow)
     }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        print("Web app loaded successfully")
+    
+    private func loadFallbackHTML() {
+        let fallbackHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Spotify WPF - Error</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+                    text-align: center;
+                    padding: 50px;
+                    background: linear-gradient(135deg, #1DB954, #191414);
+                    color: white;
+                    margin: 0;
+                    height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                }
+                h1 { color: #1DB954; margin-bottom: 20px; }
+                .error-box {
+                    background: rgba(255, 255, 255, 0.1);
+                    padding: 30px;
+                    border-radius: 10px;
+                    max-width: 500px;
+                }
+                .status { color: #ff6b6b; margin: 10px 0; }
+            </style>
+        </head>
+        <body>
+            <div class="error-box">
+                <h1>🎵 Spotify WPF</h1>
+                <p class="status">❌ HTML file not found</p>
+                <p>Check that index.html exists in the WebApp directory</p>
+                <p><small>Debug: WebView is working, but content couldn't be loaded</small></p>
+            </div>
+        </body>
+        </html>
+        """
+        webView.loadHTMLString(fallbackHTML, baseURL: nil)
+        print("🔄 Loaded fallback HTML")
     }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        print("Web app failed to load: \(error.localizedDescription)")
+    
+    func applicationWillTerminate(_ aNotification: Notification) {
+        print("👋 Application terminating")
     }
-
-    // MARK: - WKUIDelegate
-
-    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        // Handle popup windows (like OAuth) by opening in external browser
-        if let url = navigationAction.request.url {
-            NSWorkspace.shared.open(url)
-        }
-        return nil
+    
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
     }
 }

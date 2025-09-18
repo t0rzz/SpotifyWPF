@@ -13,10 +13,10 @@ const SPOTIFY_CONFIG = {
     clientSecret: 'your_client_secret_here',
 
     // 🎯 Redirect URI (must match your Spotify Developer App exactly)
-    // For native macOS app: use 'spotifywpf://callback'
+    // For native macOS app: use 'spofifywpf://callback'
     // ✅ CONFIRMED: Custom URL schemes are explicitly supported by Spotify
     // For web testing: use 'http://127.0.0.1:8080/callback.html'
-    redirectUri: 'spotifywpf://callback', // ✅ CORRECT for desktop app
+    redirectUri: 'spofifywpf://callback', // ✅ CORRECT for desktop app
 
     // 📋 Spotify API permissions (scopes) needed for the app
     scopes: [
