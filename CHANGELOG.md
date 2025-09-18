@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.0.1] - 2025-09-18
+### 🐛 Bug Fixes
+
+**macOS App Window Visibility**
+- ✅ **Fixed macOS app window not displaying on launch**
+  - Added `NSApp.activate(ignoringOtherApps: true)` to properly activate the application
+  - Added `applicationDidBecomeActive` handler to ensure window visibility when app becomes active
+  - Enhanced `loadWebApp()` method with comprehensive debugging output
+  - Fixed window activation timing to prevent hidden app issues
+
+**Cross-Platform Version Synchronization**
+- ✅ **Synchronized version numbers across all platforms**
+  - Windows (.csproj): AssemblyVersion, FileVersion, Version → 3.0.1
+  - macOS (Xcode): MARKETING_VERSION → 3.0.1
+  - MSIX Package: Version → 3.0.1.0
+  - Info.plist: CFBundleShortVersionString → 3.0.1
+  - WebApp HTML: Title updated to v3.0.1
+
 ## [3.0.0] - 2025-09-16
 ### 🎯 Major Release: Cross-Platform Spotify Power Tools
 
