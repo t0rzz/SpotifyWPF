@@ -16,6 +16,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     var webView: WKWebView!
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        print("Application did finish launching")
+        
         // Create the main window
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
@@ -27,6 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         window.center()
         window.title = "Spofify"
         window.minSize = NSSize(width: 800, height: 600)
+        print("Window created and centered")
 
         // Create WebView configuration
         let configuration = WKWebViewConfiguration()
@@ -38,15 +41,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        print("WebView created")
 
         // Add WebView to window
         window.contentView?.addSubview(webView)
+        print("WebView added to window")
 
         // Load the HTML file
         loadWebApp()
 
-        // Show the window
+        // Show the window and activate the app
         window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        print("Window made key and front, app activated")
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        print("Application became active")
+        // Ensure window is visible when app becomes active
+        if let window = window {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -133,14 +149,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     private func loadWebApp() {
+        print("Loading WebApp...")
+        
         // Get the path to the web app files
         guard let webAppPath = Bundle.main.path(forResource: "index", ofType: "html", inDirectory: "WebApp") else {
-            print("Error: Could not find web app files")
+            print("Error: Could not find web app files at path: index.html in WebApp directory")
+            print("Bundle main path: \(Bundle.main.bundlePath)")
+            print("Available resources in bundle:")
+            if let resources = try? FileManager.default.contentsOfDirectory(atPath: Bundle.main.bundlePath + "/Contents/Resources") {
+                print("Resources: \(resources)")
+            }
             return
         }
 
+        print("Found WebApp at: \(webAppPath)")
         let webAppURL = URL(fileURLWithPath: webAppPath)
+        print("Loading URL: \(webAppURL)")
         webView.loadFileURL(webAppURL, allowingReadAccessTo: webAppURL.deletingLastPathComponent())
+        print("WebView load initiated")
     }
 
     // MARK: - WKNavigationDelegate
