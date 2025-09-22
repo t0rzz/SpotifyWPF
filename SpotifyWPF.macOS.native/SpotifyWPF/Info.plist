@@ -8,6 +8,8 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
 	<string></string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.spofifywpf.macOS</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -30,11 +32,17 @@
 		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
+		<key>NSAllowsArbitraryLoadsForLocalFilesInWebContent</key>
+		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access for Spotify features.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2025 SpotifyWPF. All rights reserved.</string>
 	<key>NSMainStoryboardFile</key>
 	<string></string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access for Spotify features.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSSupportsAutomaticTermination</key>

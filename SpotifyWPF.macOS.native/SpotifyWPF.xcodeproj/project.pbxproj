@@ -1,25 +1,23 @@
-// !$*UTF8*$!
 {
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 61;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4B2F8A2D2C8F4E5600A1B2C3 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2C2C8F4E5600A1B2C3 /* AppDelegate.swift */; };
-		4B2F8A2F2C8F4E5600A1B2C3 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2E2C8F4E5600A1B2C3 /* ViewController.swift */; };
+		4B2F8A2D2C8F4E5600A1B2C3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2C2C8F4E5600A1B2C3 /* ContentView.swift */; };
+		4B2F8A2F2C8F4E5600A1B2C3 /* SpofifyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B2F8A2E2C8F4E5600A1B2C3 /* SpofifyApp.swift */; };
 		4B2F8A352C8F4E5600A1B2C3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */; };
 		4B2F8A3C2C8F4E5600A1B2C3 /* WebApp in Resources */ = {isa = PBXBuildFile; fileRef = 4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		4B2F8A292C8F4E5600A1B2C3 /* SpofifyWPF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpofifyWPF.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		4B2F8A2C2C8F4E5600A1B2C3 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		4B2F8A2E2C8F4E5600A1B2C3 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		4B2F8A2C2C8F4E5600A1B2C3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4B2F8A2E2C8F4E5600A1B2C3 /* SpofifyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpofifyApp.swift; sourceTree = "<group>"; };
 		4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4B2F8A392C8F4E5600A1B2C3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		4B2F8A3A2C8F4E5600A1B2C3 /* SpofifyWPF.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpotifyWPF/SpofifyWPF.entitlements; sourceTree = "<group>"; };
 		4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */ = {isa = PBXFileReference; lastKnownFileType = folder; path = WebApp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -53,11 +51,10 @@
 		4B2F8A2B2C8F4E5600A1B2C3 /* SpotifyWPF */ = {
 			isa = PBXGroup;
 			children = (
-				4B2F8A2C2C8F4E5600A1B2C3 /* AppDelegate.swift */,
-				4B2F8A2E2C8F4E5600A1B2C3 /* ViewController.swift */,
+				4B2F8A2C2C8F4E5600A1B2C3 /* ContentView.swift */,
+				4B2F8A2E2C8F4E5600A1B2C3 /* SpofifyApp.swift */,
 				4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */,
 				4B2F8A392C8F4E5600A1B2C3 /* Info.plist */,
-				4B2F8A3A2C8F4E5600A1B2C3 /* SpofifyWPF.entitlements */,
 				4B2F8A3B2C8F4E5600A1B2C3 /* WebApp */,
 			);
 			path = SpotifyWPF;
@@ -98,7 +95,7 @@
 				};
 			};
 			buildConfigurationList = 4B2F8A242C8F4E5600A1B2C3 /* Build configuration list for PBXProject 'SpotifyWPF' */;
-			compatibilityVersion = "Xcode 15.0";
+			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -132,14 +129,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4B2F8A2D2C8F4E5600A1B2C3 /* AppDelegate.swift in Sources */,
-				4B2F8A2F2C8F4E5600A1B2C3 /* ViewController.swift in Sources */,
+				4B2F8A2D2C8F4E5600A1B2C3 /* ContentView.swift in Sources */,
+				4B2F8A2F2C8F4E5600A1B2C3 /* SpofifyApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* PBXVariantGroup section for LaunchScreen.storyboard removed (storyboard deleted) */
 
 /* Begin XCBuildConfiguration section */
 		4B2F8A402C8F4E5600A1B2C3 /* Debug */ = {
@@ -147,7 +142,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = SpotifyWPF/SpofifyWPF.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -174,7 +169,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = SpotifyWPF/SpofifyWPF.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -196,7 +191,7 @@
 			};
 			name = Release;
 		};
-		4B2F8A502C8F4E5600A1B2C3 /* Debug */ = {
+		4B2F8A432C8F4E5600A1B2C3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -212,19 +207,19 @@
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_AGGRESSIVE;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -244,10 +239,9 @@
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -257,7 +251,7 @@
 			};
 			name = Debug;
 		};
-		4B2F8A512C8F4E5600A1B2C3 /* Release */ = {
+		4B2F8A442C8F4E5600A1B2C3 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -273,19 +267,19 @@
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_AGGRESSIVE;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -299,10 +293,9 @@
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -317,8 +310,8 @@
 		4B2F8A242C8F4E5600A1B2C3 /* Build configuration list for PBXProject 'SpotifyWPF' */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4B2F8A502C8F4E5600A1B2C3 /* Debug */,
-				4B2F8A512C8F4E5600A1B2C3 /* Release */,
+				4B2F8A432C8F4E5600A1B2C3 /* Debug */,
+				4B2F8A442C8F4E5600A1B2C3 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -333,7 +326,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = 4B2F8A212C8F4E5600A1B2C3 /* Project object */;
 }

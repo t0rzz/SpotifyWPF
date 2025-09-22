@@ -2,18 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            // Use IntelliSense to find out which attributes exist for C# debugging
-            // Use hover for the description of the existing attributes
-            // For further information visit https://github.com/dotnet/vscode-csharp/blob/main/debugger-launchjson.md
             "name": ".NET Core Launch (console)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            // If you have changed target frameworks, make sure to update the program path.
             "program": "${workspaceFolder}/SpotifyWPF/bin/Debug/net8.0-windows/SpotifyWPF.dll",
             "args": [],
             "cwd": "${workspaceFolder}/SpotifyWPF",
-            // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "internalConsole",
             "stopAtEntry": false
         },
@@ -21,6 +16,24 @@
             "name": ".NET Core Attach",
             "type": "coreclr",
             "request": "attach"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SpotifyWPF}/SpotifyWPF.macOS.native",
+            "name": "Debug SpotifyWPF-macOS (SpotifyWPF.macOS.native)",
+            "program": "${workspaceFolder:SpotifyWPF}/SpotifyWPF.macOS.native/.build/debug/SpotifyWPF-macOS",
+            "preLaunchTask": "swift: Build Debug SpotifyWPF-macOS (SpotifyWPF.macOS.native)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:SpotifyWPF}/SpotifyWPF.macOS.native",
+            "name": "Release SpotifyWPF-macOS (SpotifyWPF.macOS.native)",
+            "program": "${workspaceFolder:SpotifyWPF}/SpotifyWPF.macOS.native/.build/release/SpotifyWPF-macOS",
+            "preLaunchTask": "swift: Build Release SpotifyWPF-macOS (SpotifyWPF.macOS.native)"
         }
     ]
 }
