@@ -611,10 +611,9 @@ class SpotifyMacOSApp {
             const authUrl = await this.spotifyApi.getAuthorizationUrl();
             console.log('Generated auth URL:', authUrl);
 
-            // For native macOS app, open in external browser and let the app handle callback
-            console.log('🌐 Opening authorization URL in external browser for native app');
-            const newWindow = window.open(authUrl, '_blank');
-            console.log('Window opened:', newWindow ? 'success' : 'failed');
+            // For native macOS app, redirect current page to authorization URL
+            console.log('🌐 Redirecting to authorization URL for native app');
+            window.location.href = authUrl;
 
             this.showLoading('Waiting for authorization...');
             this.showSuccess('Authorization page opened in your browser. Please complete the authorization there.');
