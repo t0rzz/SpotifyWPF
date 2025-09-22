@@ -56,6 +56,18 @@ struct WebView: NSViewRepresentable {
     }
     
     class Coordinator: NSObject, WKNavigationDelegate {
-        // Handle navigation if needed
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if let url = navigationAction.request.url {
+                // Check if this is an external URL (not file://)
+                if url.scheme == "https" || url.scheme == "http" {
+                    // Open external URLs in the default browser
+                    NSWorkspace.shared.open(url)
+                    decisionHandler(.cancel)
+                    return
+                }
+            }
+            // Allow file:// URLs and other internal navigation
+            decisionHandler(.allow)
+        }
     }
 }
