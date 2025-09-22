@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Spofify macOS DMG Builder
+# SpotifyWPF macOS DMG Builder
 # This script builds the native macOS app and creates a .dmg installer
 
 set -e
 
-echo "Building Spofify for macOS..."
+echo "Building SpotifyWPF for macOS..."
 
 # Clean previous build
 rm -rf build/
-rm -f Spofify.dmg
+rm -f SpotifyWPF.dmg
 
 # Build the Xcode project with explicit output directory
 echo "Building Xcode project..."
@@ -124,22 +124,22 @@ echo "Size of copied .app:"
 du -sh build/dmg/*.app 2>/dev/null || echo "No .app found in build/dmg"
 
 # Verify the copied .app has content
-if [ -d "build/dmg/SpofifyWPF.app" ]; then
+if [ -d "build/dmg/SpotifyWPF.app" ]; then
 	echo "Verifying copied .app bundle contents:"
-	ls -la build/dmg/SpofifyWPF.app/Contents/ 2>/dev/null || echo "Contents directory missing"
+	ls -la build/dmg/SpotifyWPF.app/Contents/ 2>/dev/null || echo "Contents directory missing"
 	
 	# Check if executable exists and has size
-	if [ -f "build/dmg/SpofifyWPF.app/Contents/MacOS/SpofifyWPF" ]; then
+	if [ -f "build/dmg/SpotifyWPF.app/Contents/MacOS/SpotifyWPF" ]; then
 		echo "Executable size:"
-		ls -lh build/dmg/SpofifyWPF.app/Contents/MacOS/SpofifyWPF
+		ls -lh build/dmg/SpotifyWPF.app/Contents/MacOS/SpotifyWPF
 	else
 		echo "ERROR: Executable missing!"
 	fi
 	
 	# Check if WebApp resources exist
-	if [ -d "build/dmg/SpofifyWPF.app/Contents/Resources/WebApp" ]; then
+	if [ -d "build/dmg/SpotifyWPF.app/Contents/Resources/WebApp" ]; then
 		echo "WebApp resources found:"
-		find build/dmg/SpofifyWPF.app/Contents/Resources/WebApp -name "*.html" -o -name "*.css" -o -name "*.js" | head -10
+		find build/dmg/SpotifyWPF.app/Contents/Resources/WebApp -name "*.html" -o -name "*.css" -o -name "*.js" | head -10
 	else
 		echo "ERROR: WebApp resources missing!"
 	fi
@@ -162,16 +162,16 @@ echo "Creating DMG..."
 DMG_DIR_SIZE=$(du -sk build/dmg | cut -f1)
 echo "DMG source directory size: ${DMG_DIR_SIZE}KB"
 
-hdiutil create -volname "Spofify" -srcfolder build/dmg -ov -format UDZO Spofify.dmg
+hdiutil create -volname "SpotifyWPF" -srcfolder build/dmg -ov -format UDZO SpotifyWPF.dmg
 
-echo "DMG created successfully: Spofify.dmg"
+echo "DMG created successfully: SpotifyWPF.dmg"
 echo "DMG size:"
-ls -lh Spofify.dmg
+ls -lh SpotifyWPF.dmg
 
 # Verify DMG contents
 echo "Verifying DMG contents..."
-if [ -f "Spofify.dmg" ]; then
-	DMG_SIZE=$(ls -l Spofify.dmg | awk '{print $5}')
+if [ -f "SpotifyWPF.dmg" ]; then
+	DMG_SIZE=$(ls -l SpotifyWPF.dmg | awk '{print $5}')
 	DMG_SIZE_KB=$((DMG_SIZE / 1024))
 	echo "DMG file size: ${DMG_SIZE_KB}KB"
 	

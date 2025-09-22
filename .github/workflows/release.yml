@@ -146,8 +146,8 @@ jobs:
       - name: Rename DMG with version
         run: |
           cd SpotifyWPF.macOS.native
-          if [ -f "Spofify.dmg" ]; then
-            mv Spofify.dmg "../SpotifyWPF-${{ env.VERSION }}-macOS.dmg"
+          if [ -f "SpotifyWPF.dmg" ]; then
+            mv SpotifyWPF.dmg "../SpotifyWPF-${{ env.VERSION }}-macOS.dmg"
           fi
 
       - name: Upload macOS artifacts
