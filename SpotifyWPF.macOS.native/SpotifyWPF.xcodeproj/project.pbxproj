@@ -13,7 +13,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		4B2F8A292C8F4E5600A1B2C3 /* SpofifyWPF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpofifyWPF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4B2F8A292C8F4E5600A1B2C3 /* SpotifyWPF.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpotifyWPF.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B2F8A2C2C8F4E5600A1B2C3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		4B2F8A2E2C8F4E5600A1B2C3 /* SpofifyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpofifyApp.swift; sourceTree = "<group>"; };
 		4B2F8A342C8F4E5600A1B2C3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -43,7 +43,7 @@
 		4B2F8A2A2C8F4E5600A1B2C3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				4B2F8A292C8F4E5600A1B2C3 /* SpofifyWPF.app */,
+				4B2F8A292C8F4E5600A1B2C3 /* SpotifyWPF.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -63,9 +63,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		4B2F8A282C8F4E5600A1B2C3 /* SpofifyWPF */ = {
+		4B2F8A282C8F4E5600A1B2C3 /* SpotifyWPF */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 4B2F8A3D2C8F4E5600A1B2C3 /* Build configuration list for PBXNativeTarget 'SpofifyWPF' */;
+			buildConfigurationList = 4B2F8A3D2C8F4E5600A1B2C3 /* Build configuration list for PBXNativeTarget 'SpotifyWPF' */;
 			buildPhases = (
 				4B2F8A252C8F4E5600A1B2C3 /* Sources */,
 				4B2F8A262C8F4E5600A1B2C3 /* Frameworks */,
@@ -75,9 +75,9 @@
 			);
 			dependencies = (
 			);
-			name = SpofifyWPF;
-			productName = SpofifyWPF;
-			productReference = 4B2F8A292C8F4E5600A1B2C3 /* SpofifyWPF.app */;
+			name = SpotifyWPF;
+			productName = SpotifyWPF;
+			productReference = 4B2F8A292C8F4E5600A1B2C3 /* SpotifyWPF.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -107,7 +107,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				4B2F8A282C8F4E5600A1B2C3 /* SpofifyWPF */,
+				4B2F8A282C8F4E5600A1B2C3 /* SpotifyWPF */,
 			);
 		};
 /* End PBXProject section */
@@ -316,7 +316,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		4B2F8A3D2C8F4E5600A1B2C3 /* Build configuration list for PBXNativeTarget 'SpofifyWPF' */ = {
+		4B2F8A3D2C8F4E5600A1B2C3 /* Build configuration list for PBXNativeTarget 'SpotifyWPF' */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				4B2F8A402C8F4E5600A1B2C3 /* Debug */,
