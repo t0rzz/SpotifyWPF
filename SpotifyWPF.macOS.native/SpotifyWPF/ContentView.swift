@@ -58,15 +58,22 @@ struct WebView: NSViewRepresentable {
     class Coordinator: NSObject, WKNavigationDelegate {
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             if let url = navigationAction.request.url {
-                // Check if this is an external URL (not file://)
-                if url.scheme == "https" || url.scheme == "http" {
-                    // Open external URLs in the default browser
+                // Check if this is a Spotify authorization URL that should open in browser
+                if url.scheme == "https" && url.host == "accounts.spotify.com" && url.path.hasPrefix("/authorize") {
+                    // Open Spotify authorization in the default browser
                     NSWorkspace.shared.open(url)
                     decisionHandler(.cancel)
                     return
                 }
+                
+                // Check if this is a redirect back to our app (callback URL)
+                if url.scheme == "spofifywpf" || (url.scheme == "http" && url.host == "localhost") {
+                    // Handle callback URL - this should be processed by the WebApp
+                    decisionHandler(.allow)
+                    return
+                }
             }
-            // Allow file:// URLs and other internal navigation
+            // Allow all other navigation (including script loading, local files, etc.)
             decisionHandler(.allow)
         }
     }
