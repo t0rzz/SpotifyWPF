@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.0.2] - 2025-09-22
+### 🐛 Bug Fixes
+
+**CI/CD Pipeline Fixes**
+- ✅ **Fixed macOS DMG build script naming inconsistencies**
+  - Corrected scheme name from "SpofifyWPF" to "SpotifyWPF" in build_dmg.sh
+  - Updated DMG creation and verification to use consistent "SpotifyWPF" naming
+  - Fixed CI workflow to properly rename DMG artifact for release
+
 ## [3.0.1] - 2025-09-18
 ### 🐛 Bug Fixes
 
