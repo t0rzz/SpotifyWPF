@@ -7,19 +7,19 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="779637e0-8d50-400b-8dc3-136b1ab8a5be"
+    Name="com.spofifywpf.desktop"
     Publisher="CN=YourCompany"
-  Version="3.0.2.0" />
+    Version="3.0.2.0" />
 
   <Properties>
-    <DisplayName>SpotifyWPF</DisplayName>
+    <DisplayName>SpofifyWPF</DisplayName>
     <PublisherDisplayName>Your Company</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.0.0" MaxVersionTested="10.0.0.0" />
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.14393.0" MaxVersionTested="10.0.14393.0" />
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
 
   <Resources>
@@ -31,12 +31,14 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="SpotifyWPF"
+        DisplayName="SpofifyWPF"
         Description="An unofficial, simple tools application for Spotify"
         BackgroundColor="transparent"
         Square150x150Logo="Images\Square150x150Logo.png"
         Square44x44Logo="Images\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png"  Square71x71Logo="Images\SmallTile.png" Square310x310Logo="Images\LargeTile.png"/>
+        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png"
+                         Square71x71Logo="Images\SmallTile.png"
+                         Square310x310Logo="Images\LargeTile.png"/>
         <uap:SplashScreen Image="Images\SplashScreen.png" />
       </uap:VisualElements>
     </Application>
