@@ -146,8 +146,8 @@ jobs:
       - name: Rename DMG with version
         run: |
           cd SpotifyWPF.macOS.native
-          if [ -f "SpotifyWPF.dmg" ]; then
-            mv SpotifyWPF.dmg "../SpotifyWPF-${{ env.VERSION }}-macOS.dmg"
+          if [ -f "Spofify.dmg" ]; then
+            mv Spofify.dmg "../Spofify-${{ env.VERSION }}-macOS.dmg"
           fi
 
       - name: Upload macOS artifacts
@@ -155,7 +155,7 @@ jobs:
         with:
           name: macos-artifacts
           path: |
-            SpotifyWPF-${{ env.VERSION }}-macOS.dmg
+            Spofify-${{ env.VERSION }}-macOS.dmg
 
   release:
     name: Create GitHub Release
@@ -199,7 +199,7 @@ jobs:
             SpotifyWPF-${{ env.VERSION }}.zip
             SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
             SpotifyWPF-${{ env.VERSION }}.msix
-            SpotifyWPF-${{ env.VERSION }}-macOS.dmg
+            Spofify-${{ env.VERSION }}-macOS.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
