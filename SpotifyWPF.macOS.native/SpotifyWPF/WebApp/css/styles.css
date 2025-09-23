@@ -1785,6 +1785,7 @@ body {
     max-width: 800px;
     width: 90%;
     max-height: 80vh;
+    min-height: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
@@ -1798,14 +1799,153 @@ body {
     border-bottom: 1px solid var(--spotify-gray);
 }
 
-.playlist-tracks-header h3 {
-    margin: 0;
-    color: var(--spotify-white);
-    font-size: 20px;
-    font-weight: 600;
+.playlist-tracks-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.close-modal-btn {
+.playlist-search-input {
+    padding: 8px 12px;
+    border: 1px solid var(--spotify-gray);
+    border-radius: 20px;
+    background-color: var(--spotify-black);
+    color: var(--spotify-white);
+    font-size: 14px;
+    width: 200px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.playlist-search-input:focus {
+    border-color: var(--spotify-green);
+}
+
+.playlist-search-input::placeholder {
+    color: var(--spotify-light-gray);
+}
+
+.playlist-tracks-table-container {
+    max-height: 500px;
+    min-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.playlist-tracks-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--spotify-white);
+    table-layout: fixed;
+}
+
+.playlist-tracks-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+    border-bottom: 1px solid var(--spotify-gray);
+    color: var(--spotify-light-gray);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.track-number-header {
+    width: 60px;
+}
+
+.track-name-header {
+    width: 40%;
+}
+
+.track-author-header {
+    width: 30%;
+}
+
+.track-duration-header {
+    width: 100px;
+}
+
+.track-play-header {
+    width: 80px;
+}
+
+.playlist-tracks-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+.playlist-tracks-table th.sortable:hover {
+    color: var(--spotify-white);
+}
+
+.sort-icon {
+    margin-left: 8px;
+    font-size: 12px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.playlist-tracks-table th.sortable:hover .sort-icon {
+    opacity: 1;
+}
+
+.playlist-tracks-table th.sortable.sort-asc .sort-icon:before {
+    content: "\f145"; /* fa-sort-up */
+}
+
+.playlist-tracks-table th.sortable.sort-desc .sort-icon:before {
+    content: "\f144"; /* fa-sort-down */
+}
+
+.playlist-tracks-table td {
+    padding: 8px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: 0; /* Allow flex shrinking */
+}
+
+.track-name-cell {
+    min-width: 200px;
+    max-width: 300px;
+}
+
+.track-author-cell {
+    min-width: 150px;
+    max-width: 250px;
+}
+
+.track-name {
+    font-weight: 500;
+    color: var(--spotify-white);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.4;
+}
+
+.track-name span {
+    flex: 1;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+.track-author {
+    color: var(--spotify-light-gray);
+    font-size: 14px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.4;
+}
+
+.track-play-btn {
     background: none;
     border: none;
     color: var(--spotify-light-gray);
@@ -1816,27 +1956,38 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
+    width: 32px;
+    height: 32px;
 }
 
-.close-modal-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+.track-play-btn:hover {
+    background-color: var(--spotify-green);
     color: var(--spotify-white);
 }
 
-.playlist-tracks-list {
+.track-play-btn.playing {
+    color: var(--spotify-green);
+}
+
+.playlist-tracks-table tbody tr:first-child td {
+    border-top: none;
+}
+
+.playlist-tracks-table tbody tr:last-child td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Virtual scrolling spacers */
+.playlist-tracks-table td[colspan="5"] {
     padding: 0;
-    max-height: 500px;
-    overflow-y: auto;
+    border: none;
+    background: transparent;
 }
 
 /* Playlist Loading State */
 .playlist-loading-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    text-align: center;
     padding: 60px 24px;
-    min-height: 300px;
     background-color: var(--spotify-dark-gray);
     color: var(--spotify-white);
 }

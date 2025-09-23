@@ -109,6 +109,41 @@ class SpotifyMacOSApp {
             this.handleOAuthCallback(result);
         };
 
+        // Handle callback URL from native macOS app
+        window.handleCallback = (callbackUrl) => {
+            console.log('Handling callback URL:', callbackUrl);
+
+            try {
+                // Parse the callback URL
+                const url = new URL(callbackUrl);
+                const searchParams = new URLSearchParams(url.search);
+
+                const code = searchParams.get('code');
+                const error = searchParams.get('error');
+                const state = searchParams.get('state');
+
+                console.log('Parsed callback parameters:', { code: code ? 'present' : 'missing', error, state });
+
+                if (error) {
+                    console.error('OAuth error in callback:', error);
+                    this.showError(`Authorization failed: ${error}`);
+                    return;
+                }
+
+                if (code) {
+                    console.log('Authorization code received, processing...');
+                    // Call the existing OAuth callback handler with the parsed result
+                    this.handleOAuthCallback({ code, state });
+                } else {
+                    console.error('No authorization code or error in callback URL');
+                    this.showError('Invalid authorization response');
+                }
+            } catch (error) {
+                console.error('Failed to parse callback URL:', error);
+                this.showError('Failed to process authorization response');
+            }
+        };
+
         // Add helper function for console configuration
         window.setSpotifyClientId = (clientId) => {
             if (!clientId || clientId.trim() === '') {
@@ -836,7 +871,7 @@ class SpotifyMacOSApp {
 
     updateSortIndicators() {
         // Update all sort indicators
-        document.querySelectorAll('.sortable').forEach(header => {
+        document.querySelectorAll('#playlists-content .sortable').forEach(header => {
             const column = header.dataset.sort;
 
             if (column === this.currentSort.column) {
@@ -913,7 +948,7 @@ class SpotifyMacOSApp {
         });
 
         // Sorting event listeners for column headers
-        document.querySelectorAll('.sortable').forEach(header => {
+        document.querySelectorAll('#playlists-content .sortable').forEach(header => {
             header.addEventListener('click', (e) => {
                 const column = e.currentTarget.dataset.sort;
                 if (column) {
@@ -1541,7 +1576,7 @@ class SpotifyMacOSApp {
             const minLoadingTime = 800; // 800ms minimum
 
             const [tracks] = await Promise.all([
-                this.spotifyApi.getPlaylistTracks(playlistId),
+                this.spotifyApi.getAllPlaylistTracks(playlistId),
                 new Promise(resolve => setTimeout(resolve, minLoadingTime))
             ]);
 
@@ -1555,7 +1590,7 @@ class SpotifyMacOSApp {
             const playlistName = await this.getPlaylistName(playlistId);
 
             // Display tracks in modal
-            this.showPlaylistTracksModal(tracks.items, playlistName);
+            this.showPlaylistTracksModal(tracks, playlistName);
 
         } catch (error) {
             console.error('Failed to load playlist tracks:', error);
@@ -1574,12 +1609,14 @@ class SpotifyMacOSApp {
 
         // Show loading state in the tracks list area
         tracksList.innerHTML = `
-            <div class="playlist-loading-state">
-                <div class="loading-spinner">
-                    <i class="fas fa-spinner fa-spin"></i>
-                </div>
-                <div class="loading-text">Loading playlist tracks...</div>
-            </div>
+            <tr class="playlist-loading-state">
+                <td colspan="5" style="text-align: center; padding: 60px 24px;">
+                    <div class="loading-spinner">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                    <div class="loading-text">Loading playlist tracks...</div>
+                </td>
+            </tr>
         `;
 
         // Show modal
@@ -1873,34 +1910,49 @@ class SpotifyMacOSApp {
         const modal = document.getElementById('playlist-tracks-modal');
         const title = document.getElementById('playlist-tracks-title');
         const tracksList = document.getElementById('playlist-tracks-list');
+        const searchInput = document.getElementById('playlist-tracks-search');
+
+        // Store original tracks for filtering
+        this.originalTracks = tracks;
+        this.filteredTracks = [...tracks];
+        this.currentTracksSort = { field: null, direction: 'asc' };
+
+        // Initialize virtual scrolling
+        this.virtualScroll = {
+            itemHeight: 60, // Approximate height of each track row
+            containerHeight: 500,
+            bufferSize: 10, // Extra items to render outside visible area
+            startIndex: 0,
+            endIndex: 0,
+            scrollTop: 0,
+            scrollHandler: null // Store reference to scroll handler for cleanup
+        };
 
         // Set modal title
         title.textContent = `${playlistName} (${tracks.length} tracks)`;
 
-        // Clear previous tracks
-        tracksList.innerHTML = '';
+        // Clear search input
+        searchInput.value = '';
 
-        // Add tracks to the modal
-        tracks.forEach((item, index) => {
-            const track = item.track;
-            if (!track) return; // Skip if track is null
+        // Setup search functionality
+        searchInput.oninput = (e) => {
+            this.filterPlaylistTracks(e.target.value);
+        };
 
-            const trackElement = document.createElement('div');
-            trackElement.className = 'playlist-track-item';
-            trackElement.innerHTML = `
-                <span class="track-number">${index + 1}</span>
-                <img src="${track.album?.images?.[0]?.url || ''}" alt="${track.album?.name || 'Album'}" class="track-image">
-                <div class="track-info">
-                    <div class="track-name">${track.name}</div>
-                    <div class="track-artist">${track.artists?.map(artist => artist.name).join(', ') || 'Unknown Artist'}</div>
-                </div>
-                <span class="track-duration">${this.formatDuration(track.duration_ms)}</span>
-                <button class="track-play-btn" onclick="window.spotifyApp.playTrack('${track.uri}', this)" title="Play" data-track-uri="${track.uri}">
-                    <i class="fas fa-play"></i>
-                </button>
-            `;
-            tracksList.appendChild(trackElement);
+        // Setup sorting
+        const sortableHeaders = modal.querySelectorAll('.sortable');
+        sortableHeaders.forEach(header => {
+            header.onclick = () => {
+                const sortField = header.dataset.sort;
+                this.sortPlaylistTracks(sortField);
+            };
         });
+
+        // Setup virtual scrolling
+        this.setupVirtualScrolling();
+
+        // Render tracks
+        this.renderPlaylistTracks();
 
         // Show modal
         modal.style.display = 'flex';
@@ -1920,8 +1972,197 @@ class SpotifyMacOSApp {
         document.addEventListener('keydown', this.handleModalKeydown.bind(this));
     }
 
+    setupVirtualScrolling() {
+        const container = document.querySelector('.playlist-tracks-table-container');
+        if (!container) return;
+
+        // Clean up any existing scroll listener
+        if (this.virtualScroll.scrollHandler) {
+            container.removeEventListener('scroll', this.virtualScroll.scrollHandler);
+        }
+
+        // Update container height in virtual scroll config
+        this.virtualScroll.containerHeight = container.clientHeight || 500;
+
+        // Create scroll event handler with debouncing
+        this.virtualScroll.scrollHandler = this.debounce((e) => {
+            this.virtualScroll.scrollTop = e.target.scrollTop;
+            this.updateVisibleRange();
+            this.renderPlaylistTracks();
+        }, 16); // ~60fps
+
+        // Add scroll event listener
+        container.addEventListener('scroll', this.virtualScroll.scrollHandler);
+
+        // Initial visible range calculation
+        this.updateVisibleRange();
+    }
+
+    updateVisibleRange() {
+        const { itemHeight, containerHeight, bufferSize } = this.virtualScroll;
+        const scrollTop = this.virtualScroll.scrollTop;
+
+        // Calculate visible range with buffer
+        const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - bufferSize);
+        const visibleCount = Math.ceil(containerHeight / itemHeight) + (bufferSize * 2);
+        const endIndex = Math.min(this.filteredTracks.length, startIndex + visibleCount);
+
+        this.virtualScroll.startIndex = startIndex;
+        this.virtualScroll.endIndex = endIndex;
+    }
+
+    renderPlaylistTracks() {
+        const tracksList = document.getElementById('playlist-tracks-list');
+        const tracks = this.filteredTracks;
+        const { startIndex, endIndex, itemHeight } = this.virtualScroll;
+
+        // Clear previous tracks
+        tracksList.innerHTML = '';
+
+        // Add top spacer for virtual scrolling
+        if (startIndex > 0) {
+            const topSpacer = document.createElement('tr');
+            topSpacer.innerHTML = `<td colspan="5" style="height: ${startIndex * itemHeight}px;"></td>`;
+            tracksList.appendChild(topSpacer);
+        }
+
+        // Add visible tracks
+        for (let i = startIndex; i < endIndex; i++) {
+            const item = tracks[i];
+            const track = item.track;
+            if (!track) continue;
+
+            const trackRow = document.createElement('tr');
+            trackRow.className = 'playlist-track-row';
+            trackRow.innerHTML = `
+                <td class="track-number">${i + 1}</td>
+                <td class="track-name-cell">
+                    <div class="track-name">
+                        <img src="${track.album?.images?.[0]?.url || ''}" alt="${track.album?.name || 'Album'}" class="track-image">
+                        <span>${track.name}</span>
+                    </div>
+                </td>
+                <td class="track-author-cell">${track.artists?.map(artist => artist.name).join(', ') || 'Unknown Artist'}</td>
+                <td class="track-duration">${this.formatDuration(track.duration_ms)}</td>
+                <td class="track-play-cell">
+                    <button class="track-play-btn" onclick="window.spotifyApp.playTrack('${track.uri}', this)" title="Play" data-track-uri="${track.uri}">
+                        <i class="fas fa-play"></i>
+                    </button>
+                </td>
+            `;
+            tracksList.appendChild(trackRow);
+        }
+
+        // Add bottom spacer for virtual scrolling
+        const remainingItems = tracks.length - endIndex;
+        if (remainingItems > 0) {
+            const bottomSpacer = document.createElement('tr');
+            bottomSpacer.innerHTML = `<td colspan="5" style="height: ${remainingItems * itemHeight}px;"></td>`;
+            tracksList.appendChild(bottomSpacer);
+        }
+    }
+
+    filterPlaylistTracks(query) {
+        if (!query.trim()) {
+            this.filteredTracks = [...this.originalTracks];
+        } else {
+            const lowerQuery = query.toLowerCase();
+            this.filteredTracks = this.originalTracks.filter(item => {
+                const track = item.track;
+                if (!track) return false;
+
+                const nameMatch = track.name.toLowerCase().includes(lowerQuery);
+                const artistMatch = track.artists?.some(artist =>
+                    artist.name.toLowerCase().includes(lowerQuery)
+                );
+
+                return nameMatch || artistMatch;
+            });
+        }
+
+        // Reset virtual scroll position when filtering
+        this.virtualScroll.scrollTop = 0;
+        this.virtualScroll.startIndex = 0;
+        this.updateVisibleRange();
+
+        // Re-apply current sort to filtered results
+        if (this.currentTracksSort.field) {
+            this.sortPlaylistTracks(this.currentTracksSort.field, false);
+        } else {
+            this.renderPlaylistTracks();
+        }
+    }
+
+    sortPlaylistTracks(field, updateDirection = true) {
+        if (updateDirection) {
+            if (this.currentTracksSort.field === field) {
+                this.currentTracksSort.direction = this.currentTracksSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                this.currentTracksSort.field = field;
+                this.currentTracksSort.direction = 'asc';
+            }
+        }
+
+        // Update sort icons
+        const modal = document.getElementById('playlist-tracks-modal');
+        const sortableHeaders = modal.querySelectorAll('.sortable');
+        sortableHeaders.forEach(header => {
+            header.classList.remove('sort-asc', 'sort-desc');
+            if (header.dataset.sort === field) {
+                header.classList.add(`sort-${this.currentTracksSort.direction}`);
+            }
+        });
+
+        // Sort the filtered tracks array
+        this.filteredTracks.sort((a, b) => {
+            const trackA = a.track;
+            const trackB = b.track;
+            if (!trackA || !trackB) return 0;
+
+            let valueA, valueB;
+
+            switch (field) {
+                case 'name':
+                    valueA = trackA.name.toLowerCase();
+                    valueB = trackB.name.toLowerCase();
+                    break;
+                case 'author':
+                    valueA = trackA.artists?.[0]?.name.toLowerCase() || '';
+                    valueB = trackB.artists?.[0]?.name.toLowerCase() || '';
+                    break;
+                default:
+                    return 0;
+            }
+
+            if (valueA < valueB) return this.currentTracksSort.direction === 'asc' ? -1 : 1;
+            if (valueA > valueB) return this.currentTracksSort.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        // Reset scroll position when sorting
+        this.virtualScroll.scrollTop = 0;
+        this.virtualScroll.startIndex = 0;
+        this.updateVisibleRange();
+
+        // Re-render with virtual scrolling
+        this.renderPlaylistTracks();
+    }
+
+    reorderTableRows() {
+        // With virtual scrolling, we just re-render the visible range
+        this.renderPlaylistTracks();
+    }
+
     hidePlaylistTracksModal() {
         const modal = document.getElementById('playlist-tracks-modal');
+        const container = document.querySelector('.playlist-tracks-table-container');
+
+        // Clean up scroll event listener
+        if (container && this.virtualScroll.scrollHandler) {
+            container.removeEventListener('scroll', this.virtualScroll.scrollHandler);
+            this.virtualScroll.scrollHandler = null;
+        }
+
         modal.style.display = 'none';
         document.removeEventListener('keydown', this.handleModalKeydown.bind(this));
     }
@@ -1936,6 +2177,18 @@ class SpotifyMacOSApp {
         const minutes = Math.floor(ms / 60000);
         const seconds = Math.floor((ms % 60000) / 1000);
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
 
     async performSearch() {

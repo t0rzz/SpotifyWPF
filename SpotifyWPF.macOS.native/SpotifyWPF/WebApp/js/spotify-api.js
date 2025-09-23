@@ -296,15 +296,27 @@ class SpotifyAPI {
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    // Token expired
-                    console.log('401 Unauthorized - token expired');
-                    localStorage.removeItem('spotify_access_token');
-                    if (window.app) {
-                        window.app.showError('Your session has expired. Please reconnect to Spotify.');
+                    // Token expired - try to refresh it first
+                    console.log('401 Unauthorized - attempting token refresh');
+                    try {
+                        await this.refreshAccessToken();
+                        console.log('Token refresh successful, retrying request');
+                        // Retry the request with the new token
+                        return this.makeRequest(endpoint, options, retryCount);
+                    } catch (refreshError) {
+                        console.error('Token refresh failed:', refreshError);
+                        console.log('Clearing stored tokens due to refresh failure');
+                        this.accessToken = null;
+                        localStorage.removeItem('spotify_access_token');
+                        localStorage.removeItem('spotify_refresh_token');
+                        localStorage.removeItem('spotify_token_expires');
+                        if (window.app) {
+                            window.app.showError('Your session has expired. Please reconnect to Spotify.');
+                        }
+                        const error = new Error('Access token expired and refresh failed');
+                        error.status = 401;
+                        throw error;
                     }
-                    const error = new Error('Access token expired');
-                    error.status = 401;
-                    throw error;
                 }
 
                 if (response.status === 429) {
@@ -617,7 +629,46 @@ class SpotifyAPI {
         });
     }
 
-    // Recently Played
+    async setVolume(volumePercent) {
+        const params = new URLSearchParams({
+            volume_percent: Math.round(volumePercent * 100).toString()
+        });
+        return this.makeRequest(`/me/player/volume?${params.toString()}`, {
+            method: 'PUT'
+        });
+    }
+
+    async seek(positionMs, deviceId = null) {
+        const params = new URLSearchParams({
+            position_ms: positionMs.toString()
+        });
+        if (deviceId) {
+            params.append('device_id', deviceId);
+        }
+        const url = `/me/player/seek?${params.toString()}`;
+        console.log('Making seek API call to:', url, 'with deviceId:', deviceId);
+        return this.makeRequest(url, {
+            method: 'PUT'
+        });
+    }
+
+    async getCurrentPlaybackState() {
+        return this.makeRequest('/me/player');
+    }
+
+    async getDevices() {
+        return this.makeRequest('/me/player/devices');
+    }
+
+    async transferPlayback(deviceId, play = false) {
+        return this.makeRequest('/me/player', {
+            method: 'PUT',
+            body: JSON.stringify({
+                device_ids: [deviceId],
+                play: play
+            })
+        });
+    }
     async getRecentlyPlayedTracks(limit = 50, before = null, after = null) {
         const params = new URLSearchParams({
             limit: limit.toString()

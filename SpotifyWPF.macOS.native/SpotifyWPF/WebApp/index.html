@@ -236,12 +236,34 @@
         <div class="playlist-tracks-content">
             <div class="playlist-tracks-header">
                 <h3 id="playlist-tracks-title">Playlist Tracks</h3>
-                <button id="close-playlist-tracks" class="close-modal-btn">
-                    <i class="fas fa-times"></i>
-                </button>
+                <div class="playlist-tracks-controls">
+                    <input type="text" id="playlist-tracks-search" placeholder="Search tracks..." class="playlist-search-input">
+                    <button id="close-playlist-tracks" class="close-modal-btn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
-            <div id="playlist-tracks-list" class="playlist-tracks-list">
-                <!-- Tracks will be populated here -->
+            <div class="playlist-tracks-table-container">
+                <table class="playlist-tracks-table">
+                    <thead>
+                        <tr>
+                            <th class="track-number-header">#</th>
+                            <th class="track-name-header sortable" data-sort="name">
+                                <span>Name</span>
+                                <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="track-author-header sortable" data-sort="author">
+                                <span>Author</span>
+                                <i class="fas fa-sort sort-icon"></i>
+                            </th>
+                            <th class="track-duration-header">Duration</th>
+                            <th class="track-play-header">Play</th>
+                        </tr>
+                    </thead>
+                    <tbody id="playlist-tracks-list">
+                        <!-- Tracks will be populated here -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

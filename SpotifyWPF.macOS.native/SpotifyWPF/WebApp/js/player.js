@@ -7,6 +7,7 @@ class SpotifyPlayer {
         this.isPlaying = false;
         this.volume = 0.5;
         this.progressUpdateInterval = null;
+        this.remoteUpdateInterval = null;
 
         this.init();
     }
@@ -63,18 +64,23 @@ class SpotifyPlayer {
 
         // Playback status updates
         this.player.addListener('player_state_changed', async (state) => {
-            if (!state) return;
+            if (state) {
+                // Local device active
+                this.stopRemoteUpdates();
+                this.currentTrack = state.track_window.current_track;
+                this.isPlaying = !state.paused;
 
-            this.currentTrack = state.track_window.current_track;
-            this.isPlaying = !state.paused;
+                await this.updateUI(state);
 
-            await this.updateUI(state);
-
-            // Start/stop progress updates based on playback state
-            if (!state.paused && !this.progressUpdateInterval) {
-                this.startProgressUpdates();
-            } else if (state.paused && this.progressUpdateInterval) {
-                this.stopProgressUpdates();
+                // Start/stop progress updates based on playback state
+                if (!state.paused && !this.progressUpdateInterval) {
+                    this.startProgressUpdates();
+                } else if (state.paused && this.progressUpdateInterval) {
+                    this.stopProgressUpdates();
+                }
+            } else {
+                // No state, possibly remote device active
+                this.startRemoteUpdates();
             }
         });
 
@@ -82,7 +88,8 @@ class SpotifyPlayer {
         this.player.addListener('ready', ({ device_id }) => {
             console.log('Ready with Device ID', device_id);
             this.deviceId = device_id;
-            this.transferPlayback();
+            // Start remote updates to handle remote playback
+            this.startRemoteUpdates();
         });
 
         // Not Ready
@@ -250,100 +257,235 @@ class SpotifyPlayer {
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     }
 
-    // Public methods for controlling playback
-    async playTrack(trackUri) {
-        if (!this.player) return;
-
+    async updateUIFromAPI() {
         try {
-            await this.player.resume();
-            // In a real implementation, you'd queue the specific track
-            console.log('Playing track:', trackUri);
+            const playbackState = await window.spotifyApi.getCurrentPlaybackState();
+            if (playbackState && playbackState.item) {
+                // Check if this is local device
+                if (playbackState.device && playbackState.device.id === this.deviceId) {
+                    // Local device active, stop remote updates
+                    this.stopRemoteUpdates();
+                    return; // Don't update UI from API when local is active
+                }
+
+                // Remote device active, update UI
+                const mockState = {
+                    paused: !playbackState.is_playing,
+                    position: playbackState.progress_ms || 0,
+                    duration: playbackState.item.duration_ms || 0,
+                    track_window: {
+                        current_track: playbackState.item,
+                        previous_tracks: [], // Not available in API
+                        next_tracks: [] // Not available in API
+                    }
+                };
+                await this.updateUI(mockState);
+
+                // Update volume slider
+                if (playbackState.device && typeof playbackState.device.volume_percent === 'number') {
+                    const volumeSlider = document.getElementById('volume-slider');
+                    if (volumeSlider) {
+                        volumeSlider.value = playbackState.device.volume_percent;
+                    }
+                }
+            } else {
+                // No playback state, perhaps stop updates or keep trying
+            }
         } catch (error) {
-            console.error('Failed to play track:', error);
+            console.error('Failed to update UI from API:', error);
+        }
+    }
+
+    startRemoteUpdates() {
+        if (this.remoteUpdateInterval) return;
+        this.remoteUpdateInterval = setInterval(() => {
+            this.updateUIFromAPI();
+        }, 1000); // Update every second
+    }
+
+    stopRemoteUpdates() {
+        if (this.remoteUpdateInterval) {
+            clearInterval(this.remoteUpdateInterval);
+            this.remoteUpdateInterval = null;
+        }
+    }
+
+    // Public methods for controlling playback
+    async isLocalDeviceActive() {
+        try {
+            const playbackState = await window.spotifyApi.getCurrentPlaybackState();
+            return playbackState && playbackState.device && playbackState.device.id === this.deviceId;
+        } catch (error) {
+            console.error('Failed to check active device:', error);
+            return true; // Assume local if error
+        }
+    }
+
+    async playTrack(trackUri) {
+        const isLocal = await this.isLocalDeviceActive();
+        if (isLocal) {
+            if (!this.player) return;
+            try {
+                await this.player.resume();
+                console.log('Playing track (local):', trackUri);
+            } catch (error) {
+                console.error('Failed to play track (local):', error);
+            }
+        } else {
+            try {
+                await window.spotifyApi.startPlayback(null, [trackUri]);
+                console.log('Playing track (remote):', trackUri);
+            } catch (error) {
+                console.error('Failed to play track (remote):', error);
+            }
         }
     }
 
     async togglePlayPause() {
-        if (!this.player) return;
-
-        try {
-            if (this.isPlaying) {
-                await this.player.pause();
-            } else {
-                await this.player.resume();
+        const isLocal = await this.isLocalDeviceActive();
+        if (isLocal) {
+            if (!this.player) return;
+            try {
+                if (this.isPlaying) {
+                    await this.player.pause();
+                } else {
+                    await this.player.resume();
+                }
+            } catch (error) {
+                console.error('Failed to toggle playback (local):', error);
             }
-        } catch (error) {
-            console.error('Failed to toggle playback:', error);
+        } else {
+            try {
+                const playbackState = await window.spotifyApi.getCurrentPlaybackState();
+                if (playbackState && playbackState.is_playing) {
+                    await window.spotifyApi.pausePlayback();
+                } else {
+                    await window.spotifyApi.resumePlayback();
+                }
+            } catch (error) {
+                console.error('Failed to toggle playback (remote):', error);
+            }
         }
     }
 
     async nextTrack() {
-        if (!this.player) return;
-
-        try {
-            await this.player.nextTrack();
-        } catch (error) {
-            console.error('Failed to skip to next track:', error);
+        const isLocal = await this.isLocalDeviceActive();
+        if (isLocal) {
+            if (!this.player) return;
+            try {
+                await this.player.nextTrack();
+            } catch (error) {
+                console.error('Failed to skip to next track (local):', error);
+            }
+        } else {
+            try {
+                await window.spotifyApi.skipToNext();
+            } catch (error) {
+                console.error('Failed to skip to next track (remote):', error);
+            }
         }
     }
 
     async previousTrack() {
-        if (!this.player) return;
-
-        try {
-            await this.player.previousTrack();
-        } catch (error) {
-            console.error('Failed to go to previous track:', error);
+        const isLocal = await this.isLocalDeviceActive();
+        if (isLocal) {
+            if (!this.player) return;
+            try {
+                await this.player.previousTrack();
+            } catch (error) {
+                console.error('Failed to go to previous track (local):', error);
+            }
+        } else {
+            try {
+                await window.spotifyApi.skipToPrevious();
+            } catch (error) {
+                console.error('Failed to go to previous track (remote):', error);
+            }
         }
     }
 
     async setVolume(volume) {
-        if (!this.player) {
-            console.warn('No player instance available for setVolume');
-            return;
+        const isLocal = await this.isLocalDeviceActive();
+        if (isLocal) {
+            if (!this.player) {
+                console.warn('No player instance available for setVolume');
+                return;
+            }
+            try {
+                this.volume = volume / 100;
+                console.log('Setting player volume to:', this.volume);
+                await this.player.setVolume(this.volume);
+            } catch (error) {
+                console.error('Failed to set volume (local):', error);
+            }
+        } else {
+            try {
+                await window.spotifyApi.setVolume(volume / 100);
+                console.log('Setting volume (remote):', volume);
+            } catch (error) {
+                console.error('Failed to set volume (remote):', error);
+            }
         }
 
-        try {
-            this.volume = volume / 100;
-            console.log('Setting player volume to:', this.volume);
-            await this.player.setVolume(this.volume);
-
-            // Update the volume slider UI to reflect the change
-            const volumeSlider = document.getElementById('volume-slider');
-            if (volumeSlider) {
-                volumeSlider.value = volume;
-                // Set CSS custom property for volume percentage
-                volumeSlider.style.setProperty('--volume-percent', volume + '%');
-                console.log('Updated volume slider UI to:', volume);
-            }
-        } catch (error) {
-            console.error('Failed to set volume:', error);
+        // Update the volume slider UI to reflect the change
+        const volumeSlider = document.getElementById('volume-slider');
+        if (volumeSlider) {
+            volumeSlider.value = volume;
+            // Set CSS custom property for volume percentage
+            volumeSlider.style.setProperty('--volume-percent', volume + '%');
+            console.log('Updated volume slider UI to:', volume);
         }
     }
 
     async seek(position) {
-        if (!this.player) {
-            console.warn('No player instance available for seek');
-            return;
-        }
-
-        try {
-            const state = await this.player.getCurrentState();
-            if (state) {
-                // Try to get duration from state, fallback to track duration
-                const durationMs = state.duration || (state.track_window?.current_track?.duration_ms);
-                if (durationMs) {
-                    const seekMs = (position / 100) * durationMs;
-                    console.log('Seeking to position:', seekMs, 'ms (', position, '% of', durationMs, 'ms)');
-                    await this.player.seek(seekMs);
-                } else {
-                    console.warn('Cannot seek: no duration available');
-                }
-            } else {
-                console.warn('Cannot seek: no player state available');
+        const isLocal = await this.isLocalDeviceActive();
+        if (isLocal) {
+            if (!this.player) {
+                console.warn('No player instance available for seek');
+                return;
             }
-        } catch (error) {
-            console.error('Failed to seek:', error);
+            try {
+                const state = await this.player.getCurrentState();
+                if (state) {
+                    // Try to get duration from state, fallback to track duration
+                    const durationMs = state.duration || (state.track_window?.current_track?.duration_ms);
+                    if (durationMs) {
+                        const seekMs = (position / 100) * durationMs;
+                        console.log('Seeking to position:', seekMs, 'ms (', position, '% of', durationMs, 'ms)');
+                        await this.player.seek(seekMs);
+                    } else {
+                        console.warn('Cannot seek: no duration available');
+                    }
+                } else {
+                    console.warn('Cannot seek: no player state available');
+                }
+            } catch (error) {
+                console.error('Failed to seek (local):', error);
+            }
+        } else {
+            try {
+                const playbackState = await window.spotifyApi.getCurrentPlaybackState();
+                if (playbackState && playbackState.item) {
+                    const durationMs = playbackState.item.duration_ms;
+                    const seekMs = Math.round((position / 100) * durationMs);
+                    const deviceId = playbackState.device?.id;
+                    console.log('Seeking to position (remote):', seekMs, 'ms on device:', deviceId);
+                    console.log('Full playback state for debugging:', JSON.stringify(playbackState, null, 2));
+
+                    const seekResult = await window.spotifyApi.seek(seekMs, deviceId);
+                    console.log('Seek API call result:', seekResult);
+                } else {
+                    console.warn('Cannot seek (remote): no playback state');
+                }
+            } catch (error) {
+                console.error('Failed to seek (remote):', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    status: error.status,
+                    statusText: error.statusText,
+                    stack: error.stack
+                });
+            }
         }
     }
 
@@ -483,123 +625,108 @@ class SpotifyPlayer {
         document.getElementById('total-time').textContent = this.formatTime(durationMs);
     }
 
-    // Re-bind event listeners (call this after player is created)
+        // Re-bind event listeners (call this after player is created)
     bindEventListeners() {
         console.log('Binding player event listeners...');
-        const player = window.spotifyApp?.player;
 
-        if (player) {
-            console.log('Player found, setting up event listeners');
-
-            // Play/Pause button
-            document.getElementById('play-pause-btn').addEventListener('click', () => {
-                console.log('Play/pause button clicked');
-                player.togglePlayPause();
-            });
-
-            // Next/Previous buttons
-            document.getElementById('next-btn').addEventListener('click', () => {
-                console.log('Next button clicked');
-                player.nextTrack();
-            });
-
-            document.getElementById('prev-btn').addEventListener('click', () => {
-                console.log('Previous button clicked');
-                player.previousTrack();
-            });
-
-            // Volume slider
-            document.getElementById('volume-slider').addEventListener('input', (e) => {
-                console.log('Volume slider changed:', e.target.value);
-                player.setVolume(e.target.value);
-            });
-
-            // Progress bar
-            document.querySelector('.progress-bar').addEventListener('click', (e) => {
-                console.log('Progress bar clicked');
-                const rect = e.currentTarget.getBoundingClientRect();
-                const position = ((e.clientX - rect.left) / rect.width) * 100;
-                console.log('Seeking to position:', position);
-                player.seek(position);
-            });
-
-            // Progress dragger drag functionality
-            const progressDragger = document.getElementById('progress-dragger');
-            if (progressDragger) {
-                let isDragging = false;
-
-                progressDragger.addEventListener('mousedown', (e) => {
-                    isDragging = true;
-                    e.preventDefault();
-                    console.log('Started dragging progress dragger');
-                });
-
-                document.addEventListener('mousemove', (e) => {
-                    if (!isDragging) return;
-
-                    const progressBar = document.querySelector('.progress-bar');
-                    const rect = progressBar.getBoundingClientRect();
-                    const position = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-
-                    // Update visual position immediately
-                    progressDragger.style.left = `${position}%`;
-                    document.getElementById('progress-fill').style.width = `${position}%`;
-                });
-
-                document.addEventListener('mouseup', (e) => {
-                    if (!isDragging) return;
-
-                    isDragging = false;
-                    console.log('Finished dragging progress dragger');
-
-                    const progressBar = document.querySelector('.progress-bar');
-                    const rect = progressBar.getBoundingClientRect();
-                    const position = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-
-                    console.log('Seeking to dragged position:', position);
-                    player.seek(position);
-                });
-            }
-
-            console.log('Event listeners bound successfully');
-        } else {
-            console.warn('Player not found when binding event listeners');
-        }
-    }
-}
-
-// Bind player controls to UI
-document.addEventListener('DOMContentLoaded', () => {
-    const player = window.spotifyApp?.player;
-
-    if (player) {
         // Play/Pause button
         document.getElementById('play-pause-btn').addEventListener('click', () => {
-            player.togglePlayPause();
+            console.log('Play/pause button clicked');
+            this.togglePlayPause();
         });
 
         // Next/Previous buttons
         document.getElementById('next-btn').addEventListener('click', () => {
-            player.nextTrack();
+            console.log('Next button clicked');
+            this.nextTrack();
         });
 
         document.getElementById('prev-btn').addEventListener('click', () => {
-            player.previousTrack();
+            console.log('Previous button clicked');
+            this.previousTrack();
         });
 
         // Volume slider
         document.getElementById('volume-slider').addEventListener('input', (e) => {
             console.log('Volume slider changed:', e.target.value);
-            player.setVolume(e.target.value);
+            this.setVolume(e.target.value);
         });
 
-        // Progress bar
-        document.querySelector('.progress-bar').addEventListener('click', (e) => {
-            console.log('Progress bar clicked');
-            const rect = e.currentTarget.getBoundingClientRect();
-            const position = ((e.clientX - rect.left) / rect.width) * 100;
-            console.log('Seeking to position:', position);
-            player.seek(position);
-        });
+        // Style progress dragger as small circle on the bar
+        const progressDragger = document.getElementById('progress-dragger');
+        if (progressDragger) {
+            progressDragger.style.position = 'absolute';
+            progressDragger.style.top = '50%';
+            progressDragger.style.transform = 'translateY(-50%)';
+            progressDragger.style.width = '12px';
+            progressDragger.style.height = '12px';
+            progressDragger.style.background = '#1db954';
+            progressDragger.style.borderRadius = '50%';
+            progressDragger.style.cursor = 'pointer';
+            progressDragger.style.zIndex = '5';
+            progressDragger.style.left = '0%'; // Initial position
+        }
+
+        // Progress bar click (for seeking)
+        const progressContainer = document.querySelector('.progress-container');
+        if (progressContainer) {
+            progressContainer.addEventListener('click', (e) => {
+                // Prevent if clicking on controls
+                if (e.target.closest('.control-btn') || e.target.closest('.volume-control')) return;
+
+                const progressBar = document.querySelector('.progress-bar');
+                const rect = progressBar.getBoundingClientRect();
+                const position = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+
+                console.log('Progress container clicked at position:', position);
+                this.seek(position);
+
+                // Update dragger and fill position
+                const progressDragger = document.getElementById('progress-dragger');
+                if (progressDragger) {
+                    progressDragger.style.left = `${position}%`;
+                }
+                document.getElementById('progress-fill').style.width = `${position}%`;
+            });
+        }
+
+        // Progress dragger drag functionality
+        if (progressDragger) {
+            let isDragging = false;
+
+            progressDragger.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                e.preventDefault();
+                console.log('Started dragging progress dragger');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+
+                const progressBar = document.querySelector('.progress-bar');
+                const rect = progressBar.getBoundingClientRect();
+                const position = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+
+                // Update visual position immediately
+                progressDragger.style.left = `${position}%`;
+                document.getElementById('progress-fill').style.width = `${position}%`;
+            });
+
+            document.addEventListener('mouseup', (e) => {
+                if (!isDragging) return;
+
+                isDragging = false;
+                console.log('Finished dragging progress dragger');
+
+                const progressBar = document.querySelector('.progress-bar');
+                const rect = progressBar.getBoundingClientRect();
+                const position = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+
+                console.log('Seeking to dragged position:', position);
+                this.seek(position);
+            });
+        }
+
+        console.log('Event listeners bound successfully');
     }
-});
+}
