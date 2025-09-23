@@ -2,7 +2,6 @@
 //  ContentView.swift
 //  SpotifyWPF
 //
-//  Created by GitHub Copilot on 2025-09-21.
 //
 
 import SwiftUI
@@ -56,7 +55,7 @@ struct WebView: NSViewRepresentable {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>SpotifyWPF</title>
+                <title>Spofify</title>
             </head>
             <body>
                 <h1>WebApp not found</h1>

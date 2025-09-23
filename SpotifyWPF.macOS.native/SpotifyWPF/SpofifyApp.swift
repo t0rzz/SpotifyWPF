@@ -2,7 +2,6 @@
 //  SpofifyApp.swift
 //  SpotifyWPF
 //
-//  Created by GitHub Copilot on 2025-09-21.
 //
 
 import SwiftUI
@@ -10,9 +9,12 @@ import Cocoa
 
 extension Notification.Name {
     static let spotifyCallback = Notification.Name("SpotifyCallback")
+    static let showAbout = Notification.Name("ShowAbout")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    var aboutWindow: NSWindow?
+
     func application(_ application: NSApplication, open urls: [URL]) {
         print("📱 AppDelegate received URLs: \(urls)")
         
@@ -24,6 +26,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMenuBar()
+    }
+
+    func setupMenuBar() {
+        let mainMenu = NSMenu()
+
+        // App menu
+        let appMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        appMenuItem.submenu = appMenu
+
+        let aboutMenuItem = NSMenuItem(title: "About Spofify", action: #selector(showAbout(_:)), keyEquivalent: "")
+        aboutMenuItem.target = self
+        appMenu.addItem(aboutMenuItem)
+
+        appMenu.addItem(NSMenuItem.separator())
+
+        appMenu.addItem(withTitle: "Quit Spofify", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        mainMenu.addItem(appMenuItem)
+
+        NSApplication.shared.mainMenu = mainMenu
+    }
+
+    @objc func showAbout(_ sender: Any?) {
+        if aboutWindow == nil {
+            let aboutView = AboutView()
+            let hostingController = NSHostingController(rootView: aboutView)
+
+            aboutWindow = NSWindow(contentViewController: hostingController)
+            aboutWindow?.styleMask = [.titled, .closable]
+            aboutWindow?.title = "About Spofify"
+            aboutWindow?.isReleasedWhenClosed = false
+            aboutWindow?.center()
+        }
+
+        aboutWindow?.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
 }
 
 @main
@@ -31,7 +74,7 @@ struct SpofifyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {
-        Window("SpotifyWPF", id: "main") {
+        Window("Spofify", id: "main") {
             ContentView()
         }
         .windowStyle(.hiddenTitleBar)
