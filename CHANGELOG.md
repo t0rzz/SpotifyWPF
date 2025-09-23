@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.0.3] - 2025-09-23
+### 🐛 Bug Fixes
+
+**macOS App Branding and Naming**
+- ✅ **Fixed macOS app display name inconsistency**
+  - Corrected Xcode project PRODUCT_NAME from "$(TARGET_NAME)" to "Spofify" in both Debug and Release configurations
+  - Ensured future builds produce "Spofify.app" instead of "SpotifyWPF.app"
+  - Verified app displays with correct name in Applications folder, Dock, and system interfaces
+  - Maintained consistent branding across all macOS app instances
+
 ## [3.0.2] - 2025-09-22
 ### 🐛 Bug Fixes
 

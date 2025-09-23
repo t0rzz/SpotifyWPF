@@ -19,7 +19,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.0.2</string>
+	<string>3.0.3</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSApplicationCategoryType</key>
@@ -38,7 +38,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access for Spotify features.</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2025 SpofifyWPF. All rights reserved.</string>
+	<string></string>
 	<key>NSMainStoryboardFile</key>
 	<string></string>
 	<key>NSMicrophoneUsageDescription</key>
