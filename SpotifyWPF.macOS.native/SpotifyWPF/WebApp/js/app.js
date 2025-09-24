@@ -66,6 +66,21 @@ class SpotifyMacOSApp {
             }
         });
 
+        // Handle messages from callback.html
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'spotify-auth-code') {
+                console.log('Received auth code from callback page:', event.data.code);
+                this.handleOAuthCallback({ code: event.data.code });
+                // Navigate back to main app
+                this.switchSection('home');
+            } else if (event.data.type === 'spotify-auth-error') {
+                console.log('Received auth error from callback page:', event.data.error);
+                this.showError(`Authorization failed: ${event.data.error}`);
+                // Navigate back to setup
+                this.showSpotifySetup();
+            }
+        });
+
         // Search
         document.getElementById('search-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -1115,6 +1130,7 @@ class SpotifyMacOSApp {
 
             this.hideLoading();
             this.showSuccess('Playlist started on selected device!');
+            this.hideContextMenu();
 
         } catch (error) {
             this.hideLoading();
@@ -1138,6 +1154,7 @@ class SpotifyMacOSApp {
 
             this.hideLoading();
             this.showSuccess('Track started on selected device!');
+            this.hideContextMenu();
 
         } catch (error) {
             this.hideLoading();
@@ -1787,6 +1804,7 @@ class SpotifyMacOSApp {
 
             this.hideLoading();
             this.showSuccess('Playlist playback started!');
+            this.hideContextMenu();
 
         } catch (error) {
             console.error('Failed to play playlist:', error);
@@ -1899,6 +1917,7 @@ class SpotifyMacOSApp {
             }
 
             this.showSuccess('Track playback started!');
+            this.hideContextMenu();
 
         } catch (error) {
             console.error('Failed to play track:', error);

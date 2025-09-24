@@ -52,6 +52,65 @@
     </div>
 
     <script>
+        // Handle the OAuth callback when loaded directly (not as popup)
+        window.handleDirectCallback = function(callbackUrl) {
+            console.log('Direct callback received:', callbackUrl);
+            
+            // Parse the callback URL
+            const url = new URL(callbackUrl);
+            const searchParams = new URLSearchParams(url.search);
+            
+            const authorizationCode = searchParams.get('code');
+            const error = searchParams.get('error');
+            
+            console.log('Parsed direct callback params:', { authorizationCode: authorizationCode ? 'present' : 'missing', error });
+            
+            if (error) {
+                // Handle authorization error
+                console.log('Authorization error:', error);
+                document.getElementById('status').textContent = 'Authorization Failed';
+                document.getElementById('status').className = 'error';
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('message').textContent = `Error: ${error}`;
+                
+                // Send error to main app
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'spotify-auth-error',
+                        error: error
+                    }, '*');
+                }
+                
+            } else if (authorizationCode) {
+                // Handle successful authorization
+                console.log('Authorization code received, exchanging for tokens');
+                document.getElementById('status').textContent = 'Exchanging authorization code...';
+                document.getElementById('message').textContent = 'Please wait while we complete the authorization.';
+                
+                // Send the authorization code to the main app
+                if (window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'spotify-auth-code',
+                        code: authorizationCode
+                    }, '*');
+                } else {
+                    // Fallback: try to communicate with main window
+                    window.postMessage({
+                        type: 'spotify-auth-code',
+                        code: authorizationCode
+                    }, '*');
+                }
+                
+            } else {
+                // Handle unexpected state
+                console.log('Unexpected state - no code or error');
+                document.getElementById('status').textContent = 'Unexpected Error';
+                document.getElementById('status').className = 'error';
+                document.getElementById('spinner').style.display = 'none';
+                document.getElementById('message').textContent = 'Something went wrong. Please try again.';
+            }
+        };
+
         // Handle the OAuth callback
         function handleCallback() {
             console.log('Callback page loaded');

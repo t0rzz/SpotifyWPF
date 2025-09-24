@@ -76,51 +76,7 @@ Despite different platforms and technologies, both apps provide identical advanc
 - **Custom URL schemes**: Native OAuth callback handling (`spofifywpf://callback`)
 - **macOS-specific UI**: Native macOS controls and styling for bulk operations
 
-## 📋 Advanced Spotify Playlist Management Highlights (v3.0.3)
-
-### Cross-Platform Spotify Bulk Operations
-- **Modern Player UI** using Web Playback SDK (local web player in both apps for playlist management)
-- **Top Tracks module** (Personalization API) with artwork for playlist organization
-- **Unified device flow**: click-to-play promotes local player; "Play To" available from context menus
-- **Smarter volume handling** for local vs remote devices during bulk playlist operations
-- **Smooth progress tracking** to avoid network jitter in Spotify automation
-
-### Windows-Specific Spotify Power Tools (v3.0.3)
-- **Right-click context menus** on playlists (Open in Spotify, Copy link, mass playlist deletion)
-- **MSIX packaging** for simpler Windows installation of playlist management tools
-- **Portable single-file EXE** option for bulk playlist operations
-- **Window title shows app version** for Spotify playlist organizer
-
-### macOS-Specific Spotify Playlist Cleanup (v3.0.3)
-- **Native macOS UI** with Swift and WKWebView for advanced playlist management
-- **DMG distribution** for easy macOS installation of Spotify power tools
-- **Custom URL scheme handling** for OAuth (`spofifywpf://callback`) in bulk operations
-- **Native macOS context menus** with device submenus for playlist automation
-
-### **SpofifyWPF** (Windows) - Windows Spotify Playlist Organizer
-- **Platform**: Windows 10/11
-- **Technology**: WPF (.NET 8) with WebView2
-- **Distribution**: MSIX installer, portable EXE, or ZIP
-- **UI**: Native Windows application with WebView2 for embedded web player
-
-### **SpofifyWPF** (macOS) - macOS Spotify Bulk Operations Tool
-- **Platform**: macOS 12+
-- **Technology**: Swift with WKWebView (native macOS app)
-- **Distribution**: DMG installer
-- **UI**: Native macOS application with embedded WebView
-
-### **🔄 Shared Core Spotify Playlist Management Features**
-Despite different platforms and technologies, both apps provide identical advanced playlist management functionality:
-- ✅ **Bulk playlist operations** (delete, unfollow, manage multiple playlists)
-- ✅ **Device management** (list devices, transfer playback, "Play To" functionality)
-- ✅ **Advanced playlist features** (pagination, sorting, context menus)
-- ✅ **Artist management** (follow/unfollow, bulk operations)
-- ✅ **OAuth authentication** with Spotify
-- ✅ **Web Playback SDK integration** for local playback
-- ✅ **Rate limiting and error handling**
-- ✅ **Modern dark UI theme**
-
-## 🚀 Quick Start - Spotify Playlist Management Setup
+##  Quick Start - Spotify Playlist Management Setup
 
 ### Windows (SpofifyWPF) - Windows Spotify Bulk Operations
 ```powershell
@@ -219,47 +175,28 @@ The repository includes GitHub Actions workflows that automatically build both p
 
 All builds are triggered on pushes to `main`/`master` branches and releases are automatically created with cross-platform Spotify automation artifacts.
 
-## 📋 Recent Highlights (v3.0.0)
+## 📋 Recent Highlights (v3.0.4)
 
 ### Cross-Platform Features
-- **Modern Player UI** using Web Playback SDK (local web player in both apps)
-- **Top Tracks module** (Personalization API) with artwork
-- **Unified device flow**: click-to-play promotes local player; "Play To" available from context menus
-- **Smarter volume handling** for local vs remote devices
-- **Smooth progress tracking** to avoid network jitter
-
-### Windows-Specific (v3.0.0)
-- **Right-click context menus** on playlists (Open in Spotify, Copy link, Unfollow/Delete)
-- **MSIX packaging** for simpler Windows installation
-- **Portable single-file EXE** option
-- **Window title shows app version**
-
-### macOS-Specific (v3.0.0)
-- **Native macOS UI** with Swift and WKWebView
-- **DMG distribution** for easy macOS installation
-- **Custom URL scheme handling** for OAuth (`spofifywpf://callback`)
-- **Native macOS context menus** with device submenus
-
-## � Advanced Spotify Playlist Management Highlights (v3.0.3)
-
-### Cross-Platform Spotify Bulk Operations Features
 - **Modern Player UI** using Web Playback SDK (local web player in both apps for playlist management)
 - **Top Tracks module** (Personalization API) with artwork for playlist organization
 - **Unified device flow**: click-to-play promotes local player; "Play To" available from context menus
 - **Smarter volume handling** for local vs remote devices during bulk playlist operations
 - **Smooth progress tracking** to avoid network jitter in Spotify automation
+- **Context menu auto-close**: Context menus now automatically close after selection for better UX
 
-### Windows-Specific Spotify Power Tools (v3.0.3)
+### Windows-Specific (v3.0.4)
 - **Right-click context menus** on playlists (Open in Spotify, Copy link, mass playlist deletion)
 - **MSIX packaging** for simpler Windows installation of playlist management tools
 - **Portable single-file EXE** option for bulk playlist operations
 - **Window title shows app version** for Spotify playlist organizer
 
-### macOS-Specific Spotify Playlist Cleanup (v3.0.3)
+### macOS-Specific (v3.0.4)
 - **Native macOS UI** with Swift and WKWebView for advanced playlist management
 - **DMG distribution** for easy macOS installation of Spotify power tools
 - **Custom URL scheme handling** for OAuth (`spofifywpf://callback`) in bulk operations
 - **Native macOS context menus** with device submenus for playlist automation
+- **HTTP-based OAuth callbacks** for improved authorization flow reliability
 
 ## �📁 Project Structure - Spotify Playlist Management Architecture
 

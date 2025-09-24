@@ -4,7 +4,7 @@ class SpotifyAPI {
         this.baseUrl = 'https://api.spotify.com/v1';
         this.accessToken = null;
         this.clientId = window.SPOTIFY_CONFIG?.clientId || null;
-        this.redirectUri = window.SPOTIFY_CONFIG?.redirectUri || 'spofifywpf://callback';
+        this.redirectUri = window.SPOTIFY_CONFIG?.redirectUri || 'http://localhost:8080/callback';
 
         // Rate limit tracking
         this.rateLimitState = {

@@ -85,6 +85,7 @@ struct WebView: NSViewRepresentable {
     class Coordinator: NSObject, WKNavigationDelegate {
         var callbackURL: URL?
         var hasInjected = false
+        var pendingCallbackURL: URL?
         
         init(callbackURL: URL?) {
             self.callbackURL = callbackURL
@@ -111,6 +112,26 @@ struct WebView: NSViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             // Inject callback if available and not already injected
             injectCallback(into: webView)
+            
+            // Inject pending callback URL if this is the callback page
+            if let pendingURL = self.pendingCallbackURL,
+               let currentURL = webView.url,
+               currentURL.lastPathComponent == "callback.html" {
+                print("🔗 Injecting pending callback URL into callback.html: \(pendingURL)")
+                let script = """
+                if (window.handleDirectCallback) {
+                    window.handleDirectCallback('\(pendingURL.absoluteString)');
+                }
+                """
+                webView.evaluateJavaScript(script) { result, error in
+                    if let error = error {
+                        print("❌ Error injecting pending callback URL: \(error)")
+                    } else {
+                        print("✅ Pending callback URL injected successfully")
+                        self.pendingCallbackURL = nil
+                    }
+                }
+            }
         }
         
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -124,9 +145,14 @@ struct WebView: NSViewRepresentable {
                 }
                 
                 // Check if this is a redirect back to our app (callback URL)
-                if url.scheme == "spofifywpf" || (url.scheme == "http" && url.host == "localhost") {
-                    // Handle callback URL - this should be processed by the WebApp
-                    decisionHandler(.allow)
+                if url.scheme == "spofifywpf" || (url.scheme == "http" && url.host == "localhost" && url.path == "/callback") {
+                    // Handle callback URL - load the local callback.html and inject parameters
+                    if let callbackURL = Bundle.main.url(forResource: "callback", withExtension: "html", subdirectory: "WebApp") {
+                        webView.loadFileURL(callbackURL, allowingReadAccessTo: callbackURL.deletingLastPathComponent())
+                        // Store the callback parameters to inject after loading
+                        self.pendingCallbackURL = url
+                    }
+                    decisionHandler(.cancel)
                     return
                 }
             }
