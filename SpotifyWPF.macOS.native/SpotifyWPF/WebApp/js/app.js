@@ -49,6 +49,23 @@ class SpotifyMacOSApp {
             this.disconnect();
         });
 
+        // Global context menu handler to prevent default browser menu
+        document.addEventListener('contextmenu', (e) => {
+            const target = e.target;
+            const playlistRow = target.closest('.playlist-row');
+            const trackRow = target.closest('.playlist-track-row');
+            
+            if (playlistRow) {
+                e.preventDefault();
+                const playlistId = playlistRow.dataset.id;
+                this.showPlaylistContextMenu(e, playlistId);
+            } else if (trackRow) {
+                e.preventDefault();
+                const trackUri = trackRow.dataset.trackUri;
+                this.showTrackContextMenu(e, trackUri);
+            }
+        });
+
         // Search
         document.getElementById('search-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -891,14 +908,6 @@ class SpotifyMacOSApp {
     }
 
     addPlaylistTableEventListeners() {
-        // Add right-click context menu to playlist rows
-        document.querySelectorAll('.playlist-row').forEach(row => {
-            row.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                this.showPlaylistContextMenu(e, row.dataset.id);
-            });
-        });
-
         // Hide context menu when clicking elsewhere
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.context-menu')) {
@@ -1020,6 +1029,59 @@ class SpotifyMacOSApp {
         }
     }
 
+    async showTrackContextMenu(event, trackUri) {
+        // Hide any existing context menu
+        this.hideContextMenu();
+
+        // Get available devices
+        const devices = await this.getAvailableDevices();
+
+        // Create context menu
+        const menu = document.createElement('div');
+        menu.className = 'context-menu';
+        menu.style.left = `${event.pageX}px`;
+        menu.style.top = `${event.pageY}px`;
+
+        // Add menu items
+        menu.innerHTML = `
+            <div class="context-menu-item" onclick="window.spotifyApp.playTrack('${trackUri}')">
+                <i class="fas fa-play"></i>
+                Play
+            </div>
+            <div class="context-menu-item has-submenu">
+                <i class="fas fa-external-link-alt"></i>
+                Play To
+                <div class="context-menu-submenu">
+                    ${devices.map(device => `
+                        <div class="context-menu-item" onclick="window.spotifyApp.playTrackOnDevice('${trackUri}', '${device.id}')">
+                            <i class="fas fa-${this.getDeviceIcon(device.type)}"></i>
+                            ${device.name}
+                            ${device.is_active ? '<span style="color: var(--spotify-green); margin-left: auto;">●</span>' : ''}
+                        </div>
+                    `).join('')}
+                    ${devices.length === 0 ? `
+                        <div class="context-menu-item" style="color: var(--spotify-light-gray); cursor: default;">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            No devices available
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(menu);
+        menu.style.display = 'block';
+
+        // Prevent menu from going off-screen
+        const rect = menu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            menu.style.left = `${window.innerWidth - rect.width - 10}px`;
+        }
+        if (rect.bottom > window.innerHeight) {
+            menu.style.top = `${window.innerHeight - rect.height - 10}px`;
+        }
+    }
+
     hideContextMenu() {
         const existingMenu = document.querySelector('.context-menu');
         if (existingMenu) {
@@ -1058,6 +1120,29 @@ class SpotifyMacOSApp {
             this.hideLoading();
             console.error('Failed to play playlist on device:', error);
             this.showError('Failed to start playlist on selected device');
+        }
+    }
+
+    async playTrackOnDevice(trackUri, deviceId) {
+        try {
+            this.showLoading('Transferring playback and starting track...');
+
+            // Transfer playback to the selected device
+            await this.spotifyApi.transferPlayback(deviceId, true);
+
+            // Wait a moment for the transfer to complete
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Start the track on the new device
+            await this.spotifyApi.startPlayback(null, [trackUri]);
+
+            this.hideLoading();
+            this.showSuccess('Track started on selected device!');
+
+        } catch (error) {
+            this.hideLoading();
+            console.error('Failed to play track on device:', error);
+            this.showError('Failed to start track on selected device');
         }
     }
 
@@ -2034,6 +2119,7 @@ class SpotifyMacOSApp {
 
             const trackRow = document.createElement('tr');
             trackRow.className = 'playlist-track-row';
+            trackRow.dataset.trackUri = track.uri;
             trackRow.innerHTML = `
                 <td class="track-number">${i + 1}</td>
                 <td class="track-name-cell">
@@ -2050,6 +2136,7 @@ class SpotifyMacOSApp {
                     </button>
                 </td>
             `;
+
             tracksList.appendChild(trackRow);
         }
 
