@@ -269,4 +269,3 @@ This project is licensed under the GPL v3 License - see the [LICENSE](LICENSE) f
 
 **Keywords**: Spotify playlist management, bulk playlist operations, mass playlist deletion, Spotify power tools, playlist cleanup, Spotify automation, playlist organizer, bulk unfollow playlists, Spotify bulk operations, playlist management tool
 ```
-
