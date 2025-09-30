@@ -8,5 +8,14 @@ namespace SpotifyWPF.View.Page
         {
             InitializeComponent();
         }
+
+        private void AlbumsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Notify the ViewModel that the selection changed so it can update command states
+            if (DataContext is ViewModel.Page.AlbumsPageViewModel viewModel)
+            {
+                viewModel.DeleteSelectedAlbumsCommand?.RaiseCanExecuteChanged();
+            }
+        }
     }
 }
