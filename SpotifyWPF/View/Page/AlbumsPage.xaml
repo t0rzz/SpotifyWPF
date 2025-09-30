@@ -12,6 +12,7 @@
 
     <UserControl.Resources>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
         <ContextMenu x:Key="AlbumsContextMenu" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}">
             <ContextMenu.Template>
                 <ControlTemplate TargetType="ContextMenu">
@@ -59,21 +60,21 @@
             <MenuItem Header="Open in Spotify"
                       Command="{Binding PlacementTarget.Tag.OpenInSpotifyCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                      Visibility="{Binding RelativeSource={RelativeSource AncestorType=DataGrid}, Path=SelectedItems.Count, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=single}"/>
             <MenuItem Header="Copy Link"
                       Command="{Binding PlacementTarget.Tag.CopyAlbumLinkCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <Separator Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                      Visibility="{Binding RelativeSource={RelativeSource AncestorType=DataGrid}, Path=SelectedItems.Count, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=single}"/>
+            <Separator Visibility="{Binding RelativeSource={RelativeSource AncestorType=DataGrid}, Path=SelectedItems.Count, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=multiple}"/>
             <MenuItem Header="Remove from Library"
                       Foreground="{DynamicResource DangerBrush}"
                       Command="{Binding PlacementTarget.Tag.RemoveAlbumCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                      Visibility="{Binding RelativeSource={RelativeSource AncestorType=DataGrid}, Path=SelectedItems.Count, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=single}"/>
             <MenuItem Header="Remove from Library"
                       Foreground="{DynamicResource DangerBrush}"
                       Command="{Binding PlacementTarget.Tag.DeleteSelectedAlbumsFromContextMenuCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                      Visibility="{Binding RelativeSource={RelativeSource AncestorType=DataGrid}, Path=SelectedItems.Count, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=multiple}"/>
         </ContextMenu>
     </UserControl.Resources>
 
