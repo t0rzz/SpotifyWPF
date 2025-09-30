@@ -32,6 +32,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         // Search filter properties
         private string _albumsFilterText = string.Empty;
+        private bool _isMultipleAlbumsSelected;
         public string AlbumsFilterText
         {
             get => _albumsFilterText;
@@ -42,6 +43,19 @@ namespace SpotifyWPF.ViewModel.Page
                     _albumsFilterText = value;
                     RaisePropertyChanged();
                     ApplyAlbumsFilter();
+                }
+            }
+        }
+
+        public bool IsMultipleAlbumsSelected
+        {
+            get => _isMultipleAlbumsSelected;
+            set
+            {
+                if (_isMultipleAlbumsSelected != value)
+                {
+                    _isMultipleAlbumsSelected = value;
+                    RaisePropertyChanged();
                 }
             }
         }
