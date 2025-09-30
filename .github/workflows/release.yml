@@ -117,17 +117,9 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          if [ -f "./SpotifyWPF.macOS.native/SpotifyWPF.xcodeproj/project.pbxproj" ]; then
-            # Try to extract version from Xcode project
-            VERSION=$(grep -o 'MARKETING_VERSION = [0-9.]*' "./SpotifyWPF.macOS.native/SpotifyWPF.xcodeproj/project.pbxproj" | head -1 | cut -d' ' -f3)
-            if [ -z "$VERSION" ]; then
-              # Fallback to csproj version if Xcode version not found
-              if [ -f "../SpotifyWPF/SpotifyWPF.csproj" ]; then
-                VERSION=$(grep -o '<Version>[^<]*' ../SpotifyWPF/SpotifyWPF.csproj | head -1 | sed 's/<Version>//')
-              else
-                VERSION="1.0.0"
-              fi
-            fi
+          # Always use the csproj version for consistency across platforms
+          if [ -f "./SpotifyWPF/SpotifyWPF.csproj" ]; then
+            VERSION=$(grep -o '<Version>[^<]*' ./SpotifyWPF/SpotifyWPF.csproj | head -1 | sed 's/<Version>//')
           else
             VERSION="1.0.0"
           fi
