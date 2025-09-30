@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.0.6] - 2025-09-30
+
+### Fixed
+- **Multiple Album Deletion Bug**: Fixed "Collection was modified; enumeration operation may not execute" error when deleting multiple albums simultaneously by creating a safe copy of selected items before iteration
+
 ## [3.0.5] - 2025-09-30
 
 ### Added

@@ -382,8 +382,9 @@ namespace SpotifyWPF.ViewModel.Page
                 var albumIds = selectedAlbums.Cast<Album>().Select(a => a.Id).ToList();
                 await _spotify.RemoveSavedAlbumsAsync(albumIds);
 
-                // Remove from local collection
-                foreach (Album album in selectedAlbums)
+                // Remove from local collection - create a copy to avoid enumeration issues
+                var albumsToRemove = selectedAlbums.Cast<Album>().ToList();
+                foreach (Album album in albumsToRemove)
                 {
                     Albums.Remove(album);
                 }
