@@ -12,6 +12,7 @@ on:
       - '.github/workflows/release.yml'
       - 'SpotifyWPF.MSIX/SpotifyWPF.MSIX.wapproj'
       - 'SpotifyWPF.macOS.native/**'
+      - 'SpotifyWPF/View/**'
   workflow_dispatch:
 
 permissions:
