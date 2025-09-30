@@ -33,6 +33,7 @@ namespace SpotifyWPF.ViewModel.Page
         // Search filter properties
         private string _albumsFilterText = string.Empty;
         private bool _isMultipleAlbumsSelected;
+        private IList _selectedAlbums = new List<object>();
         public string AlbumsFilterText
         {
             get => _albumsFilterText;
@@ -60,9 +61,20 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        public IList SelectedAlbums
+        {
+            get => _selectedAlbums;
+            set
+            {
+                _selectedAlbums = value;
+                RaisePropertyChanged();
+            }
+        }
+
         // Commands
         public RelayCommand LoadAlbumsCommand { get; private set; }
         public RelayCommand<IList> DeleteSelectedAlbumsCommand { get; private set; }
+        public RelayCommand DeleteSelectedAlbumsFromContextMenuCommand { get; private set; }
 
         // Context menu commands
         public RelayCommand<Album> OpenInSpotifyCommand { get; private set; }
@@ -89,6 +101,11 @@ namespace SpotifyWPF.ViewModel.Page
             DeleteSelectedAlbumsCommand = new RelayCommand<IList>(
                 async albums => await DeleteSelectedAlbumsAsync(albums),
                 albums => albums != null && albums.Count > 0
+            );
+
+            DeleteSelectedAlbumsFromContextMenuCommand = new RelayCommand(
+                async () => await DeleteSelectedAlbumsAsync(_selectedAlbums),
+                () => _selectedAlbums != null && _selectedAlbums.Count > 0
             );
 
             // Context menu commands

@@ -15,6 +15,7 @@ namespace SpotifyWPF.View.Page
             if (DataContext is ViewModel.Page.AlbumsPageViewModel viewModel && sender is DataGrid dataGrid)
             {
                 viewModel.IsMultipleAlbumsSelected = dataGrid.SelectedItems.Count > 1;
+                viewModel.SelectedAlbums = dataGrid.SelectedItems;
                 viewModel.DeleteSelectedAlbumsCommand?.RaiseCanExecuteChanged();
             }
         }
