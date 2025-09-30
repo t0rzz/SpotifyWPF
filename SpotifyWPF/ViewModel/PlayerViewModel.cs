@@ -118,8 +118,11 @@ namespace SpotifyWPF.ViewModel
                     }
 
                     // Keep device selection in sync even if the active device changes outside this app
-                    await RefreshDevicesAsync();
-                    await RefreshPlayerStateAsync();
+                    await Application.Current.Dispatcher.InvokeAsync(async () =>
+                    {
+                        await RefreshDevicesAsync();
+                        await RefreshPlayerStateAsync();
+                    });
                 }
                 catch { }
             };

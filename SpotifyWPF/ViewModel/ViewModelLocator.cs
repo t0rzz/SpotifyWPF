@@ -27,6 +27,7 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<LoginPageViewModel>();
             SimpleIoc.Default.Register<PlaylistsPageViewModel>();
             SimpleIoc.Default.Register<SearchPageViewModel>();
+            SimpleIoc.Default.Register<AlbumsPageViewModel>();
             SimpleIoc.Default.Register(() => new StatusBarViewModel(SimpleIoc.Default.GetInstance<MainViewModel>()));
         }
 
@@ -35,6 +36,8 @@ namespace SpotifyWPF.ViewModel
         public PlaylistsPageViewModel PlaylistsPage => ServiceLocator.Current.GetInstance<PlaylistsPageViewModel>();
 
         public SearchPageViewModel Search => ServiceLocator.Current.GetInstance<SearchPageViewModel>();
+
+        public AlbumsPageViewModel AlbumsPage => ServiceLocator.Current.GetInstance<AlbumsPageViewModel>();
 
         public StatusBarViewModel StatusBar => ServiceLocator.Current.GetInstance<StatusBarViewModel>();
 

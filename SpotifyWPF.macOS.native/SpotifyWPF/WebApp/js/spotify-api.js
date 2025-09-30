@@ -395,6 +395,23 @@ class SpotifyAPI {
             if (response.status === 204) {
                 return null;
             }
+            // For DELETE requests that return 200 OK with empty body, return null
+            if (options && options.method === 'DELETE' && response.status === 200) {
+                console.log('🗑️ Handling DELETE request with 200 OK response');
+                try {
+                    // Try to parse JSON, but if the body is empty, return null
+                    const text = await response.text();
+                    if (!text.trim()) {
+                        console.log('🗑️ DELETE response body is empty, returning null (success)');
+                        return null;
+                    }
+                    return JSON.parse(text);
+                } catch (e) {
+                    // If JSON parsing fails (empty body), return null for successful DELETE
+                    console.log('🗑️ DELETE request returned empty body, treating as success');
+                    return null;
+                }
+            }
             return response.json();
         } catch (error) {
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
@@ -445,6 +462,24 @@ class SpotifyAPI {
         });
 
         return this.makeRequest(`/me/albums?${params.toString()}`);
+    }
+
+    async saveAlbums(albumIds) {
+        return this.makeRequest('/me/albums', {
+            method: 'PUT',
+            body: JSON.stringify({ ids: albumIds })
+        });
+    }
+
+    async removeSavedAlbums(albumIds) {
+        return this.makeRequest('/me/albums', {
+            method: 'DELETE',
+            body: JSON.stringify({ ids: albumIds })
+        });
+    }
+
+    async getAlbum(albumId) {
+        return this.makeRequest(`/albums/${albumId}`);
     }
 
     async saveTracks(trackIds) {
@@ -515,6 +550,54 @@ class SpotifyAPI {
 
         } catch (error) {
             console.error('Failed to load all playlists:', error);
+            throw error;
+        }
+    }
+
+    async getAllUserAlbums() {
+        try {
+            // First, get the total count
+            const firstBatch = await this.getSavedAlbums(1, 0);
+            const total = firstBatch.total;
+
+            if (total <= 50) {
+                // If 50 or fewer albums, just get them all at once
+                return await this.getSavedAlbums(50, 0);
+            }
+
+            // Calculate how many batches we need (using 50 per batch for efficiency)
+            const batchSize = 50;
+            const numBatches = Math.ceil(total / batchSize);
+
+            // Create batches with offsets
+            const batches = [];
+            for (let i = 0; i < numBatches; i++) {
+                const offset = i * batchSize;
+                const limit = Math.min(batchSize, total - offset);
+                batches.push({ offset, limit });
+            }
+
+            // Execute all requests in parallel
+            const batchPromises = batches.map(batch =>
+                this.getSavedAlbums(batch.limit, batch.offset)
+            );
+
+            const results = await Promise.all(batchPromises);
+
+            // Combine all results
+            const allItems = results.flatMap(result => result.items);
+            const combinedResult = {
+                ...results[0], // Copy metadata from first result
+                items: allItems,
+                total: total,
+                limit: allItems.length,
+                offset: 0
+            };
+
+            return combinedResult;
+
+        } catch (error) {
+            console.error('Failed to load all albums:', error);
             throw error;
         }
     }

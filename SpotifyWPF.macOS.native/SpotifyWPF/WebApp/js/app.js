@@ -7,11 +7,17 @@ class SpotifyMacOSApp {
         this.isConnected = false;
         this.deviceRefreshTimer = null;
         this.deviceRefreshInterval = 30000; // 30 seconds
+        this.userProfile = null; // Store user profile data
 
         // Initialize playlist-related properties
         this.allPlaylists = [];
         this.filteredPlaylists = null;
         this.currentSort = { column: 'name', direction: 'asc' };
+
+        // Initialize album-related properties
+        this.allAlbums = [];
+        this.filteredAlbums = null;
+        this.currentAlbumSort = { column: 'name', direction: 'asc' };
 
         this.init();
     }
@@ -104,6 +110,21 @@ class SpotifyMacOSApp {
         if (clearSearchBtn) {
             clearSearchBtn.addEventListener('click', () => {
                 this.clearPlaylistSearch();
+            });
+        }
+
+        // Album search
+        const albumSearchInput = document.getElementById('album-search');
+        if (albumSearchInput) {
+            albumSearchInput.addEventListener('input', (e) => {
+                this.filterAlbums(e.target.value);
+            });
+        }
+
+        const clearAlbumSearchBtn = document.getElementById('clear-album-search-btn');
+        if (clearAlbumSearchBtn) {
+            clearAlbumSearchBtn.addEventListener('click', () => {
+                this.clearAlbumSearch();
             });
         }
 
@@ -236,8 +257,11 @@ class SpotifyMacOSApp {
 
                 this.isConnected = true;
                 this.hideLoading();
-                this.updateUI();
                 this.showSuccess('Successfully connected to Spotify!');
+
+                // Load user data first, then update UI
+                await this.loadUserData();
+                this.updateUI();
 
                 // Initialize player after successful connection
                 this.player = new SpotifyPlayer();
@@ -245,8 +269,6 @@ class SpotifyMacOSApp {
                 if (this.player.bindEventListeners) {
                     this.player.bindEventListeners();
                 }
-
-                await this.loadUserData();
             }
         } catch (error) {
             console.error('OAuth callback processing failed:', error);
@@ -353,6 +375,12 @@ class SpotifyMacOSApp {
             this.loadDevices();
         }
 
+        // Handle album loading based on current section
+        if (sectionName === 'albums' && this.isConnected) {
+            // Load albums when entering albums section
+            this.loadAlbums();
+        }
+
         this.currentSection = sectionName;
         this.updateUI();
     }
@@ -364,10 +392,10 @@ class SpotifyMacOSApp {
         console.log('Restoring section from URL:', hash, 'Current section:', this.currentSection);
 
         // If there's a valid section in the hash and it's different from current section, switch to it
-        if (hash && ['home', 'search', 'devices', 'library', 'playlists'].includes(hash) && hash !== this.currentSection) {
+        if (hash && ['home', 'search', 'devices', 'library', 'albums', 'playlists'].includes(hash) && hash !== this.currentSection) {
             console.log('Switching to section from URL:', hash);
             this.switchSection(hash);
-        } else if (!hash || !['home', 'search', 'devices', 'library', 'playlists'].includes(hash)) {
+        } else if (!hash || !['home', 'search', 'devices', 'library', 'albums', 'playlists'].includes(hash)) {
             // Default to home if no valid hash or empty hash, but only if we're not already on home
             if (this.currentSection !== 'home') {
                 console.log('No valid hash found, defaulting to home');
@@ -706,6 +734,7 @@ class SpotifyMacOSApp {
             // Load user profile
             console.log('Loading user profile...');
             const profile = await this.spotifyApi.getCurrentUserProfile();
+            this.userProfile = profile; // Store user profile
             document.getElementById('user-display-name').textContent = profile.display_name || 'User';
             console.log('User profile loaded:', profile.display_name);
 
@@ -765,6 +794,112 @@ class SpotifyMacOSApp {
             const container = document.getElementById('playlists-content');
             container.innerHTML = '<p>Failed to load playlists. Please try again.</p>';
             this.showError('Failed to load playlists');
+        }
+    }
+
+    async loadAlbums() {
+        try {
+            this.showLoading('Loading all albums...');
+            const albums = await this.spotifyApi.getAllUserAlbums();
+            this.hideLoading();
+
+            // Store albums data
+            this.allAlbums = albums.items || [];
+
+            // Clear search when reloading albums
+            this.clearAlbumSearch();
+
+            this.renderAlbumsTable();
+        } catch (error) {
+            console.error('Failed to load albums:', error);
+            const container = document.getElementById('albums-content');
+            container.innerHTML = '<p>Failed to load albums. Please try again.</p>';
+            this.showError('Failed to load albums');
+        }
+    }
+
+    renderAlbumsTable() {
+        const container = document.getElementById('albums-content');
+        const albumsToShow = this.filteredAlbums || this.allAlbums;
+
+        if (albumsToShow && albumsToShow.length > 0) {
+            try {
+                // Sort albums based on current sort settings
+                const sortedAlbums = this.sortAlbums(albumsToShow);
+
+                // Create table structure
+                container.innerHTML = `
+                    <div class="albums-table-container">
+                        <table class="albums-table">
+                            <thead>
+                                <tr>
+                                    <th class="checkbox-column">
+                                        <input type="checkbox" id="select-all-albums" class="album-checkbox">
+                                    </th>
+                                    <th class="image-column"></th>
+                                    <th class="name-column sortable" data-sort="name">
+                                        <span class="column-header">Album</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="artist-column sortable" data-sort="artist">
+                                        <span class="column-header">Artist</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="tracks-column sortable" data-sort="tracks">
+                                        <span class="column-header">Tracks</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="release-date-column sortable" data-sort="release_date">
+                                        <span class="column-header">Release Date</span>
+                                        <span class="sort-indicator"></span>
+                                    </th>
+                                    <th class="actions-column">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="albums-table-body">
+                                ${sortedAlbums.map(album => `
+                                    <tr class="album-row" data-id="${album.album?.id || ''}">
+                                        <td class="checkbox-column">
+                                            <input type="checkbox" class="album-checkbox" data-id="${album.album?.id || ''}">
+                                        </td>
+                                        <td class="image-column">
+                                            <img src="${album.album?.images?.[0]?.url || ''}" alt="${album.album?.name || ''}" class="album-table-image">
+                                        </td>
+                                        <td class="name-column">
+                                            <div class="album-table-name">${album.album?.name || 'Unknown'}</div>
+                                        </td>
+                                        <td class="artist-column">
+                                            <div class="album-table-artist">${album.album?.artists?.map(artist => artist.name).join(', ') || 'Unknown'}</div>
+                                        </td>
+                                        <td class="tracks-column">
+                                            <span class="track-count">${album.album?.total_tracks || 0}</span>
+                                        </td>
+                                        <td class="release-date-column">
+                                            <span class="release-date">${album.album?.release_date || 'Unknown'}</span>
+                                        </td>
+                                        <td class="actions-column">
+                                            <button class="album-action-btn" onclick="window.spotifyApp.playAlbum('${album.album?.id || ''}')" title="Play">
+                                                <i class="fas fa-play"></i>
+                                            </button>
+                                            <button class="album-action-btn" onclick="window.spotifyApp.loadAlbumTracks('${album.album?.id || ''}')" title="View Tracks">
+                                                <i class="fas fa-list"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                this.addAlbumTableEventListeners();
+                this.updateAlbumSortIndicators();
+            } catch (error) {
+                console.error('Error rendering albums table:', error);
+                container.innerHTML = '<p>Failed to render albums table. Please try again.</p>';
+            }
+        } else {
+            container.innerHTML = '<p>No albums found.</p>';
         }
     }
 
@@ -885,6 +1020,302 @@ class SpotifyMacOSApp {
                 return 0; // No change in order
             }
         });
+    }
+
+    sortAlbums(albums) {
+        if (!albums || !Array.isArray(albums)) return albums;
+
+        return [...albums].sort((a, b) => {
+            let aValue, bValue;
+
+            try {
+                switch (this.currentAlbumSort?.column) {
+                    case 'name':
+                        aValue = (a.album?.name || '').toLowerCase();
+                        bValue = (b.album?.name || '').toLowerCase();
+                        break;
+                    case 'artist':
+                        aValue = (a.album?.artists?.[0]?.name || '').toLowerCase();
+                        bValue = (b.album?.artists?.[0]?.name || '').toLowerCase();
+                        break;
+                    case 'tracks':
+                        aValue = a.album?.total_tracks || 0;
+                        bValue = b.album?.total_tracks || 0;
+                        break;
+                    case 'release_date':
+                        aValue = new Date(a.album?.release_date || '1970-01-01');
+                        bValue = new Date(b.album?.release_date || '1970-01-01');
+                        break;
+                    default:
+                        aValue = (a.album?.name || '').toLowerCase();
+                        bValue = (b.album?.name || '').toLowerCase();
+                }
+
+                if (this.currentAlbumSort?.direction === 'asc') {
+                    return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+                } else {
+                    return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+                }
+            } catch (error) {
+                console.error('Error sorting albums:', error);
+                return 0; // No change in order
+            }
+        });
+    }
+
+    filterAlbums(searchTerm) {
+        const clearBtn = document.getElementById('clear-album-search-btn');
+
+        if (searchTerm.trim() === '') {
+            // Show all albums when search is empty
+            this.filteredAlbums = null;
+            clearBtn.style.display = 'none';
+        } else {
+            // Filter albums based on search term
+            if (this.allAlbums && Array.isArray(this.allAlbums)) {
+                this.filteredAlbums = this.allAlbums.filter(savedAlbum => {
+                    const album = savedAlbum.album;
+                    const name = (album?.name || '').toLowerCase();
+                    const artists = (album?.artists || []).map(artist => artist.name.toLowerCase()).join(' ');
+
+                    return name.includes(searchTerm.toLowerCase()) ||
+                           artists.includes(searchTerm.toLowerCase());
+                });
+            } else {
+                this.filteredAlbums = [];
+            }
+            clearBtn.style.display = 'flex';
+        }
+
+        // Re-render the table with filtered results
+        this.renderAlbumsTable();
+        this.updateFilteredAlbumCount(this.filteredAlbums ? this.filteredAlbums.length : (this.allAlbums ? this.allAlbums.length : 0));
+    }
+
+    clearAlbumSearch() {
+        const searchInput = document.getElementById('album-search');
+        const clearBtn = document.getElementById('clear-album-search-btn');
+
+        searchInput.value = '';
+        clearBtn.style.display = 'none';
+        this.filterAlbums('');
+    }
+
+    addAlbumTableEventListeners() {
+        // Select all checkbox
+        const selectAllCheckbox = document.getElementById('select-all-albums');
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', (e) => {
+                const isChecked = e.target.checked;
+                document.querySelectorAll('.album-checkbox').forEach(checkbox => {
+                    if (checkbox !== selectAllCheckbox) {
+                        checkbox.checked = isChecked;
+                        const row = checkbox.closest('.album-row');
+                        row.classList.toggle('selected', isChecked);
+                    }
+                });
+                this.updateAlbumToolbarVisibility();
+            });
+        }
+
+        // Individual checkbox change handlers
+        document.querySelectorAll('.album-checkbox').forEach(checkbox => {
+            if (checkbox.id !== 'select-all-albums') {
+                checkbox.addEventListener('change', (e) => {
+                    const row = e.target.closest('.album-row');
+                    row.classList.toggle('selected', e.target.checked);
+                    this.updateAlbumSelectAllState();
+                    this.updateAlbumToolbarVisibility();
+                });
+            }
+        });
+
+        // Row click handlers (avoid when clicking checkbox or buttons)
+        document.querySelectorAll('.album-row').forEach(row => {
+            row.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox' && !e.target.classList.contains('album-action-btn') && !e.target.closest('.album-action-btn')) {
+                    const checkbox = row.querySelector('.album-checkbox');
+                    checkbox.checked = !checkbox.checked;
+                    row.classList.toggle('selected', checkbox.checked);
+                    this.updateAlbumSelectAllState();
+                    this.updateAlbumToolbarVisibility();
+                }
+            });
+        });
+
+        // Sorting event listeners for column headers
+        document.querySelectorAll('#albums-content .sortable').forEach(header => {
+            header.addEventListener('click', (e) => {
+                const column = e.currentTarget.dataset.sort;
+                if (column) {
+                    this.handleAlbumColumnSort(column);
+                }
+            });
+            // Make headers look clickable
+            header.style.cursor = 'pointer';
+            header.style.userSelect = 'none';
+        });
+    }
+
+    handleAlbumColumnSort(column) {
+        if (this.currentAlbumSort.column === column) {
+            // Toggle direction if same column
+            this.currentAlbumSort.direction = this.currentAlbumSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            // New column, default to ascending
+            this.currentAlbumSort.column = column;
+            this.currentAlbumSort.direction = 'asc';
+        }
+
+        // Re-render the table with new sort
+        this.renderAlbumsTable();
+    }
+
+    updateAlbumSortIndicators() {
+        // Update all sort indicators
+        document.querySelectorAll('#albums-content .sortable').forEach(header => {
+            const column = header.dataset.sort;
+
+            if (column === this.currentAlbumSort.column) {
+                // Active sort column
+                header.classList.add(this.currentAlbumSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+                header.classList.remove(this.currentAlbumSort.direction === 'asc' ? 'sort-desc' : 'sort-asc');
+            } else {
+                // Inactive sort column
+                header.classList.remove('sort-asc', 'sort-desc');
+            }
+        });
+    }
+
+    updateAlbumSelectAllState() {
+        const checkboxes = document.querySelectorAll('.album-checkbox:not(#select-all-albums)');
+        const selectAllCheckbox = document.getElementById('select-all-albums');
+
+        if (!selectAllCheckbox || checkboxes.length === 0) return;
+
+        const checkedCount = document.querySelectorAll('.album-checkbox:not(#select-all-albums):checked').length;
+        const totalCount = checkboxes.length;
+
+        selectAllCheckbox.checked = checkedCount === totalCount;
+        selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+    }
+
+    updateAlbumToolbarVisibility() {
+        const selectedCount = document.querySelectorAll('.album-checkbox:not(#select-all-albums):checked').length;
+        const selectAllBtn = document.getElementById('select-all-albums-btn');
+        const deselectAllBtn = document.getElementById('deselect-all-albums-btn');
+        const deleteSelectedBtn = document.getElementById('delete-selected-albums-btn');
+
+        if (selectedCount > 0) {
+            selectAllBtn.style.display = 'none';
+            deselectAllBtn.style.display = 'flex';
+            deleteSelectedBtn.style.display = 'flex';
+        } else {
+            selectAllBtn.style.display = 'flex';
+            deselectAllBtn.style.display = 'none';
+            deleteSelectedBtn.style.display = 'none';
+        }
+    }
+
+    selectAllAlbums() {
+        document.querySelectorAll('.album-checkbox').forEach(checkbox => {
+            checkbox.checked = true;
+            if (checkbox.id !== 'select-all-albums') {
+                const row = checkbox.closest('.album-row');
+                row.classList.add('selected');
+            }
+        });
+        this.updateAlbumToolbarVisibility();
+    }
+
+    deselectAllAlbums() {
+        document.querySelectorAll('.album-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+            if (checkbox.id !== 'select-all-albums') {
+                const row = checkbox.closest('.album-row');
+                row.classList.remove('selected');
+            }
+        });
+        this.updateAlbumToolbarVisibility();
+    }
+
+    async removeSelectedAlbums() {
+        const selectedCheckboxes = document.querySelectorAll('.album-checkbox:not(#select-all-albums):checked');
+        if (selectedCheckboxes.length === 0) return;
+
+        const albumIds = Array.from(selectedCheckboxes).map(checkbox => checkbox.dataset.id).filter(id => id);
+
+        if (albumIds.length === 0) return;
+
+        try {
+            console.log('🎵 Starting album removal process...');
+            this.showLoading(`Removing ${albumIds.length} album${albumIds.length > 1 ? 's' : ''}...`);
+
+            console.log('📡 Calling Spotify API to remove albums:', albumIds);
+            const result = await this.spotifyApi.removeSavedAlbums(albumIds);
+            console.log('✅ API call completed, result:', result);
+
+            this.hideLoading();
+
+            // Remove from local data
+            this.allAlbums = this.allAlbums.filter(savedAlbum => !albumIds.includes(savedAlbum.album?.id));
+
+            // Clear filtered results if they exist
+            if (this.filteredAlbums) {
+                this.filteredAlbums = this.filteredAlbums.filter(savedAlbum => !albumIds.includes(savedAlbum.album?.id));
+            }
+
+            // Re-render the table
+            this.renderAlbumsTable();
+
+            this.showSuccess(`Successfully removed ${albumIds.length} album${albumIds.length > 1 ? 's' : ''} from your library.`);
+        } catch (error) {
+            console.error('Failed to remove albums:', error);
+            this.showError('Failed to remove albums from your library');
+        }
+    }
+
+    updateFilteredAlbumCount(visibleCount) {
+        const header = document.querySelector('.albums-header h2');
+        const totalRows = document.querySelectorAll('.album-row').length;
+
+        if (visibleCount === totalRows) {
+            // Show total count when all are visible
+            header.textContent = `Your Albums (${totalRows})`;
+        } else {
+            // Show filtered count when searching
+            header.textContent = `Your Albums (${visibleCount} of ${totalRows})`;
+        }
+    }
+
+    async playAlbum(albumId) {
+        try {
+            this.showLoading('Starting album playback...');
+            const albumUri = `spotify:album:${albumId}`;
+            await this.spotifyApi.startPlayback(albumUri);
+            this.hideLoading();
+            this.showSuccess('Album started playing');
+        } catch (error) {
+            console.error('Failed to play album:', error);
+            this.hideLoading();
+            this.showError('Failed to start album playback');
+        }
+    }
+
+    async loadAlbumTracks(albumId) {
+        try {
+            this.showLoading('Loading album tracks...');
+            const album = await this.spotifyApi.getAlbum(albumId);
+            this.hideLoading();
+
+            // Show album tracks in a modal or similar interface
+            // For now, just show a success message
+            this.showSuccess(`Loaded tracks for "${album.name}" (${album.tracks.total} tracks)`);
+        } catch (error) {
+            console.error('Failed to load album tracks:', error);
+            this.hideLoading();
+            this.showError('Failed to load album tracks');
+        }
     }
 
     handleColumnSort(column) {
@@ -2516,12 +2947,29 @@ class SpotifyMacOSApp {
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
         const userDisplay = document.getElementById('user-display-name');
+        const userAvatar = document.getElementById('user-avatar');
 
         if (this.isConnected) {
             // Show connected state
             if (connectBtn) connectBtn.style.display = 'none';
             if (disconnectBtn) disconnectBtn.style.display = 'flex';
-            if (userDisplay) userDisplay.textContent = 'Connected';
+            if (userDisplay) {
+                // Show user display name instead of "Connected"
+                const displayName = this.userProfile?.display_name || 'Connected';
+                userDisplay.textContent = displayName;
+            }
+
+            // Show user avatar if available
+            if (userAvatar && this.userProfile?.images?.[0]?.url) {
+                userAvatar.src = this.userProfile.images[0].url;
+                userAvatar.style.display = 'block';
+                // Add error handling for broken images
+                userAvatar.onerror = () => {
+                    userAvatar.style.display = 'none';
+                };
+            } else if (userAvatar) {
+                userAvatar.style.display = 'none';
+            }
 
             // Switch to home section if we're in setup
             if (this.currentSection === 'home') {
@@ -2532,6 +2980,7 @@ class SpotifyMacOSApp {
             if (connectBtn) connectBtn.style.display = 'flex';
             if (disconnectBtn) disconnectBtn.style.display = 'none';
             if (userDisplay) userDisplay.textContent = 'Not Connected';
+            if (userAvatar) userAvatar.style.display = 'none';
         }
     }
 
@@ -2749,6 +3198,11 @@ class SpotifyMacOSApp {
     // Disconnect from Spotify
     disconnect() {
         this.isConnected = false;
+        this.userProfile = null; // Clear user profile
+        this.allPlaylists = []; // Clear playlists data
+        this.filteredPlaylists = null;
+        this.allAlbums = []; // Clear albums data
+        this.filteredAlbums = null;
         this.stopDeviceMonitoring();
 
         // Clear stored tokens
@@ -2762,6 +3216,7 @@ class SpotifyMacOSApp {
         // Clear content sections
         document.getElementById('playlists-content').innerHTML = '';
         document.getElementById('library-content').innerHTML = '';
+        document.getElementById('albums-content').innerHTML = '';
         document.getElementById('devices-list').innerHTML = '<p>Connect to Spotify to view devices.</p>';
 
         // Switch to home section

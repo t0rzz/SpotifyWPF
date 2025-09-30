@@ -62,7 +62,15 @@ body {
 .user-info {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--spotify-dark-gray);
 }
 
 #user-display-name {
@@ -655,6 +663,12 @@ a:hover {
     .search-results {
         grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         gap: 16px;
+    }
+
+    /* User info responsive */
+    .user-avatar {
+        width: 28px;
+        height: 28px;
     }
 }
 
@@ -1726,6 +1740,227 @@ a:hover {
     100% { transform: rotate(360deg); }
 }
 
+/* Albums Enhancements - Matching Playlists Styles */
+.albums-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.albums-toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* Album Table Styles - Matching Playlists */
+.albums-table-container {
+    background-color: var(--spotify-gray);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.albums-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.albums-table thead {
+    background-color: var(--spotify-dark-gray);
+}
+
+.albums-table th {
+    padding: 16px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--spotify-white);
+    border-bottom: 1px solid var(--spotify-gray);
+    position: sticky;
+    top: 0;
+    background-color: var(--spotify-dark-gray);
+    z-index: 10;
+}
+
+.albums-table td {
+    padding: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    vertical-align: middle;
+}
+
+.albums-table tbody tr {
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.albums-table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.albums-table tbody tr.selected {
+    background-color: rgba(29, 185, 84, 0.1);
+    border-left: 3px solid var(--spotify-green);
+}
+
+.album-table-image {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.album-table-name {
+    font-weight: 600;
+    color: var(--spotify-white);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.album-table-artist {
+    color: var(--spotify-light-gray);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+.track-count, .release-date {
+    color: var(--spotify-light-gray);
+    font-size: 12px;
+}
+
+.checkbox-column {
+    width: 40px;
+    text-align: center;
+}
+
+.image-column {
+    width: 60px;
+}
+
+.name-column {
+    min-width: 200px;
+}
+
+.artist-column {
+    min-width: 150px;
+}
+
+.tracks-column {
+    width: 100px;
+    text-align: center;
+}
+
+.release-date-column {
+    width: 140px;
+}
+
+.actions-column {
+    width: 100px;
+    text-align: center;
+}
+
+.album-checkbox {
+    margin: 0;
+}
+
+.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+
+.sortable:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.column-header {
+    display: inline-block;
+}
+
+.sort-indicator {
+    display: inline-block;
+    margin-left: 6px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.sort-asc .sort-indicator:before {
+    content: "↑";
+}
+
+.sort-desc .sort-indicator:before {
+    content: "↓";
+}
+
+.sort-asc .sort-indicator,
+.sort-desc .sort-indicator {
+    opacity: 1;
+}
+
+.album-action-btn {
+    background: none;
+    border: none;
+    color: var(--spotify-light-gray);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.album-action-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--spotify-white);
+}
+
+.album-action-btn:active {
+    transform: scale(0.95);
+}
+
+/* Responsive Design for Albums */
+@media (max-width: 1200px) {
+    .release-date-column {
+        display: none;
+    }
+
+    .artist-column {
+        min-width: 120px;
+    }
+}
+
+@media (max-width: 768px) {
+    .albums-table-container {
+        overflow-x: auto;
+    }
+
+    .albums-table {
+        min-width: 600px;
+    }
+
+    .name-column {
+        min-width: 150px;
+    }
+
+    .artist-column {
+        min-width: 120px;
+    }
+
+    .tracks-column {
+        width: 80px;
+    }
+
+    .actions-column {
+        width: 80px;
+    }
+}
+
 .confirm-btn, .cancel-btn {
     padding: 10px 20px;
     border: none;
@@ -2161,7 +2396,8 @@ a:hover {
         width: 200px;
     }
     
-    .playlists-toolbar {
+    .playlists-toolbar,
+    .albums-toolbar {
         flex-wrap: wrap;
         gap: 8px;
     }
@@ -2185,13 +2421,15 @@ a:hover {
         width: 18px;
     }
     
-    .playlists-header {
+    .playlists-header,
+    .albums-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 15px;
     }
     
-    .playlists-toolbar {
+    .playlists-toolbar,
+    .albums-toolbar {
         width: 100%;
         justify-content: space-between;
     }

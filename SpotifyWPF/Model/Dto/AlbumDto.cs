@@ -8,5 +8,7 @@ namespace SpotifyWPF.Model.Dto
         public string? ReleaseDate { get; set; }
         public int TotalTracks { get; set; }
         public string? Href { get; set; }
+        public string? ImageUrl { get; set; }
+        public DateTime? AddedAt { get; set; }
     }
 }

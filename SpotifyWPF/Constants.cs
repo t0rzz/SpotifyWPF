@@ -9,7 +9,7 @@ namespace SpotifyWPF
         public const int DeviceRefreshIntervalSeconds = 30;
         public const int PortCheckTimeoutMs = 100;
         public const int SeekThrottleDelayMs = 120;
-        public const int StatePollIntervalMs = 800;
+        public const int StatePollIntervalMs = 5000; // Increased from 800ms to 5 seconds to reduce API calls
         public const int UiProgressUpdateIntervalMs = 1000;
 
         // Network constants

@@ -32,6 +32,7 @@ namespace SpotifyWPF.Service
 
         private readonly TokenStorage _tokenStorage = new TokenStorage();
         private TokenInfo? _currentToken;
+        private DateTime _lastAuthCheck = DateTime.MinValue;
 
         // Coordina una sola ri-autenticazione per volta tra più worker
         private readonly SemaphoreSlim _authSemaphore = new SemaphoreSlim(1, 1);
@@ -241,7 +242,10 @@ namespace SpotifyWPF.Service
                     // Required for user identification in Web Playback SDK
                     Scopes.UserReadEmail,
                     // Required for top tracks and artists
-                    Scopes.UserTopRead
+                    Scopes.UserTopRead,
+                    // Required for saved albums access
+                    Scopes.UserLibraryRead,
+                    Scopes.UserLibraryModify
                 }
             };
 
@@ -411,7 +415,14 @@ namespace SpotifyWPF.Service
         // Metodo pubblico usato per verificare/ripristinare l'autenticazione basandosi sul token salvato
         public async Task<bool> EnsureAuthenticatedAsync()
         {
+            // Cache authentication check for 10 seconds to avoid excessive API calls
+            if ((DateTime.Now - _lastAuthCheck) < TimeSpan.FromSeconds(10) && Api != null)
+            {
+                return true;
+            }
+
             _loggingService.LogDebug("Checking authentication status");
+            _lastAuthCheck = DateTime.Now;
 
             // Usa cache in memoria se disponibile
             var token = _currentToken;
@@ -1108,6 +1119,91 @@ namespace SpotifyWPF.Service
                 var chunk = ids.Skip(i).Take(batchSize).ToList();
                 var request = new UnfollowRequest(UnfollowRequest.Type.Artist, chunk);
                 await Api.Follow.Unfollow(request).ConfigureAwait(false);
+            }
+        }
+
+        public async Task<PagingDto<AlbumDto>> GetMySavedAlbumsPageAsync(int offset, int limit)
+        {
+            ValidatePaginationParameters(offset, limit, nameof(GetMySavedAlbumsPageAsync));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return new PagingDto<AlbumDto> { Items = new List<AlbumDto>() };
+            }
+
+            try
+            {
+                var request = new LibraryAlbumsRequest
+                {
+                    Limit = limit,
+                    Offset = offset
+                };
+
+                var response = await Api.Library.GetAlbums(request).ConfigureAwait(false);
+
+                var result = new PagingDto<AlbumDto>
+                {
+                    Href = response.Href,
+                    Limit = response.Limit ?? limit,
+                    Offset = response.Offset ?? offset,
+                    Total = response.Total ?? 0,
+                    Next = response.Next,
+                    Previous = response.Previous,
+                    Items = new List<AlbumDto>()
+                };
+
+                if (response.Items != null)
+                {
+                    foreach (var item in response.Items)
+                    {
+                        if (item.Album != null)
+                        {
+                            // Get the best quality album image
+                            var imageUrl = item.Album.Images?.OrderByDescending(img => (img?.Width ?? 0) * (img?.Height ?? 0)).FirstOrDefault()?.Url ?? string.Empty;
+
+                            result.Items.Add(new AlbumDto
+                            {
+                                Id = item.Album.Id,
+                                Name = item.Album.Name,
+                                Artists = string.Join(", ", item.Album.Artists?.Select(a => a.Name) ?? Array.Empty<string>()),
+                                ReleaseDate = item.Album.ReleaseDate,
+                                TotalTracks = item.Album.TotalTracks,
+                                Href = item.Album.Href,
+                                ImageUrl = imageUrl,
+                                AddedAt = item.AddedAt
+                            });
+                        }
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError($"Error getting saved albums: {ex.Message}");
+                return new PagingDto<AlbumDto> { Items = new List<AlbumDto>() };
+            }
+        }
+
+        public async Task RemoveSavedAlbumsAsync(IEnumerable<string> albumIds)
+        {
+            ValidateCollection(albumIds, nameof(albumIds));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return;
+            }
+
+            var ids = albumIds?.Where(id => !string.IsNullOrWhiteSpace(id)).ToList() ?? new List<string>();
+            if (ids.Count == 0) return;
+
+            // Spotify API allows up to 50 ids per request for albums
+            const int batchSize = 50;
+            for (var i = 0; i < ids.Count; i += batchSize)
+            {
+                var chunk = ids.Skip(i).Take(batchSize).ToList();
+                var request = new LibraryRemoveAlbumsRequest(chunk);
+                await Api.Library.RemoveAlbums(request).ConfigureAwait(false);
             }
         }
 

@@ -14,6 +14,7 @@
             <div class="header-content">
                 <h1 class="app-title">Spofify</h1>
                 <div class="user-info">
+                    <img id="user-avatar" class="user-avatar" style="display: none;" alt="User Avatar">
                     <span id="user-display-name">Not Connected</span>
                     <button id="connect-btn" class="connect-button">
                         <i class="fab fa-spotify"></i>
@@ -48,6 +49,10 @@
                         <li class="nav-item" data-section="library">
                             <i class="fas fa-music"></i>
                             <span>Your Library</span>
+                        </li>
+                        <li class="nav-item" data-section="albums">
+                            <i class="fas fa-compact-disc"></i>
+                            <span>Albums</span>
                         </li>
                         <li class="nav-item" data-section="playlists">
                             <i class="fas fa-list"></i>
@@ -140,6 +145,40 @@
                     <h2>Your Library</h2>
                     <div id="library-content" class="library-content">
                         <p>Your saved tracks and albums will appear here.</p>
+                    </div>
+                </section>
+
+                <!-- Albums Section -->
+                <section id="albums-section" class="content-section">
+                    <div class="albums-header">
+                        <h2>Your Albums</h2>
+                        <div class="albums-toolbar">
+                            <div class="search-container">
+                                <input type="text" id="album-search" placeholder="Search albums..." class="search-input">
+                                <button id="clear-album-search-btn" class="search-clear-btn" style="display: none;" title="Clear search">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <button id="select-all-albums-btn" class="toolbar-btn" onclick="window.spotifyApp.selectAllAlbums()">
+                                <i class="fas fa-check-square"></i>
+                                Select All
+                            </button>
+                            <button id="deselect-all-albums-btn" class="toolbar-btn" style="display: none;" onclick="window.spotifyApp.deselectAllAlbums()">
+                                <i class="fas fa-square"></i>
+                                Deselect All
+                            </button>
+                            <button id="delete-selected-albums-btn" class="toolbar-btn delete-btn" style="display: none;" onclick="window.spotifyApp.removeSelectedAlbums()">
+                                <i class="fas fa-trash"></i>
+                                Remove Selected
+                            </button>
+                            <button id="refresh-albums-btn" class="toolbar-btn" onclick="window.spotifyApp.loadAlbums()">
+                                <i class="fas fa-sync-alt"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div id="albums-content" class="albums-content">
+                        <p>Your saved albums will appear here.</p>
                     </div>
                 </section>
 

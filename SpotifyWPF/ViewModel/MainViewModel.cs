@@ -25,6 +25,7 @@ namespace SpotifyWPF.ViewModel
     private readonly IMessageBoxService _mb;
     private readonly LoginPageViewModel _loginPageViewModel;
         private readonly PlaylistsPageViewModel _playlistsPageViewModel;
+        private readonly AlbumsPageViewModel _albumsPageViewModel;
         private readonly DispatcherTimer _devicesRefreshTimer;
         private bool _isRefreshingDevicesMenu;
 
@@ -34,12 +35,14 @@ namespace SpotifyWPF.ViewModel
         public MainViewModel(LoginPageViewModel loginPageViewModel,
             PlaylistsPageViewModel playlistsPageViewModel,
             SearchPageViewModel searchPageViewModel,
+            AlbumsPageViewModel albumsPageViewModel,
             ISpotify spotify,
             IMessageBoxService messageBoxService)
         {
             _loginPageViewModel = loginPageViewModel;
             _playlistsPageViewModel = playlistsPageViewModel;
             _searchPageViewModel = searchPageViewModel;
+            _albumsPageViewModel = albumsPageViewModel;
             _spotify = spotify;
             _mb = messageBoxService;
 
@@ -71,6 +74,8 @@ namespace SpotifyWPF.ViewModel
                             new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)),
                         new MenuItemViewModel("Playlists",
                             new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsChecked = true},
+                        new MenuItemViewModel("Albums",
+                            new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)),
                     }
                 },
                 new MenuItemViewModel("Devices")
@@ -242,6 +247,9 @@ namespace SpotifyWPF.ViewModel
                     CurrentPage = _searchPageViewModel;
                     // Ensure logging is set up for TracksDataGridViewModel
                     _searchPageViewModel.TracksDataGridViewModel.SetLogAction(msg => System.Diagnostics.Debug.WriteLine(msg));
+                    break;
+                case "Albums":
+                    CurrentPage = _albumsPageViewModel;
                     break;
                 default:
                     return;

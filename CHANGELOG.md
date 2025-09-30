@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [3.0.5] - 2025-09-30
+
+### Added
+
+**Album Management Feature**
+- Complete album library management with saved albums viewing and bulk operations
+- Sortable album table with columns for name, artist, track count, and release date
+- Bulk album deletion with confirmation dialogs and progress feedback
+- Real-time album search and filtering functionality
+- Album playback integration with Spotify Web Playback SDK
+- User profile avatar display in header when available
+- Enhanced UI consistency between playlists and albums sections
+- Fixed DELETE API response handling for empty response bodies
+
+### Enhanced
+
+**User Interface Improvements**
+- User profile name now displays instead of generic "Connected" text
+- Profile avatar shows in header when user has profile picture
+- Improved responsive design for mobile devices
+- Better error handling for broken or missing images
+
 ## [3.0.4] - 2025-09-24
 
 ### Added

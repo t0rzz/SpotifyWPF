@@ -25,6 +25,7 @@ This repository contains **two powerful implementations** of the same core Spoti
 ### **🔄 Core Spotify Bulk Operations & Playlist Management**
 Despite different platforms and technologies, both apps provide identical advanced Spotify playlist management functionality:
 - ✅ **Bulk playlist deletion** and mass playlist operations (delete, unfollow, manage multiple playlists)
+- ✅ **Album management** (view saved albums, bulk album deletion, sorting and filtering)
 - ✅ **Spotify playlist cleanup** tools with advanced filtering and sorting
 - ✅ **Device management** (list devices, transfer playback, "Play To" functionality)
 - ✅ **Advanced playlist features** (pagination, sorting, context menus)
@@ -41,6 +42,14 @@ Despite different platforms and technologies, both apps provide identical advanc
 - **Pagination**: Efficient loading of large playlist libraries for playlist cleanup
 - **Context menus**: Right-click playlists for quick bulk operations (both platforms)
 - **Search & filter**: Find playlists quickly with real-time filtering for playlist organization
+
+### 🎵 Spotify Album Management & Bulk Operations
+- **Saved albums library**: View all your saved Spotify albums in a sortable table
+- **Bulk album deletion**: Remove multiple albums from your library simultaneously
+- **Album sorting**: Sort albums by name, artist, track count, or release date
+- **Album filtering**: Search and filter your album collection with real-time results
+- **Album playback**: Play albums directly from the management interface
+- **Album details**: View track counts, release dates, and artist information
 
 ### 📱 Spotify Device Management & Playback Control
 - **Device discovery**: Automatically detect all available Spotify devices for playback transfer

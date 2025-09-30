@@ -2,6 +2,7 @@
 using System.Linq;
 using AutoMapper;
 using SpotifyAPI.Web;
+using SpotifyWPF.Model.Dto;
 
 namespace SpotifyWPF.Model
 {
@@ -38,6 +39,14 @@ namespace SpotifyWPF.Model
                         }
                         return null;
                     }));
+
+                cfg.CreateMap<AlbumDto, Album>()
+                    .ForMember(dest => dest.Id, act => act.MapFrom(src => src.Id))
+                    .ForMember(dest => dest.Name, act => act.MapFrom(src => src.Name ?? string.Empty))
+                    .ForMember(dest => dest.Artist, act => act.MapFrom(src => src.Artists ?? string.Empty))
+                    .ForMember(dest => dest.ImageUrl, act => act.MapFrom(src => src.ImageUrl ?? string.Empty))
+                    .ForMember(dest => dest.TotalTracks, act => act.MapFrom(src => src.TotalTracks))
+                    .ForMember(dest => dest.AddedAt, act => act.MapFrom(src => src.AddedAt ?? DateTime.Now));
             });
 
             config.AssertConfigurationIsValid();

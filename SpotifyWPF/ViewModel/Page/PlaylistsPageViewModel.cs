@@ -97,8 +97,13 @@ namespace SpotifyWPF.ViewModel.Page
             StopLoadPlaylistsCommand = new RelayCommand(
                 () =>
                 {
+                    System.Diagnostics.Debug.WriteLine("StopLoadPlaylistsCommand executed");
                     _cancelRequested = true; // cancel deletions
                     _loadPlaylistsCts?.Cancel(); // cancel loading
+                    System.Diagnostics.Debug.WriteLine($"Cancellation requested. CTS state: {_loadPlaylistsCts?.IsCancellationRequested}");
+                    
+                    // Immediately stop the loading state for UI responsiveness
+                    _isLoadingPlaylists = false;
                     UpdateLoadingUiState();
                 },
                 () => CanStop
@@ -743,7 +748,7 @@ namespace SpotifyWPF.ViewModel.Page
                         return;
                     }
 
-                    if (cancellationToken.IsCancellationRequested)
+                    if (cancellationToken.IsCancellationRequested || _cancelRequested)
                     {
                         System.Diagnostics.Debug.WriteLine("Load cancelled during first page phase.");
                         return;
@@ -779,8 +784,9 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     workers.Add(Task.Run(async () =>
                     {
-                        while (!allLoaded && !cancellationToken.IsCancellationRequested && offsets.TryDequeue(out var off))
+                        while (!allLoaded && !cancellationToken.IsCancellationRequested && !_cancelRequested && offsets.TryDequeue(out var off))
                         {
+                            System.Diagnostics.Debug.WriteLine($"Worker processing offset {off}, cancellation requested: {cancellationToken.IsCancellationRequested}");
                             // Retry per pagina (senza delay), reset per ogni offset
                             const int pageMaxAttempts = 20;
                             bool pageLoaded = false;
@@ -861,6 +867,7 @@ namespace SpotifyWPF.ViewModel.Page
                 }
 
                 await Task.WhenAll(workers);
+                System.Diagnostics.Debug.WriteLine($"All workers completed. Cancellation requested: {cancellationToken.IsCancellationRequested}");
 
                 var finalCount = GetLoadedPlaylistsCount();
                 if (finalCount >= total)
