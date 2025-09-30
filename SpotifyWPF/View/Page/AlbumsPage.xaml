@@ -64,11 +64,17 @@
                       Command="{Binding PlacementTarget.Tag.CopyAlbumLinkCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                       Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <Separator/>
+            <Separator Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             <MenuItem Header="Remove from Library"
                       Foreground="{DynamicResource DangerBrush}"
                       Command="{Binding PlacementTarget.Tag.RemoveAlbumCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <MenuItem Header="Remove from Library"
+                      Foreground="{DynamicResource DangerBrush}"
+                      Command="{Binding PlacementTarget.Tag.DeleteSelectedAlbumsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding ElementName=AlbumsDataGrid, Path=SelectedItems}"
+                      Visibility="{Binding PlacementTarget.Tag.IsMultipleAlbumsSelected, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
         </ContextMenu>
     </UserControl.Resources>
 
