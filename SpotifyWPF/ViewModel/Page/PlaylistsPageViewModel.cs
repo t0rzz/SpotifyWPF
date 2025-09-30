@@ -78,6 +78,7 @@ namespace SpotifyWPF.ViewModel.Page
                 async () =>
                 {
                     if (_isLoadingPlaylists) return;
+                    _cancelRequested = false; // Reset cancellation flag for fresh start
                     _loadPlaylistsCts = new CancellationTokenSource();
                     UpdateLoadingUiState();
                     try
@@ -151,13 +152,52 @@ namespace SpotifyWPF.ViewModel.Page
                 p => p != null && !string.IsNullOrWhiteSpace(p.Id)
             );
 
-            UnfollowPlaylistCommand = new RelayCommand<PlaylistDto>(
-                async p =>
+            UnfollowPlaylistCommand = new RelayCommand<object>(
+                async param =>
                 {
-                    if (p == null) return;
-                    await DeletePlaylistsAsync(new[] { p });
+                    if (param == null) return;
+                    if (_isDeletingPlaylists) return;
+                    _cancelRequested = false;
+                    _isDeletingPlaylists = true;
+                    UpdateLoadingUiState();
+                    try
+                    {
+                        IList playlistsToDelete;
+                        if (param is PlaylistDto singlePlaylist)
+                        {
+                            playlistsToDelete = new[] { singlePlaylist };
+                        }
+                        else if (param is IList list)
+                        {
+                            playlistsToDelete = list;
+                        }
+                        else
+                        {
+                            return; // Invalid parameter
+                        }
+                        await DeletePlaylistsAsync(playlistsToDelete);
+                    }
+                    finally
+                    {
+                        _isDeletingPlaylists = false;
+                        UpdateLoadingUiState();
+                    }
                 },
-                p => p != null && !string.IsNullOrWhiteSpace(p.Id) && !_isDeletingPlaylists
+                param =>
+                {
+                    if (param == null) return false;
+                    if (_isDeletingPlaylists) return false;
+                    
+                    if (param is PlaylistDto playlist)
+                    {
+                        return !string.IsNullOrWhiteSpace(playlist.Id);
+                    }
+                    else if (param is IList list)
+                    {
+                        return list.Count > 0;
+                    }
+                    return false;
+                }
             );
 
             // Users/Artists tab
@@ -348,7 +388,7 @@ namespace SpotifyWPF.ViewModel.Page
         // Context menu commands
         public RelayCommand<PlaylistDto> OpenInSpotifyCommand { get; }
         public RelayCommand<PlaylistDto> CopyPlaylistLinkCommand { get; }
-        public RelayCommand<PlaylistDto> UnfollowPlaylistCommand { get; }
+        public RelayCommand<object> UnfollowPlaylistCommand { get; }
 
         private CancellationTokenSource? _loadPlaylistsCts;
         private volatile bool _cancelRequested;
@@ -623,6 +663,15 @@ namespace SpotifyWPF.ViewModel.Page
                             if (!success)
                             {
                                 System.Diagnostics.Debug.WriteLine($"Failed to delete playlist '{playlist.Name}' after {attempt} attempt(s).");
+                                await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                                {
+                                    _messageBoxService.ShowMessageBox(
+                                        $"Failed to delete playlist '{playlist.Name}'. Please try again.",
+                                        "Deletion Failed",
+                                        MessageBoxButton.OK,
+                                        MessageBoxIcon.Error
+                                    );
+                                }));
                             }
                         }
                         finally

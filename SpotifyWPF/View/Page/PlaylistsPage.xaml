@@ -73,7 +73,7 @@
             <MenuItem Header="Unfollow (Delete)"
                       Foreground="{DynamicResource DangerBrush}"
                       Command="{Binding PlacementTarget.Tag.UnfollowPlaylistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                      CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=DataGrid}, Path=SelectedItems}"/>
         </ContextMenu>
     </UserControl.Resources>
 
