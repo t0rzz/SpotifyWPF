@@ -172,7 +172,7 @@ chmod +x build_dmg.sh
 ### CI/CD
 The repository includes GitHub Actions workflows that automatically build both platforms. All builds are triggered on pushes to `main`/`master` branches and releases are automatically created with cross-platform artifacts.
 
-## 📋 Recent Changes (v3.0.6)
+## 📋 Recent Changes (v3.0.7)
 
 ### Cross-Platform Features
 - **Album Management Feature**: Complete album library management with saved albums viewing and bulk operations
@@ -181,13 +181,13 @@ The repository includes GitHub Actions workflows that automatically build both p
 - **Improved Error Handling**: Better handling of DELETE API responses and broken/missing images
 - **Responsive Design**: Enhanced mobile device support and layout improvements
 
-### Windows-Specific (v3.0.6)
+### Windows-Specific (v3.0.7)
 - **Bulk Album Operations**: Delete multiple albums with confirmation dialogs and progress feedback
 - **Sortable Album Table**: Columns for name, artist, track count, and release date
 - **Real-time Search**: Album filtering and search functionality
 - **Album Playback**: Direct playback integration with Spotify Web Playback SDK
 
-### macOS-Specific (v3.0.6)
+### macOS-Specific (v3.0.7)
 - **Album Management UI**: Consistent table layouts and styling for album management
 - **Profile Display**: User avatar and name integration in macOS interface
 - **Enhanced Error Handling**: Improved API response handling for album operations
