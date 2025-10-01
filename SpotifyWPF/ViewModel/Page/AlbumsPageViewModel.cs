@@ -34,19 +34,6 @@ namespace SpotifyWPF.ViewModel.Page
         private string _albumsFilterText = string.Empty;
         private bool _isMultipleAlbumsSelected;
         private IList _selectedAlbums = new List<object>();
-        public string AlbumsFilterText
-        {
-            get => _albumsFilterText;
-            set
-            {
-                if (_albumsFilterText != value)
-                {
-                    _albumsFilterText = value;
-                    RaisePropertyChanged();
-                    ApplyAlbumsFilter();
-                }
-            }
-        }
 
         public bool IsMultipleAlbumsSelected
         {

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spofify - v3.0.4</title>
+    <title>Spofify - v3.0.6</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -277,6 +277,7 @@
                 <h3 id="playlist-tracks-title">Playlist Tracks</h3>
                 <div class="playlist-tracks-controls">
                     <input type="text" id="playlist-tracks-search" placeholder="Search tracks..." class="playlist-search-input">
+                    <div id="track-actions-container"></div>
                     <button id="close-playlist-tracks" class="close-modal-btn">
                         <i class="fas fa-times"></i>
                     </button>
@@ -287,6 +288,9 @@
                     <thead>
                         <tr>
                             <th class="track-number-header">#</th>
+                            <th class="track-select-header">
+                                <input type="checkbox" id="select-all-tracks" title="Select All Tracks">
+                            </th>
                             <th class="track-name-header sortable" data-sort="name">
                                 <span>Name</span>
                                 <i class="fas fa-sort sort-icon"></i>
@@ -297,6 +301,7 @@
                             </th>
                             <th class="track-duration-header">Duration</th>
                             <th class="track-play-header">Play</th>
+                            <th class="track-remove-header">Remove</th>
                         </tr>
                     </thead>
                     <tbody id="playlist-tracks-list">

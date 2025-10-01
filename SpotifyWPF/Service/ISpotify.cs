@@ -26,12 +26,18 @@ namespace SpotifyWPF.Service
         Task<PagingDto<ArtistDto>> SearchArtistsPageAsync(string query, int offset, int limit);
         Task<PagingDto<TrackDto>> SearchTracksPageAsync(string query, int offset, int limit);
         Task UnfollowPlaylistAsync(string playlistId);
+        Task DeletePlaylistAsync(string playlistId);
+
+        // Playlist tracks management
+        Task RemoveTracksFromPlaylistAsync(string playlistId, IEnumerable<string> trackUris);
 
         // Saved albums management
         Task<PagingDto<AlbumDto>> GetMySavedAlbumsPageAsync(int offset, int limit);
         Task RemoveSavedAlbumsAsync(IEnumerable<string> albumIds);
 
         ISpotifyClient? Api { get; }
+
+        PrivateUser? CurrentUser { get; }
 
     // Devices / Playback
     Task<IReadOnlyList<Device>> GetDevicesAsync();

@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using SpotifyWPF.ViewModel.Page;
+using SpotifyWPF.Model;
 
 namespace SpotifyWPF.View.Page
 {
@@ -36,6 +37,19 @@ namespace SpotifyWPF.View.Page
         {
             // The MenuItem is deep inside DataGrid row styles, we need to handle it differently
             // We'll handle this via the ContextMenu.Opened event instead
+        }
+
+        private void TracksDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var vm = DataContext as PlaylistsPageViewModel;
+            if (vm != null)
+            {
+                vm.SelectedTracks.Clear();
+                foreach (TrackModel item in ((DataGrid)sender).SelectedItems)
+                {
+                    vm.SelectedTracks.Add(item);
+                }
+            }
         }
     }
 }

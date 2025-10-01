@@ -13,5 +13,6 @@ namespace SpotifyWPF.Model
         public Uri? AlbumArtUri { get; set; }
         public int DurationMs { get; set; }
         public string Uri { get; set; } = string.Empty; // Spotify URI (spotify:track:...)
+        public int Position { get; set; } // Position in playlist (1-based)
     }
 }

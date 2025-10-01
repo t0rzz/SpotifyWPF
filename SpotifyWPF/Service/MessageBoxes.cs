@@ -1,5 +1,7 @@
 ﻿namespace SpotifyWPF.Service.MessageBoxes
 {
+    using System.Windows;
+    using SpotifyWPF.View;
     public enum MessageBoxButton
     {
         OK = 0,
@@ -41,6 +43,58 @@
         {
             return (MessageBoxResult)System.Windows.MessageBox.Show(message, caption,
                 (System.Windows.MessageBoxButton)buttons, (System.Windows.MessageBoxImage)icon);
+        }
+    }
+
+    public interface IConfirmationDialogService
+    {
+        bool? ShowConfirmation(string title, string message, string confirmButtonText = "Yes", string cancelButtonText = "Cancel", bool showCancel = true);
+    }
+
+    public class ConfirmationDialogService : IConfirmationDialogService
+    {
+        public bool? ShowConfirmation(string title, string message, string confirmButtonText = "Yes", string cancelButtonText = "Cancel", bool showCancel = true)
+        {
+            var dialog = new System.Windows.Window
+            {
+                Title = title,
+                Content = new ConfirmationDialog(),
+                SizeToContent = SizeToContent.WidthAndHeight,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                Topmost = true
+            };
+
+            // Set owner to main window for proper centering
+            var mainWindow = System.Windows.Application.Current.MainWindow;
+            if (mainWindow != null)
+            {
+                dialog.Owner = mainWindow;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+
+            var viewModel = new ConfirmationDialogViewModel
+            {
+                Title = title,
+                Message = message,
+                ConfirmButtonText = confirmButtonText,
+                CancelButtonText = cancelButtonText,
+                CancelButtonVisibility = showCancel ? Visibility.Visible : Visibility.Collapsed
+            };
+
+            var dialogControl = (ConfirmationDialog)dialog.Content;
+            dialogControl.DataContext = viewModel;
+
+            // Set close action
+            viewModel.CloseAction = () => dialog.Close();
+
+            dialog.ShowDialog();
+
+            return viewModel.Result;
         }
     }
 }

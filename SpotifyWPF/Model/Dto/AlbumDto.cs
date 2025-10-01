@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace SpotifyWPF.Model.Dto
 {
     public class AlbumDto

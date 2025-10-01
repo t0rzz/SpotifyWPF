@@ -11,6 +11,7 @@
              d:DesignHeight="450" d:DesignWidth="800">
 
     <UserControl.Resources>
+        <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <ContextMenu x:Key="PlaylistsContextMenu" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}">
             <ContextMenu.Template>
                 <ControlTemplate TargetType="ContextMenu">
@@ -107,50 +108,67 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <GroupBox Header="Playlists">
+                    <GroupBox Header="{Binding PlaylistsHeader}">
                         <DockPanel>
                             <!-- Search Panel for Playlists -->
                             <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,8">
                                 <Grid Margin="8,6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
-                                    <!-- Search Icon -->
-                                    <Viewbox Grid.Column="0" Width="16" Height="16" Margin="0,0,8,0">
-                                        <Path Fill="{DynamicResource ControlForegroundBrush}" Opacity="0.6"
-                                              Data="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                                    </Viewbox>
+                                    <!-- Search row -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <!-- Search TextBox -->
-                                    <TextBox Grid.Column="1" x:Name="PlaylistsSearchTextBox"
-                                             Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
-                                             Background="Transparent" BorderThickness="0"
-                                             Foreground="{DynamicResource ControlForegroundBrush}"
-                                             FontSize="12" Padding="0"
-                                             VerticalContentAlignment="Center"
-                                             Tag="Filter playlists by name or creator...">
-                                        <TextBox.Style>
-                                            <Style TargetType="TextBox">
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="TextBox">
-                                                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                                                                <ScrollViewer x:Name="PART_ContentHost"/>
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="Text" Value="">
-                                                        <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
-                                                        <Setter Property="Opacity" Value="0.6"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBox.Style>
-                                    </TextBox>
+                                        <!-- Search Icon -->
+                                        <Viewbox Grid.Column="0" Width="16" Height="16" Margin="0,0,8,0">
+                                            <Path Fill="{DynamicResource ControlForegroundBrush}" Opacity="0.6"
+                                                  Data="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                                        </Viewbox>
+
+                                        <!-- Search TextBox -->
+                                        <TextBox Grid.Column="1" x:Name="PlaylistsSearchTextBox"
+                                                 Text="{Binding PlaylistsFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Background="Transparent" BorderThickness="0"
+                                                 Foreground="{DynamicResource ControlForegroundBrush}"
+                                                 FontSize="12" Padding="0"
+                                                 VerticalContentAlignment="Center"
+                                                 Tag="Filter playlists by name or creator...">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="TextBox">
+                                                                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                                                                    <ScrollViewer x:Name="PART_ContentHost"/>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="Text" Value="">
+                                                            <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                                                            <Setter Property="Opacity" Value="0.6"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                    </Grid>
+
+                                    <!-- Exclude owned playlists checkbox -->
+                                    <CheckBox Grid.Row="1" Content="Exclude owned playlists"
+                                              IsChecked="{Binding ExcludeOwnedPlaylists, Mode=TwoWay}"
+                                              Margin="0,4,0,0"
+                                              FontSize="11"
+                                              VerticalContentAlignment="Center"
+                                              Foreground="{DynamicResource ControlForegroundBrush}"
+                                              Opacity="0.8"/>
                                 </Grid>
                             </Border>
 
@@ -182,7 +200,7 @@
                         </DockPanel>
                     </GroupBox>
 
-                    <GroupBox Grid.Column="1" Header="Tracks">
+                    <GroupBox Grid.Column="1" Header="{Binding TracksHeader}">
                         <DockPanel>
                             <!-- Search Panel for Tracks -->
                             <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,8">
@@ -229,7 +247,7 @@
                                 </Grid>
                             </Border>
 
-                            <DataGrid x:Name="TracksDataGrid" ItemsSource="{Binding FilteredTracks}" AutoGenerateColumns="False" CanUserAddRows="False" Height="240">
+                            <DataGrid x:Name="TracksDataGrid" ItemsSource="{Binding FilteredTracks}" AutoGenerateColumns="False" CanUserAddRows="False" Height="240" SelectionMode="Extended" SelectionChanged="TracksDataGrid_SelectionChanged">
                             <DataGrid.InputBindings>
                                 <MouseBinding Gesture="LeftDoubleClick"
                                               Command="{Binding DataContext.Player.ClickTrackCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -309,24 +327,31 @@
                                                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                                                         <Setter Property="Background" Value="Transparent"/>
                                                         <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
-                                                        <Setter Property="Padding" Value="8,6"/>
+                                                        <Setter Property="Padding" Value="8,6,4,6"/>
                                                         <Setter Property="Template">
                                                             <Setter.Value>
                                                                 <ControlTemplate TargetType="MenuItem">
                                                                     <Border x:Name="Border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                                                                         <Grid>
                                                                             <Grid.ColumnDefinitions>
-                                                                                <ColumnDefinition Width="18"/>
                                                                                 <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
                                                                             </Grid.ColumnDefinitions>
-                                                                            <TextBlock x:Name="CheckGlyph" Grid.Column="0" Text="✓" FontSize="12"
-                                                                                       VerticalAlignment="Center" HorizontalAlignment="Center"
-                                                                                       Visibility="Collapsed"
-                                                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
-                                                                            <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                                                            <ContentPresenter Grid.Column="0" ContentSource="Header"
                                                                                               RecognizesAccessKey="True"
                                                                                               VerticalAlignment="Center"
                                                                                               TextBlock.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                                                            <Path x:Name="Arrow" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" Width="8" Height="10"
+                                                                                  Stretch="Fill" StrokeThickness="2"
+                                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                                  Data="M0,0 L6,5 L0,10" Visibility="Collapsed"/>
+                                                                            <Popup x:Name="PART_Popup" Placement="Right" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                                                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                                                                <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                                                                        Effect="{DynamicResource DropShadowEffect}">
+                                                                                    <ItemsPresenter/>
+                                                                                </Border>
+                                                                            </Popup>
                                                                         </Grid>
                                                                     </Border>
                                                                     <ControlTemplate.Triggers>
@@ -334,8 +359,8 @@
                                                                             <Setter TargetName="Border" Property="Background" Value="{DynamicResource ControlHighlightBrush}"/>
                                                                             <Setter Property="Foreground" Value="{DynamicResource ControlHighlightForegroundBrush}"/>
                                                                         </Trigger>
-                                                                        <Trigger Property="IsChecked" Value="True">
-                                                                            <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                                                                        <Trigger Property="HasItems" Value="True">
+                                                                            <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
                                                                         </Trigger>
                                                                         <Trigger Property="IsEnabled" Value="False">
                                                                             <Setter Property="Opacity" Value="0.6"/>
@@ -378,14 +403,23 @@
                                                         </Style>
                                                     </MenuItem.ItemContainerStyle>
                                                 </MenuItem>
+                                                <Separator/>
+                                                <MenuItem Header="Remove from Playlist"
+                                                          Style="{StaticResource TracksMenuItemPlain}"
+                                                          Command="{Binding RemoveTracksFromPlaylistCommand}"
+                                                          CommandParameter="{Binding SelectedTracks}"
+                                                          Visibility="{Binding IsCurrentPlaylistOwnedByUser}"/>
                                             </ContextMenu>
                                         </Setter.Value>
                                     </Setter>
+                                    <Style.Triggers>
+                                    </Style.Triggers>
                                 </Style>
                             </DataGrid.RowStyle>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Name" Binding="{Binding TrackName}" IsReadOnly="True" Width="2*"/>
-                                <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}" IsReadOnly="True" Width="*"/>
+                                <DataGridTextColumn Header="#" Binding="{Binding Position}" IsReadOnly="True" Width="Auto"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Title}" IsReadOnly="True" Width="2*"/>
+                                <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artist}" IsReadOnly="True" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
                         </DockPanel>

@@ -156,9 +156,7 @@
                             </TextBox.Style>
                         </TextBox>
                     </Grid>
-                </Border>
-
-                <!-- Albums DataGrid -->
+                </Border>                <!-- Albums DataGrid -->
                 <DataGrid x:Name="AlbumsDataGrid" ItemsSource="{Binding FilteredAlbums}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True" Height="300"
                           SelectionChanged="AlbumsDataGrid_SelectionChanged">
                     <DataGrid.InputBindings>

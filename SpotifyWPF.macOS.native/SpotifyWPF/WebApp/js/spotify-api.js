@@ -663,6 +663,17 @@ class SpotifyAPI {
         });
     }
 
+    async removeTracksFromPlaylist(playlistId, tracks) {
+        // tracks should be an array of objects with 'uri' property
+        // Example: [{ uri: 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh' }]
+        return this.makeRequest(`/playlists/${playlistId}/tracks`, {
+            method: 'DELETE',
+            body: JSON.stringify({
+                tracks: tracks
+            })
+        });
+    }
+
     // Playback
 
     async startPlayback(contextUri = null, uris = null, offset = null, positionMs = 0) {

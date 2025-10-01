@@ -22,6 +22,7 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<ISettingsProvider, SettingsProvider>();
             SimpleIoc.Default.Register<ISpotify, Spotify>();
             SimpleIoc.Default.Register<IMessageBoxService, MessageBoxService>();
+            SimpleIoc.Default.Register<IConfirmationDialogService, ConfirmationDialogService>();
 
             SimpleIoc.Default.Register<MainViewModel>();
             SimpleIoc.Default.Register<LoginPageViewModel>();

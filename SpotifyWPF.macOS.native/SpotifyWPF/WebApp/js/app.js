@@ -1304,16 +1304,38 @@ class SpotifyMacOSApp {
 
     async loadAlbumTracks(albumId) {
         try {
-            this.showLoading('Loading album tracks...');
-            const album = await this.spotifyApi.getAlbum(albumId);
-            this.hideLoading();
+            // Show modal immediately with loading state
+            this.showPlaylistTracksModalLoading();
 
-            // Show album tracks in a modal or similar interface
-            // For now, just show a success message
-            this.showSuccess(`Loaded tracks for "${album.name}" (${album.tracks.total} tracks)`);
+            // Add minimum loading time to ensure loading state is visible
+            const loadingStartTime = Date.now();
+            const minLoadingTime = 800; // 800ms minimum
+
+            const [album] = await Promise.all([
+                this.spotifyApi.getAlbum(albumId),
+                new Promise(resolve => setTimeout(resolve, minLoadingTime))
+            ]);
+
+            // Ensure minimum loading time has passed
+            const elapsedTime = Date.now() - loadingStartTime;
+            if (elapsedTime < minLoadingTime) {
+                await new Promise(resolve => setTimeout(resolve, minLoadingTime - elapsedTime));
+            }
+
+            // Convert album tracks to playlist-like format for display
+            const tracks = album.tracks.items.map((track, index) => ({
+                added_at: null, // Albums don't have added_at
+                added_by: null, // Albums don't have added_by
+                is_local: false,
+                track: track
+            }));
+
+            // Display tracks in modal
+            this.showPlaylistTracksModal(tracks, album.name, albumId, 'album');
+
         } catch (error) {
             console.error('Failed to load album tracks:', error);
-            this.hideLoading();
+            this.hidePlaylistTracksModal();
             this.showError('Failed to load album tracks');
         }
     }
@@ -2123,7 +2145,7 @@ class SpotifyMacOSApp {
             const playlistName = await this.getPlaylistName(playlistId);
 
             // Display tracks in modal
-            this.showPlaylistTracksModal(tracks, playlistName);
+            this.showPlaylistTracksModal(tracks, playlistName, playlistId, 'playlist');
 
         } catch (error) {
             console.error('Failed to load playlist tracks:', error);
@@ -2143,11 +2165,11 @@ class SpotifyMacOSApp {
         // Show loading state in the tracks list area
         tracksList.innerHTML = `
             <tr class="playlist-loading-state">
-                <td colspan="5" style="text-align: center; padding: 60px 24px;">
+                <td colspan="7" style="text-align: center; padding: 60px 24px;">
                     <div class="loading-spinner">
                         <i class="fas fa-spinner fa-spin"></i>
                     </div>
-                    <div class="loading-text">Loading playlist tracks...</div>
+                    <div class="loading-text">Loading tracks...</div>
                 </td>
             </tr>
         `;
@@ -2441,16 +2463,22 @@ class SpotifyMacOSApp {
         }
     }
 
-    showPlaylistTracksModal(tracks, playlistName) {
+    showPlaylistTracksModal(tracks, name, id, type = 'playlist') {
         const modal = document.getElementById('playlist-tracks-modal');
         const title = document.getElementById('playlist-tracks-title');
         const tracksList = document.getElementById('playlist-tracks-list');
         const searchInput = document.getElementById('playlist-tracks-search');
 
-        // Store original tracks for filtering
-        this.originalTracks = tracks;
-        this.filteredTracks = [...tracks];
+        // Store original tracks for filtering with position information
+        this.originalTracks = tracks.map((track, index) => ({
+            ...track,
+            playlistPosition: index + 1
+        }));
+        this.filteredTracks = [...this.originalTracks];
         this.currentTracksSort = { field: null, direction: 'asc' };
+        this.selectedTracks = new Set(); // Store selected track URIs
+        this.currentPlaylistId = id; // Store current ID for operations
+        this.currentTracksType = type; // Store type: 'playlist' or 'album'
 
         // Initialize virtual scrolling
         this.virtualScroll = {
@@ -2464,7 +2492,38 @@ class SpotifyMacOSApp {
         };
 
         // Set modal title
-        title.textContent = `${playlistName} (${tracks.length} tracks)`;
+        title.textContent = `${name} (${tracks.length} tracks)`;
+
+        // Show/hide columns and add/remove track actions based on type
+        const selectHeader = modal.querySelector('.track-select-header');
+        const removeHeader = modal.querySelector('.track-remove-header');
+        const trackActionsContainer = modal.querySelector('#track-actions-container');
+        
+        if (type === 'playlist') {
+            selectHeader.classList.remove('hidden');
+            removeHeader.classList.remove('hidden');
+            
+            // Add track action buttons for playlists
+            trackActionsContainer.innerHTML = `
+                <div class="track-actions">
+                    <button id="select-all-tracks-btn" class="track-action-btn" onclick="window.spotifyApp.selectAllTracks()" title="Select All">
+                        <i class="fas fa-check-square"></i>
+                    </button>
+                    <button id="deselect-all-tracks-btn" class="track-action-btn" style="display: none;" onclick="window.spotifyApp.deselectAllTracks()" title="Deselect All">
+                        <i class="fas fa-square"></i>
+                    </button>
+                    <button id="remove-selected-tracks-btn" class="track-action-btn delete-btn" style="display: none;" onclick="window.spotifyApp.removeSelectedTracks()" title="Remove Selected Tracks">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+        } else {
+            selectHeader.classList.add('hidden');
+            removeHeader.classList.add('hidden');
+            
+            // Clear track actions for albums
+            trackActionsContainer.innerHTML = '';
+        }
 
         // Clear search input
         searchInput.value = '';
@@ -2482,6 +2541,11 @@ class SpotifyMacOSApp {
                 this.sortPlaylistTracks(sortField);
             };
         });
+
+        // Setup track selection functionality (only for playlists)
+        if (type === 'playlist') {
+            this.setupTrackSelection();
+        }
 
         // Setup virtual scrolling
         this.setupVirtualScrolling();
@@ -2555,9 +2619,10 @@ class SpotifyMacOSApp {
         tracksList.innerHTML = '';
 
         // Add top spacer for virtual scrolling
+        const colspan = this.currentTracksType === 'playlist' ? 7 : 5;
         if (startIndex > 0) {
             const topSpacer = document.createElement('tr');
-            topSpacer.innerHTML = `<td colspan="5" style="height: ${startIndex * itemHeight}px;"></td>`;
+            topSpacer.innerHTML = `<td colspan="${colspan}" style="height: ${startIndex * itemHeight}px;"></td>`;
             tracksList.appendChild(topSpacer);
         }
 
@@ -2570,8 +2635,15 @@ class SpotifyMacOSApp {
             const trackRow = document.createElement('tr');
             trackRow.className = 'playlist-track-row';
             trackRow.dataset.trackUri = track.uri;
+            
+            // Conditionally show checkboxes and remove buttons based on type
+            const showControls = this.currentTracksType === 'playlist';
+            
             trackRow.innerHTML = `
-                <td class="track-number">${i + 1}</td>
+                <td class="track-number">${item.playlistPosition}</td>
+                ${showControls ? `<td class="track-select-cell">
+                    <input type="checkbox" class="track-checkbox" data-track-uri="${track.uri}" data-position="${item.playlistPosition - 1}" ${this.selectedTracks.has(track.uri) ? 'checked' : ''}>
+                </td>` : ''}
                 <td class="track-name-cell">
                     <div class="track-name">
                         <img src="${track.album?.images?.[0]?.url || ''}" alt="${track.album?.name || 'Album'}" class="track-image">
@@ -2585,6 +2657,11 @@ class SpotifyMacOSApp {
                         <i class="fas fa-play"></i>
                     </button>
                 </td>
+                ${showControls ? `<td class="track-remove-cell">
+                    <button class="track-remove-btn" onclick="window.spotifyApp.removeTrackFromPlaylist('${track.uri}', ${item.playlistPosition - 1})" title="Remove Track">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>` : ''}
             `;
 
             tracksList.appendChild(trackRow);
@@ -2594,7 +2671,7 @@ class SpotifyMacOSApp {
         const remainingItems = tracks.length - endIndex;
         if (remainingItems > 0) {
             const bottomSpacer = document.createElement('tr');
-            bottomSpacer.innerHTML = `<td colspan="5" style="height: ${remainingItems * itemHeight}px;"></td>`;
+            bottomSpacer.innerHTML = `<td colspan="${colspan}" style="height: ${remainingItems * itemHeight}px;"></td>`;
             tracksList.appendChild(bottomSpacer);
         }
     }
@@ -2699,6 +2776,9 @@ class SpotifyMacOSApp {
             container.removeEventListener('scroll', this.virtualScroll.scrollHandler);
             this.virtualScroll.scrollHandler = null;
         }
+
+        // Clear track selection
+        this.selectedTracks.clear();
 
         modal.style.display = 'none';
         document.removeEventListener('keydown', this.handleModalKeydown.bind(this));
@@ -3256,4 +3336,191 @@ window.debugSpotifyTokens = function() {
         }
     });
     console.log('=== END DEBUG ===');
+};
+
+// Track selection and removal functionality
+SpotifyMacOSApp.prototype.removeTrackFromPlaylist = async function(trackUri, position) {
+    if (!this.currentPlaylistId) {
+        this.showError('No playlist selected');
+        return;
+    }
+
+    const confirmed = await this.showConfirmationDialog(
+        'Remove Track',
+        'Are you sure you want to remove this track from the playlist?',
+        'Remove',
+        'Cancel'
+    );
+
+    if (!confirmed) return;
+
+    try {
+        this.showLoading('Removing track...');
+        await this.spotifyApi.removeTracksFromPlaylist(this.currentPlaylistId, [{ uri: trackUri }]);
+        this.hideLoading();
+        this.showSuccess('Track removed successfully');
+
+        // Reload playlist tracks
+        await this.loadPlaylistTracks(this.currentPlaylistId);
+    } catch (error) {
+        console.error('Failed to remove track:', error);
+        this.hideLoading();
+        this.showError('Failed to remove track. Please try again.');
+    }
+};
+
+SpotifyMacOSApp.prototype.removeSelectedTracks = async function() {
+    if (!this.currentPlaylistId) {
+        this.showError('No playlist selected');
+        return;
+    }
+
+    const modal = document.getElementById('playlist-tracks-modal');
+    const checkedBoxes = modal.querySelectorAll('.track-checkbox:checked');
+
+    if (checkedBoxes.length === 0) {
+        this.showError('No tracks selected');
+        return;
+    }
+
+    const trackUris = Array.from(checkedBoxes).map(cb => cb.dataset.trackUri);
+
+    const confirmed = await this.showConfirmationDialog(
+        'Remove Tracks',
+        `Are you sure you want to remove ${checkedBoxes.length} track${checkedBoxes.length > 1 ? 's' : ''} from the playlist?`,
+        'Remove',
+        'Cancel'
+    );
+
+    if (!confirmed) return;
+
+    try {
+        this.showLoading(`Removing ${checkedBoxes.length} track${checkedBoxes.length > 1 ? 's' : ''}...`);
+
+        // Process tracks in batches of 100 (Spotify API limit)
+        const batchSize = 100;
+        let processed = 0;
+        
+        for (let i = 0; i < trackUris.length; i += batchSize) {
+            const batch = trackUris.slice(i, i + batchSize);
+            const tracksToRemove = batch.map(uri => ({ uri }));
+            
+            await this.spotifyApi.removeTracksFromPlaylist(this.currentPlaylistId, tracksToRemove);
+            
+            processed += batch.length;
+            
+            // Update progress for large batches
+            if (trackUris.length > batchSize) {
+                this.showLoading(`Removing tracks... (${processed}/${trackUris.length})`);
+            }
+        }
+        
+        this.hideLoading();
+        this.showSuccess(`${checkedBoxes.length} track${checkedBoxes.length > 1 ? 's' : ''} removed successfully`);
+
+        // Reload playlist tracks
+        await this.loadPlaylistTracks(this.currentPlaylistId);
+    } catch (error) {
+        console.error('Failed to remove tracks:', error);
+        this.hideLoading();
+        this.showError('Failed to remove tracks. Please try again.');
+    }
+};
+
+// Track selection and removal functionality
+SpotifyMacOSApp.prototype.setupTrackSelection = function() {
+    const modal = document.getElementById('playlist-tracks-modal');
+    const selectAllCheckbox = document.getElementById('select-all-tracks');
+    const selectAllBtn = document.getElementById('select-all-tracks-btn');
+    const deselectAllBtn = document.getElementById('deselect-all-tracks-btn');
+    const removeSelectedBtn = document.getElementById('remove-selected-tracks-btn');
+
+    // Handle select all checkbox in header
+    selectAllCheckbox.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        const checkboxes = modal.querySelectorAll('.track-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = isChecked;
+            const trackUri = cb.dataset.trackUri;
+            if (isChecked) {
+                this.selectedTracks.add(trackUri);
+            } else {
+                this.selectedTracks.delete(trackUri);
+            }
+        });
+        this.updateTrackSelectionUI();
+    });
+
+    // Handle individual checkbox changes
+    modal.addEventListener('change', (e) => {
+        if (e.target.classList.contains('track-checkbox')) {
+            const trackUri = e.target.dataset.trackUri;
+            if (e.target.checked) {
+                this.selectedTracks.add(trackUri);
+            } else {
+                this.selectedTracks.delete(trackUri);
+            }
+            this.updateTrackSelectionUI();
+        }
+    });
+
+    // Initialize UI state
+    this.updateTrackSelectionUI();
+};
+
+SpotifyMacOSApp.prototype.updateTrackSelectionUI = function() {
+    const modal = document.getElementById('playlist-tracks-modal');
+    const selectAllCheckbox = document.getElementById('select-all-tracks');
+    const selectAllBtn = document.getElementById('select-all-tracks-btn');
+    const deselectAllBtn = document.getElementById('deselect-all-tracks-btn');
+    const removeSelectedBtn = document.getElementById('remove-selected-tracks-btn');
+
+    const checkboxes = modal.querySelectorAll('.track-checkbox');
+    const checkedBoxes = modal.querySelectorAll('.track-checkbox:checked');
+
+    // Update select all checkbox state
+    if (checkboxes.length === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    } else if (checkedBoxes.length === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    } else if (checkedBoxes.length === checkboxes.length) {
+        selectAllCheckbox.checked = true;
+        selectAllCheckbox.indeterminate = false;
+    } else {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = true;
+    }
+
+    // Update button visibility
+    if (checkedBoxes.length > 0) {
+        selectAllBtn.style.display = 'none';
+        deselectAllBtn.style.display = 'inline-flex';
+        removeSelectedBtn.style.display = 'inline-flex';
+    } else {
+        selectAllBtn.style.display = 'inline-flex';
+        deselectAllBtn.style.display = 'none';
+        removeSelectedBtn.style.display = 'none';
+    }
+};
+
+SpotifyMacOSApp.prototype.selectAllTracks = function() {
+    const modal = document.getElementById('playlist-tracks-modal');
+    const checkboxes = modal.querySelectorAll('.track-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = true;
+        this.selectedTracks.add(cb.dataset.trackUri);
+    });
+    this.updateTrackSelectionUI();
+};
+
+SpotifyMacOSApp.prototype.deselectAllTracks = function() {
+    const modal = document.getElementById('playlist-tracks-modal');
+    const checkboxes = modal.querySelectorAll('.track-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = false;
+        this.selectedTracks.delete(cb.dataset.trackUri);
+    });
+    this.updateTrackSelectionUI();
 };

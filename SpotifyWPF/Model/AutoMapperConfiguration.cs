@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 using AutoMapper;
+using AutoMapper.Configuration;
 using SpotifyAPI.Web;
 using SpotifyWPF.Model.Dto;
 
@@ -38,7 +39,8 @@ namespace SpotifyWPF.Model
                             return new Uri(images[0].Url);
                         }
                         return null;
-                    }));
+                    }))
+                    .ForMember(dest => dest.Position, opt => opt.Ignore());
 
                 cfg.CreateMap<AlbumDto, Album>()
                     .ForMember(dest => dest.Id, act => act.MapFrom(src => src.Id))

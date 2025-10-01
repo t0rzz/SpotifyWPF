@@ -40,6 +40,8 @@ namespace SpotifyWPF.Service
 
         public ISpotifyClient? Api { get; private set; } = null;
 
+        public PrivateUser? CurrentUser => _privateProfile;
+
         public Spotify(ISettingsProvider settingsProvider, ILoggingService loggingService)
         {
             _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
@@ -154,6 +156,19 @@ namespace SpotifyWPF.Service
 
             if (list.Count > 50)
                 throw new ArgumentException($"Parameter '{parameterName}' cannot contain more than 50 items.", parameterName);
+        }
+
+        private void ValidateTrackCollection(IEnumerable<string> trackUris, string parameterName)
+        {
+            if (trackUris == null)
+                throw new ArgumentNullException(parameterName);
+
+            var list = trackUris.ToList();
+            if (list.Count == 0)
+                throw new ArgumentException($"Parameter '{parameterName}' cannot be empty.", parameterName);
+
+            // Note: Individual API calls are limited to 100 tracks, but batching is handled at the ViewModel level
+            // So we allow more than 100 tracks here, but the method will process them in batches
         }
 
         private void ValidateRepeatState(string state)
@@ -652,8 +667,7 @@ namespace SpotifyWPF.Service
                         {
                             var v = kv.Value;
                             if (int.TryParse(v, out var secInt)) return Math.Max(0.5, secInt);
-                            if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var secD))
-                                return Math.Max(0.5, secD);
+                            if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var secD)) return Math.Max(0.5, secD);
                         }
                     }
                     return 1.0;
@@ -787,6 +801,7 @@ namespace SpotifyWPF.Service
                         Id = p.Id,
                         Name = p.Name,
                         OwnerName = p.Owner?.DisplayName ?? p.Owner?.Id,
+                        OwnerId = p.Owner?.Id,
                         TracksTotal = p.Tracks?.Total ?? 0,
                         SnapshotId = p.SnapshotId,
                         Href = p.Href
@@ -1364,11 +1379,60 @@ namespace SpotifyWPF.Service
             return result;
         }
 
+        public async Task DeletePlaylistAsync(string playlistId)
+        {
+            await EnsureAuthenticatedAsync();
+            
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _currentToken?.AccessToken);
+            
+            var response = await client.DeleteAsync($"https://api.spotify.com/v1/playlists/{playlistId}");
+            response.EnsureSuccessStatusCode();
+        }
+
         public async Task UnfollowPlaylistAsync(string playlistId)
         {
-            if (string.IsNullOrWhiteSpace(playlistId)) return;
-            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null) return;
-            await Api.Follow.UnfollowPlaylist(playlistId).ConfigureAwait(false);
+            await EnsureAuthenticatedAsync();
+            
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _currentToken?.AccessToken);
+            
+            var response = await client.DeleteAsync($"https://api.spotify.com/v1/playlists/{playlistId}/followers");
+            response.EnsureSuccessStatusCode();
+        }
+
+        public async Task RemoveTracksFromPlaylistAsync(string playlistId, IEnumerable<string> trackUris)
+        {
+            ValidateSpotifyId(playlistId, nameof(playlistId));
+            ValidateTrackCollection(trackUris, nameof(trackUris));
+
+            var trackList = trackUris.ToList();
+            if (trackList.Count > 100)
+                throw new ArgumentException("Cannot remove more than 100 tracks at once.", nameof(trackUris));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+                return;
+
+            try
+            {
+                var request = new PlaylistRemoveItemsRequest
+                {
+                    Tracks = trackList.Select(uri => new PlaylistRemoveItemsRequest.Item { Uri = uri }).ToList()
+                };
+
+                await Api.Playlists.RemoveItems(playlistId, request).ConfigureAwait(false);
+                _loggingService.LogInfo($"Successfully removed {trackList.Count} tracks from playlist {playlistId}");
+            }
+            catch (APIException apiEx)
+            {
+                _loggingService.LogError($"API error removing tracks from playlist: {apiEx.Message}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError($"Error removing tracks from playlist: {ex.Message}");
+                throw;
+            }
         }
 
         /// <summary>
