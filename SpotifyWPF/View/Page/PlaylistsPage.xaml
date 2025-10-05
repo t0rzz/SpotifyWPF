@@ -493,7 +493,7 @@
                             <Separator/>
                             <MenuItem Header="Unfollow"
                                       Foreground="{DynamicResource DangerBrush}"
-                                      Command="{Binding PlacementTarget.Tag.UnfollowArtistsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      Command="{Binding PlacementTarget.Tag.UnfollowArtistCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                       CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                         </ContextMenu>
                     </DockPanel.Resources>

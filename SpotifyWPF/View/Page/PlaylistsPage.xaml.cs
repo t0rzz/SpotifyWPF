@@ -55,9 +55,12 @@ namespace SpotifyWPF.View.Page
         private void ArtistsDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Notify the ViewModel that the selection changed so it can update command states
-            if (DataContext is PlaylistsPageViewModel viewModel)
+            if (DataContext is PlaylistsPageViewModel viewModel && sender is DataGrid dataGrid)
             {
+                viewModel.SelectedArtistsCount = dataGrid.SelectedItems.Count;
+                viewModel.SelectedArtists = dataGrid.SelectedItems.Count > 0 ? dataGrid.SelectedItems : null;
                 viewModel.UnfollowArtistsCommand?.RaiseCanExecuteChanged();
+                viewModel.UnfollowArtistCommand?.RaiseCanExecuteChanged();
             }
         }
     }

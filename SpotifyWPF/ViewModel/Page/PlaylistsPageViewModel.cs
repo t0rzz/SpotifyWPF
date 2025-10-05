@@ -40,6 +40,8 @@ namespace SpotifyWPF.ViewModel.Page
     private bool _isLoadingPlaylists;
     private bool _isLoadingArtists;
     private int _selectedTabIndex;
+    private int _selectedArtistsCount;
+    private IList? _selectedArtists;
 
         public RelayCommand<IList> RemoveTracksFromPlaylistCommand { get; private set; }
 
@@ -219,13 +221,32 @@ namespace SpotifyWPF.ViewModel.Page
             StopLoadFollowedArtistsCommand = new RelayCommand(() => _loadArtistsCts?.Cancel(), () => _isLoadingArtists);
             UnfollowArtistsCommand = new RelayCommand<IList>(
                 async items => await UnfollowArtistsAsync(items),
-                items => items != null && items.Count > 0
+                items => _selectedArtistsCount > 0
             );
             OpenInSpotifyArtistCommand = new RelayCommand<ArtistDto>(
                 a => { var url = BuildArtistWebUrl(a); if (!string.IsNullOrWhiteSpace(url)) TryOpenUrl(url); },
                 a => a != null && !string.IsNullOrWhiteSpace(a.Id));
             CopyArtistLinkCommand = new RelayCommand<ArtistDto>(
                 a => { var url = BuildArtistWebUrl(a); if (!string.IsNullOrWhiteSpace(url)) TryCopyToClipboard(url); },
+                a => a != null && !string.IsNullOrWhiteSpace(a.Id));
+            UnfollowArtistCommand = new RelayCommand<ArtistDto>(
+                async a => {
+                    if (a == null || string.IsNullOrWhiteSpace(a.Id)) return;
+                    
+                    // If multiple artists are selected, unfollow all selected artists
+                    // Otherwise, unfollow just the clicked artist
+                    IList artistsToUnfollow;
+                    if (_selectedArtistsCount > 1 && _selectedArtists != null)
+                    {
+                        artistsToUnfollow = _selectedArtists;
+                    }
+                    else
+                    {
+                        artistsToUnfollow = new[] { a };
+                    }
+                    
+                    await UnfollowArtistsAsync(artistsToUnfollow);
+                },
                 a => a != null && !string.IsNullOrWhiteSpace(a.Id));
 
             // Initialize filtering
@@ -411,6 +432,29 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        public int SelectedArtistsCount
+        {
+            get => _selectedArtistsCount;
+            internal set
+            {
+                if (_selectedArtistsCount != value)
+                {
+                    _selectedArtistsCount = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        public IList? SelectedArtists
+        {
+            get => _selectedArtists;
+            internal set
+            {
+                _selectedArtists = value;
+                RaisePropertyChanged();
+            }
+        }
+
     // Users/Artists tab collections
     public ObservableCollection<ArtistDto> FollowedArtists { get; } = new ObservableCollection<ArtistDto>();
 
@@ -497,11 +541,7 @@ namespace SpotifyWPF.ViewModel.Page
     public RelayCommand<IList> UnfollowArtistsCommand { get; }
         public RelayCommand<ArtistDto> OpenInSpotifyArtistCommand { get; }
         public RelayCommand<ArtistDto> CopyArtistLinkCommand { get; }
-        public RelayCommand<ArtistDto> UnfollowArtistCommand => new RelayCommand<ArtistDto>(async a =>
-        {
-            if (a == null || string.IsNullOrWhiteSpace(a.Id)) return;
-            await UnfollowArtistsAsync(new[] { a });
-        });
+        public RelayCommand<ArtistDto> UnfollowArtistCommand { get; }
 
         // Context menu commands
         public RelayCommand<PlaylistDto> OpenInSpotifyCommand { get; }
@@ -1221,8 +1261,8 @@ namespace SpotifyWPF.ViewModel.Page
             var msg = artists.Count == 1
                 ? $"Are you sure you want to delete artist '{artists[0].Name}'? (Unfollow)"
                 : $"Are you sure you want to delete these {artists.Count} artists? (Unfollow)";
-            var res = _messageBoxService.ShowMessageBox(msg, "Confirm", MessageBoxButton.YesNo, MessageBoxIcon.Exclamation);
-            if (res != MessageBoxResult.Yes) return;
+            var res = _confirmationDialogService.ShowConfirmation("Confirm", msg, "Unfollow", "Cancel");
+            if (res != true) return;
 
             try
             {
