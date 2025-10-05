@@ -134,6 +134,7 @@ Import-Certificate -FilePath .\msix-signing.cer -CertStoreLocation Cert:\LocalMa
 
 # Because it's self-signed, also trust as a root (often required)
 Import-Certificate -FilePath .\msix-signing.cer -CertStoreLocation Cert:\LocalMachine\Root
+```
 
 ## 🔑 Authentication
 
