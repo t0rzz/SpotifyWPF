@@ -204,6 +204,7 @@ jobs:
             SpotifyWPF-${{ env.VERSION }}-portable-win-x64.exe
             SpotifyWPF-${{ env.VERSION }}.msix
             Spofify-${{ env.VERSION }}-macOS.dmg
+            msix-signing.cer
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
