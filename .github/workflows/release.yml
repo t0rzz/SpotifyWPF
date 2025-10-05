@@ -22,7 +22,8 @@ jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
-
+    environment: Signing
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,19 +80,31 @@ jobs:
           Copy-Item $exe $dest -Force
           Write-Host "Portable EXE: $dest"
         shell: pwsh
+        
+      - name: Decode signing cert
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String("${{ secrets.MSIX_PFX_BASE64 }}")
+          $pfxPath = "$env:RUNNER_TEMP\signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $bytes)
+          echo "SIGN_PFX=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Build MSIX (unsigned) via WAP project
+      - name: Build MSIX (signed) via WAP project
+        shell: pwsh
         run: |
           $out = "${{ github.workspace }}\artifacts\msix"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          msbuild .\SpotifyWPF.MSIX\SpotifyWPF.MSIX.wapproj /t:Restore,Rebuild /p:Configuration=Release `
-            /p:UapAppxPackageBuildMode=SideLoadOnly /p:AppxBundle=Never /p:AppxPackageSigningEnabled=false /p:AppxPackageDir="$out"
+          msbuild .\SpotifyWPF.MSIX\SpotifyWPF.MSIX.wapproj /t:Restore,Rebuild `
+            /p:Configuration=Release `
+            /p:UapAppxPackageBuildMode=SideLoadOnly `
+            /p:AppxBundle=Never `
+            /p:AppxPackageSigningEnabled=true `
+            /p:PackageCertificateKeyFile="$env:SIGN_PFX" `
+            /p:PackageCertificatePassword=${{ secrets.MSIX_PFX_PASSWORD }} `
+            /p:AppxPackageDir="$out"
           $msix = Get-ChildItem $out -Filter *.msix -Recurse | Select-Object -First 1
           if (-not $msix) { Write-Error 'MSIX package not found.' }
-          $dest = "${{ github.workspace }}\SpotifyWPF-$env:VERSION.msix"
-          Copy-Item $msix.FullName $dest -Force
-          Write-Host "MSIX: $dest"
-        shell: pwsh
+          Copy-Item $msix.FullName "${{ github.workspace }}\SpotifyWPF-$env:VERSION.msix" -Force
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
