@@ -114,6 +114,27 @@ Head to the [Releases page](https://github.com/t0rzz/SpotifyWPF/releases) and do
 - **DMG installer**: Native macOS installer package
 - Contains the complete SpofifyWPF application bundle
 
+### Installing MSIX (developer build)
+
+> These builds are signed with our **developer certificate** (`msix-signing.cer`).  
+> Windows needs to trust this publisher once before installing.
+
+**1) Download from the Release page**
+- `SpofifyWPF-<version>.msix`
+- `msix-signing.cer` (publisher certificate)
+
+**2) Enable app sideloading (once)**
+- Windows 10/11 → *Settings* → *Privacy & Security* → *For developers* → **Developer Mode** (or enable *Install apps from any source, including loose files*).
+
+**3) Trust the certificate (Admin PowerShell)**
+```powershell
+# From the folder where you downloaded the files:
+# Trust the publisher for app packages
+Import-Certificate -FilePath .\msix-signing.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+
+# Because it's self-signed, also trust as a root (often required)
+Import-Certificate -FilePath .\msix-signing.cer -CertStoreLocation Cert:\LocalMachine\Root
+
 ## 🔑 Authentication
 
 Both applications use OAuth 2.0 with the following required scopes:
@@ -239,12 +260,6 @@ Both platforms welcome contributions! The core business logic is shared, so impr
 1. **Windows**: Use Visual Studio 2022 with .NET desktop workload
 2. **macOS**: Use Xcode 14+ with Swift 5.7+
 3. **Cross-platform**: Web technologies (HTML/CSS/JS) work on both platforms
-
-### Testing
-- Test OAuth flows on both platforms
-- Verify device management functionality
-- Ensure playlist operations work consistently
-- Check context menu behavior matches expectations
 
 ## 📄 License
 
