@@ -502,7 +502,7 @@
                         <Button Content="Stop" Command="{Binding StopLoadFollowedArtistsCommand}" Margin="0,0,8,0"/>
                         <Button Content="Unfollow Selected" Command="{Binding UnfollowArtistsCommand}" CommandParameter="{Binding ElementName=ArtistsDataGrid, Path=SelectedItems}"/>
                     </StackPanel>
-                    <DataGrid x:Name="ArtistsDataGrid" ItemsSource="{Binding FollowedArtists}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" Height="290">
+                    <DataGrid x:Name="ArtistsDataGrid" ItemsSource="{Binding FollowedArtists}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" Height="290" SelectionChanged="ArtistsDataGrid_SelectionChanged">
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow">
                                 <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
