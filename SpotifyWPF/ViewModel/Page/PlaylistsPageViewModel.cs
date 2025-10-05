@@ -256,6 +256,10 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     includeItem = includeItem && item.OwnerId != _currentUserId;
                 }
+                if (_onlyShowOwnedPlaylists && !string.IsNullOrWhiteSpace(_currentUserId))
+                {
+                    includeItem = includeItem && item.OwnerId == _currentUserId;
+                }
 
                 return includeItem;
             });
@@ -356,6 +360,31 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     _excludeOwnedPlaylists = value;
                     RaisePropertyChanged();
+                    // If enabling exclude, disable only show owned
+                    if (value && _onlyShowOwnedPlaylists)
+                    {
+                        OnlyShowOwnedPlaylists = false;
+                    }
+                    ApplyPlaylistsFilter();
+                }
+            }
+        }
+
+        private bool _onlyShowOwnedPlaylists;
+        public bool OnlyShowOwnedPlaylists
+        {
+            get => _onlyShowOwnedPlaylists;
+            set
+            {
+                if (_onlyShowOwnedPlaylists != value)
+                {
+                    _onlyShowOwnedPlaylists = value;
+                    RaisePropertyChanged();
+                    // If enabling only show owned, disable exclude
+                    if (value && _excludeOwnedPlaylists)
+                    {
+                        ExcludeOwnedPlaylists = false;
+                    }
                     ApplyPlaylistsFilter();
                 }
             }
@@ -374,7 +403,7 @@ namespace SpotifyWPF.ViewModel.Page
                     RaisePropertyChanged();
                     RaisePropertyChanged(nameof(IsCurrentPlaylistOwnedByUser));
                     // Re-apply filter when user ID changes
-                    if (_excludeOwnedPlaylists)
+                    if (_excludeOwnedPlaylists || _onlyShowOwnedPlaylists)
                     {
                         ApplyPlaylistsFilter();
                     }
@@ -648,7 +677,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 // Some playlists are not owned by the user
                 var notOwned = playlists.Except(ownedPlaylists).Select(p => p.Name).ToList();
-                var message = $"Owned playlists will be deleted, followed playlists will be unfollowed.\n\nThe following playlists will be unfollowed:\n{string.Join("\n", notOwned)}";
+                var message = $"The following playlists will be unfollowed:\n{string.Join("\n", notOwned)}";
                 var result = _confirmationDialogService.ShowConfirmation(
                     "Delete/Unfollow Playlists",
                     message,

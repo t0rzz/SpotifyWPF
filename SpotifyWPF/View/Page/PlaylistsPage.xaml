@@ -116,6 +116,7 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
                                     <!-- Search row -->
@@ -164,6 +165,15 @@
                                     <!-- Exclude owned playlists checkbox -->
                                     <CheckBox Grid.Row="1" Content="Exclude owned playlists"
                                               IsChecked="{Binding ExcludeOwnedPlaylists, Mode=TwoWay}"
+                                              Margin="0,4,0,0"
+                                              FontSize="11"
+                                              VerticalContentAlignment="Center"
+                                              Foreground="{DynamicResource ControlForegroundBrush}"
+                                              Opacity="0.8"/>
+
+                                    <!-- Only show owned playlists checkbox -->
+                                    <CheckBox Grid.Row="2" Content="Only show owned playlists"
+                                              IsChecked="{Binding OnlyShowOwnedPlaylists, Mode=TwoWay}"
                                               Margin="0,4,0,0"
                                               FontSize="11"
                                               VerticalContentAlignment="Center"
