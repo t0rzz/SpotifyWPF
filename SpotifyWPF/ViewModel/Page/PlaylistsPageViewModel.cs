@@ -648,7 +648,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 // Some playlists are not owned by the user
                 var notOwned = playlists.Except(ownedPlaylists).Select(p => p.Name).ToList();
-                var message = $"You can only delete playlists you own. The following playlists will be unfollowed instead:\n{string.Join("\n", notOwned)}";
+                var message = $"Owned playlists will be deleted, followed playlists will be unfollowed.\n\nThe following playlists will be unfollowed:\n{string.Join("\n", notOwned)}";
                 var result = _confirmationDialogService.ShowConfirmation(
                     "Delete/Unfollow Playlists",
                     message,
@@ -675,26 +675,48 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
-                foreach (var playlist in playlists)
-                {
-                    if (ownedPlaylists.Contains(playlist))
-                    {
-                        // Delete owned playlist
-                        await _spotify.DeletePlaylistAsync(playlist.Id!);
-                    }
-                    else
-                    {
-                        // Unfollow not owned playlist
-                        await _spotify.UnfollowPlaylistAsync(playlist.Id!);
-                    }
+                // Use parallel processing for better performance
+                const int maxWorkers = 8;
+                var workersCount = Math.Min(maxWorkers, playlists.Count);
+                var playlistsQueue = new ConcurrentQueue<PlaylistDto>(playlists);
+                var workers = new List<Task>();
 
-                    // Remove from UI
-                    await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                for (var w = 0; w < workersCount; w++)
+                {
+                    workers.Add(Task.Run(async () =>
                     {
-                        Playlists.Remove(playlist);
-                        _playlistIds.Remove(playlist.Id!);
+                        while (playlistsQueue.TryDequeue(out var playlist))
+                        {
+                            try
+                            {
+                                if (ownedPlaylists.Contains(playlist))
+                                {
+                                    // Delete owned playlist
+                                    await _spotify.DeletePlaylistAsync(playlist.Id!);
+                                }
+                                else
+                                {
+                                    // Unfollow not owned playlist
+                                    await _spotify.UnfollowPlaylistAsync(playlist.Id!);
+                                }
+
+                                // Remove from UI
+                                await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                                {
+                                    Playlists.Remove(playlist);
+                                    _playlistIds.Remove(playlist.Id!);
+                                }));
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Failed to delete/unfollow playlist '{playlist.Name}': {ex.Message}");
+                            }
+                        }
                     }));
                 }
+
+                // Wait for all workers to complete
+                await Task.WhenAll(workers);
 
                 System.Diagnostics.Debug.WriteLine($"Successfully deleted/unfollowed {playlists.Count} playlist(s)");
             }
