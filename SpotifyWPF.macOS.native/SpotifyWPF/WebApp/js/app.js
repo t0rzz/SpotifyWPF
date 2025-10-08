@@ -3397,46 +3397,86 @@ SpotifyMacOSApp.prototype.removeSelectedTracks = async function() {
     try {
         this.showLoading(`Removing ${checkedBoxes.length} track${checkedBoxes.length > 1 ? 's' : ''}...`);
 
-        // Process tracks in parallel batches (up to 8 concurrent workers)
+        // Process tracks in parallel batches with retry logic for rate limits
         const batchSize = 100;
         const maxWorkers = Math.min(8, Math.ceil(trackUris.length / batchSize));
         const batches = [];
+        const failedBatches = [];
+        const maxRetries = 3;
         
         // Create batches
         for (let i = 0; i < trackUris.length; i += batchSize) {
             const batch = trackUris.slice(i, i + batchSize);
-            batches.push(batch);
+            batches.push({ uris: batch, startIndex: i, retryCount: 0 });
         }
         
-        // Process batches in parallel using workers
-        const workers = [];
-        let batchIndex = 0;
+        // Process all batches with retry logic
+        let totalProcessed = 0;
+        let retryDelay = 1000; // Start with 1 second delay
         
-        for (let workerId = 0; workerId < maxWorkers && batchIndex < batches.length; workerId++) {
-            const worker = this.processTrackRemovalBatch(batches[batchIndex], batchIndex * batchSize);
-            workers.push(worker);
-            batchIndex++;
-        }
-        
-        // Wait for all initial workers to complete and start new ones as they finish
-        while (batchIndex < batches.length) {
-            await Promise.race(workers);
-            
-            // Remove completed worker and start new one
-            const completedIndex = workers.findIndex(w => w.isCompleted);
-            if (completedIndex !== -1) {
-                workers.splice(completedIndex, 1);
-                
-                if (batchIndex < batches.length) {
-                    const worker = this.processTrackRemovalBatch(batches[batchIndex], batchIndex * batchSize);
-                    workers.push(worker);
-                    batchIndex++;
+        while (batches.length > 0 || failedBatches.length > 0) {
+            // Move failed batches back to main queue if retries available
+            while (failedBatches.length > 0) {
+                const failedBatch = failedBatches.shift();
+                if (failedBatch.retryCount < maxRetries) {
+                    failedBatch.retryCount++;
+                    batches.unshift(failedBatch);
+                } else {
+                    // Max retries reached, skip this batch
+                    console.error(`Batch at index ${failedBatch.startIndex} failed after ${maxRetries} retries`);
+                    totalProcessed += failedBatch.uris.length;
                 }
+            }
+            
+            if (batches.length === 0) break;
+            
+            // Process batches in parallel using workers
+            const workers = [];
+            let batchIndex = 0;
+            
+            for (let workerId = 0; workerId < maxWorkers && batchIndex < batches.length; workerId++) {
+                const batch = batches[batchIndex];
+                const worker = this.processTrackRemovalBatch(batch.uris, batch.startIndex);
+                workers.push(worker);
+                batchIndex++;
+            }
+            
+            // Wait for workers to complete
+            const results = await Promise.all(workers);
+            
+            // Process results and collect failures
+            results.forEach((result, index) => {
+                const batch = batches[index];
+                if (result.success) {
+                    totalProcessed += batch.uris.length;
+                    
+                    // Update progress for large removals
+                    if (trackUris.length > batchSize) {
+                        this.showLoading(`Removing tracks... (${totalProcessed}/${trackUris.length})`);
+                    }
+                } else {
+                    // Batch failed, add to failed batches for retry
+                    failedBatches.push(batch);
+                }
+            });
+            
+            // Remove processed batches from queue
+            batches.splice(0, results.length);
+            
+            // If we have failed batches, wait before retrying
+            if (failedBatches.length > 0 && batches.length === 0) {
+                console.log(`Waiting ${retryDelay/1000}s before retrying ${failedBatches.length} failed batches`);
+                this.showLoading(`Rate limited, waiting ${retryDelay/1000}s before retry...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                retryDelay = Math.min(retryDelay * 2, 30000); // Exponential backoff, max 30s
             }
         }
         
-        // Wait for remaining workers to complete
-        await Promise.all(workers);
+        // Check if all batches were processed successfully
+        if (failedBatches.length > 0) {
+            const failedCount = failedBatches.reduce((sum, batch) => sum + batch.uris.length, 0);
+            throw new Error(`Failed to remove ${failedCount} tracks after maximum retries due to rate limiting`);
+        }
         
         this.hideLoading();
         this.showSuccess(`${checkedBoxes.length} track${checkedBoxes.length > 1 ? 's' : ''} removed successfully`);
@@ -3456,18 +3496,16 @@ SpotifyMacOSApp.prototype.processTrackRemovalBatch = async function(trackUris, s
     
     try {
         await this.spotifyApi.removeTracksFromPlaylist(this.currentPlaylistId, tracksToRemove);
+        return { success: true };
+    } catch (error) {
+        console.error(`Failed to remove batch at index ${startIndex}:`, error);
         
-        // Update progress for large removals
-        const totalTracks = document.querySelectorAll('.track-checkbox:checked').length;
-        if (totalTracks > 100) {
-            const processed = startIndex + trackUris.length;
-            this.showLoading(`Removing tracks... (${processed}/${totalTracks})`);
+        // Check if it's a rate limit error
+        if (error.status === 429 || error.isRateLimit) {
+            console.log(`Rate limit error for batch at index ${startIndex}, will retry`);
         }
         
-        return { isCompleted: true, success: true };
-    } catch (error) {
-        console.error('Failed to remove batch:', error);
-        return { isCompleted: true, success: false, error };
+        return { success: false, error };
     }
 };
 
