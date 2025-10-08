@@ -3397,23 +3397,46 @@ SpotifyMacOSApp.prototype.removeSelectedTracks = async function() {
     try {
         this.showLoading(`Removing ${checkedBoxes.length} track${checkedBoxes.length > 1 ? 's' : ''}...`);
 
-        // Process tracks in batches of 100 (Spotify API limit)
+        // Process tracks in parallel batches (up to 8 concurrent workers)
         const batchSize = 100;
-        let processed = 0;
+        const maxWorkers = Math.min(8, Math.ceil(trackUris.length / batchSize));
+        const batches = [];
         
+        // Create batches
         for (let i = 0; i < trackUris.length; i += batchSize) {
             const batch = trackUris.slice(i, i + batchSize);
-            const tracksToRemove = batch.map(uri => ({ uri }));
+            batches.push(batch);
+        }
+        
+        // Process batches in parallel using workers
+        const workers = [];
+        let batchIndex = 0;
+        
+        for (let workerId = 0; workerId < maxWorkers && batchIndex < batches.length; workerId++) {
+            const worker = this.processTrackRemovalBatch(batches[batchIndex], batchIndex * batchSize);
+            workers.push(worker);
+            batchIndex++;
+        }
+        
+        // Wait for all initial workers to complete and start new ones as they finish
+        while (batchIndex < batches.length) {
+            await Promise.race(workers);
             
-            await this.spotifyApi.removeTracksFromPlaylist(this.currentPlaylistId, tracksToRemove);
-            
-            processed += batch.length;
-            
-            // Update progress for large batches
-            if (trackUris.length > batchSize) {
-                this.showLoading(`Removing tracks... (${processed}/${trackUris.length})`);
+            // Remove completed worker and start new one
+            const completedIndex = workers.findIndex(w => w.isCompleted);
+            if (completedIndex !== -1) {
+                workers.splice(completedIndex, 1);
+                
+                if (batchIndex < batches.length) {
+                    const worker = this.processTrackRemovalBatch(batches[batchIndex], batchIndex * batchSize);
+                    workers.push(worker);
+                    batchIndex++;
+                }
             }
         }
+        
+        // Wait for remaining workers to complete
+        await Promise.all(workers);
         
         this.hideLoading();
         this.showSuccess(`${checkedBoxes.length} track${checkedBoxes.length > 1 ? 's' : ''} removed successfully`);
@@ -3424,6 +3447,27 @@ SpotifyMacOSApp.prototype.removeSelectedTracks = async function() {
         console.error('Failed to remove tracks:', error);
         this.hideLoading();
         this.showError('Failed to remove tracks. Please try again.');
+    }
+};
+
+// Helper method to process a batch of track removals
+SpotifyMacOSApp.prototype.processTrackRemovalBatch = async function(trackUris, startIndex) {
+    const tracksToRemove = trackUris.map(uri => ({ uri }));
+    
+    try {
+        await this.spotifyApi.removeTracksFromPlaylist(this.currentPlaylistId, tracksToRemove);
+        
+        // Update progress for large removals
+        const totalTracks = document.querySelectorAll('.track-checkbox:checked').length;
+        if (totalTracks > 100) {
+            const processed = startIndex + trackUris.length;
+            this.showLoading(`Removing tracks... (${processed}/${totalTracks})`);
+        }
+        
+        return { isCompleted: true, success: true };
+    } catch (error) {
+        console.error('Failed to remove batch:', error);
+        return { isCompleted: true, success: false, error };
     }
 };
 
