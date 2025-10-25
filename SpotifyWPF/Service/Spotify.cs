@@ -1057,6 +1057,42 @@ namespace SpotifyWPF.Service
             return ok;
         }
 
+        public async Task<PlaylistDto> CreatePlaylistAsync(string name, string description, bool isPublic, bool isCollaborative)
+        {
+            ValidateCollection(new[] { name }, nameof(name));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                throw new InvalidOperationException("Not authenticated");
+            }
+
+            var me = await GetPrivateProfileAsync().ConfigureAwait(false);
+            if (me?.Id is not string userId || string.IsNullOrWhiteSpace(userId))
+            {
+                throw new InvalidOperationException("Unable to get user ID");
+            }
+
+            var request = new PlaylistCreateRequest(name)
+            {
+                Description = description,
+                Public = isPublic,
+                Collaborative = isCollaborative
+            };
+
+            var playlist = await Api.Playlists.Create(userId, request).ConfigureAwait(false);
+
+            return new PlaylistDto
+            {
+                Id = playlist.Id ?? string.Empty,
+                Name = playlist.Name,
+                OwnerName = playlist.Owner?.DisplayName ?? playlist.Owner?.Id,
+                OwnerId = playlist.Owner?.Id,
+                TracksTotal = playlist.Tracks?.Total ?? 0,
+                SnapshotId = playlist.SnapshotId,
+                Href = playlist.Href
+            };
+        }
+
         public async Task<SpotifyWPF.Model.Dto.FollowedArtistsPage> GetFollowedArtistsPageAsync(string? after, int limit)
         {
             ValidatePaginationParameters(0, limit, nameof(GetFollowedArtistsPageAsync));
@@ -1382,23 +1418,17 @@ namespace SpotifyWPF.Service
         public async Task DeletePlaylistAsync(string playlistId)
         {
             await EnsureAuthenticatedAsync();
-            
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _currentToken?.AccessToken);
-            
-            var response = await client.DeleteAsync($"https://api.spotify.com/v1/playlists/{playlistId}");
-            response.EnsureSuccessStatusCode();
+
+            var url = $"https://api.spotify.com/v1/playlists/{playlistId}";
+            await SendDeleteWithRetryAsync(url, $"delete playlist {playlistId}");
         }
 
         public async Task UnfollowPlaylistAsync(string playlistId)
         {
             await EnsureAuthenticatedAsync();
-            
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _currentToken?.AccessToken);
-            
-            var response = await client.DeleteAsync($"https://api.spotify.com/v1/playlists/{playlistId}/followers");
-            response.EnsureSuccessStatusCode();
+
+            var url = $"https://api.spotify.com/v1/playlists/{playlistId}/followers";
+            await SendDeleteWithRetryAsync(url, $"unfollow playlist {playlistId}");
         }
 
         public async Task RemoveTracksFromPlaylistAsync(string playlistId, IEnumerable<string> trackUris)
@@ -1445,6 +1475,286 @@ namespace SpotifyWPF.Service
                 return null;
             }
             return _currentToken?.AccessToken;
+        }
+
+        private async Task SendDeleteWithRetryAsync(string requestUrl, string operationDescription, CancellationToken cancellationToken = default)
+        {
+            if (_currentToken?.AccessToken == null)
+            {
+                throw new InvalidOperationException("Authorization token is not available.");
+            }
+
+            const int maxAttempts = 5;
+            var attempt = 0;
+
+            while (true)
+            {
+                attempt++;
+
+                using var request = new HttpRequestMessage(HttpMethod.Delete, requestUrl);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _currentToken.AccessToken);
+
+                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return;
+                }
+
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+                if (response.StatusCode == (HttpStatusCode)429 && attempt <= maxAttempts)
+                {
+                    var retryAfterSeconds = response.Headers.RetryAfter?.Delta?.TotalSeconds
+                                            ?? RateLimitHelper.TryExtractRetryAfterSeconds(responseBody)
+                                            ?? Math.Pow(2, attempt);
+
+                    var delaySeconds = Math.Min(retryAfterSeconds, 60);
+                    _loggingService.LogWarning($"Spotify rate limit during {operationDescription}. Retrying in {delaySeconds:F0}s (attempt {attempt}/{maxAttempts}).");
+                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (response.StatusCode == HttpStatusCode.Unauthorized && attempt <= maxAttempts)
+                {
+                    _loggingService.LogWarning($"Spotify unauthorized during {operationDescription}. Refreshing token (attempt {attempt}/{maxAttempts}).");
+                    if (await EnsureAuthenticatedAsync().ConfigureAwait(false))
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+                }
+
+                var message = $"Failed to {operationDescription}. Status {(int)response.StatusCode} {response.ReasonPhrase}. Body: {responseBody}";
+                _loggingService.LogError(message);
+                throw new HttpRequestException(message);
+            }
+        }
+
+        public async Task UploadPlaylistImageAsync(string playlistId, string imagePath)
+        {
+            ValidateSpotifyId(playlistId, nameof(playlistId));
+            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+                throw new ArgumentException("Image path is invalid or file does not exist.", nameof(imagePath));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+                throw new InvalidOperationException("Not authenticated");
+
+            // Read and encode image
+            var imageBytes = await File.ReadAllBytesAsync(imagePath).ConfigureAwait(false);
+            var base64Image = Convert.ToBase64String(imageBytes);
+
+            await Api.Playlists.UploadCover(playlistId, base64Image).ConfigureAwait(false);
+        }
+
+        public async Task<PagingDto<SearchResultDto>> SearchItemsPageAsync(string query, List<string> types, int offset, int limit)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                throw new ArgumentException("Search query cannot be null, empty, or whitespace.", nameof(query));
+            ValidatePaginationParameters(offset, limit, nameof(SearchItemsPageAsync));
+
+            var result = new PagingDto<SearchResultDto>();
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                result.Items = new List<SearchResultDto>();
+                result.Total = 0;
+                result.Limit = limit;
+                result.Offset = offset;
+                return result;
+            }
+
+            var req = new SearchRequest(SearchRequest.Types.All, query)
+            {
+                Offset = offset,
+                Limit = limit
+            };
+            var search = await Api.Search.Item(req).ConfigureAwait(false);
+
+            // Combine results from different types
+            var items = new List<SearchResultDto>();
+
+            // Tracks
+            if (search.Tracks?.Items != null)
+            {
+                foreach (var t in search.Tracks.Items)
+                {
+                    if (t == null || string.IsNullOrEmpty(t.Id)) continue;
+                    var artistNames = t.Artists != null ? string.Join(", ", t.Artists.Select(ar => ar?.Name).Where(n => !string.IsNullOrWhiteSpace(n))) : null;
+                    items.Add(new SearchResultDto
+                    {
+                        Id = t.Id,
+                        Name = t.Name,
+                        Artists = artistNames,
+                        AlbumName = t.Album?.Name,
+                        DurationMs = t.DurationMs,
+                        Href = t.Href,
+                        Uri = t.Uri,
+                        AlbumImageUrl = t.Album?.Images?.FirstOrDefault()?.Url,
+                        Type = "track",
+                        Description = $"{artistNames} - {t.Album?.Name}",
+                        ImageUrl = t.Album?.Images?.FirstOrDefault()?.Url,
+                        CanAddToPlaylist = true,
+                        IsInSelectedPlaylist = false,
+                        OriginalDto = t
+                    });
+                }
+            }
+
+            // Albums
+            if (search.Albums?.Items != null)
+            {
+                foreach (var a in search.Albums.Items)
+                {
+                    if (a == null || string.IsNullOrEmpty(a.Id)) continue;
+                    var artistNames = a.Artists != null ? string.Join(", ", a.Artists.Select(ar => ar?.Name).Where(n => !string.IsNullOrWhiteSpace(n))) : null;
+                    items.Add(new SearchResultDto
+                    {
+                        Id = a.Id,
+                        Name = a.Name,
+                        Artists = artistNames,
+                        AlbumName = a.Name,
+                        DurationMs = 0,
+                        Href = a.Href,
+                        Uri = a.Uri,
+                        AlbumImageUrl = a.Images?.FirstOrDefault()?.Url,
+                        Type = "album",
+                        Description = $"{artistNames}",
+                        ImageUrl = a.Images?.FirstOrDefault()?.Url,
+                        CanAddToPlaylist = false,
+                        IsInSelectedPlaylist = false,
+                        OriginalDto = a
+                    });
+                }
+            }
+
+            // Artists
+            if (search.Artists?.Items != null)
+            {
+                foreach (var ar in search.Artists.Items)
+                {
+                    if (ar == null || string.IsNullOrEmpty(ar.Id)) continue;
+                    items.Add(new SearchResultDto
+                    {
+                        Id = ar.Id,
+                        Name = ar.Name,
+                        Artists = ar.Name,
+                        AlbumName = null,
+                        DurationMs = 0,
+                        Href = ar.Href,
+                        Uri = ar.Uri,
+                        AlbumImageUrl = ar.Images?.FirstOrDefault()?.Url,
+                        Type = "artist",
+                        Description = $"{ar.Followers?.Total ?? 0} followers",
+                        ImageUrl = ar.Images?.FirstOrDefault()?.Url,
+                        CanAddToPlaylist = false,
+                        IsInSelectedPlaylist = false,
+                        OriginalDto = ar
+                    });
+                }
+            }
+
+            // Playlists
+            if (search.Playlists?.Items != null)
+            {
+                foreach (var p in search.Playlists.Items)
+                {
+                    if (p == null || string.IsNullOrEmpty(p.Id)) continue;
+                    items.Add(new SearchResultDto
+                    {
+                        Id = p.Id,
+                        Name = p.Name,
+                        Artists = p.Owner?.DisplayName ?? p.Owner?.Id,
+                        AlbumName = null,
+                        DurationMs = 0,
+                        Href = p.Href,
+                        Uri = p.Uri ?? string.Empty,
+                        AlbumImageUrl = p.Images?.FirstOrDefault()?.Url,
+                        Type = "playlist",
+                        Description = $"{p.Tracks?.Total ?? 0} tracks",
+                        ImageUrl = p.Images?.FirstOrDefault()?.Url,
+                        CanAddToPlaylist = false,
+                        IsInSelectedPlaylist = false,
+                        OriginalDto = p
+                    });
+                }
+            }
+
+            result.Items = items;
+            result.Total = items.Count; // Approximate
+            result.Limit = limit;
+            result.Offset = offset;
+            return result;
+        }
+
+        public async Task AddTracksToPlaylistAsync(string playlistId, IEnumerable<string> trackUris)
+        {
+            ValidateSpotifyId(playlistId, nameof(playlistId));
+            ValidateTrackCollection(trackUris, nameof(trackUris));
+
+            var trackList = trackUris.ToList();
+            if (trackList.Count > 100)
+                throw new ArgumentException("Cannot add more than 100 tracks at once.", nameof(trackUris));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+                return;
+
+            var request = new PlaylistAddItemsRequest(trackList);
+            await Api.Playlists.AddItems(playlistId, request).ConfigureAwait(false);
+        }
+
+        public async Task<PagingDto<TrackDto>> GetPlaylistTracksPageAsync(string playlistId, int offset, int limit)
+        {
+            ValidateSpotifyId(playlistId, nameof(playlistId));
+            ValidatePaginationParameters(offset, limit, nameof(GetPlaylistTracksPageAsync));
+
+            var result = new PagingDto<TrackDto>();
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                result.Items = new List<TrackDto>();
+                result.Total = 0;
+                result.Limit = limit;
+                result.Offset = offset;
+                return result;
+            }
+
+            var req = new PlaylistGetItemsRequest()
+            {
+                Offset = offset,
+                Limit = limit
+            };
+
+            var page = await Api.Playlists.GetItems(playlistId, req).ConfigureAwait(false);
+            result.Href = page.Href;
+            result.Limit = page.Limit ?? limit;
+            result.Offset = page.Offset ?? offset;
+            result.Total = page.Total ?? 0;
+            result.Next = page.Next;
+            result.Previous = page.Previous;
+
+            var items = new List<TrackDto>();
+            if (page.Items != null)
+            {
+                foreach (var item in page.Items)
+                {
+                    if (item.Track is FullTrack fullTrack)
+                    {
+                        var artistNames = fullTrack.Artists != null ? string.Join(", ", fullTrack.Artists.Select(ar => ar?.Name).Where(n => !string.IsNullOrWhiteSpace(n))) : null;
+                        items.Add(new TrackDto
+                        {
+                            Id = fullTrack.Id,
+                            Name = fullTrack.Name,
+                            Artists = artistNames,
+                            AlbumName = fullTrack.Album?.Name,
+                            DurationMs = fullTrack.DurationMs,
+                            Href = fullTrack.Href,
+                            Uri = fullTrack.Uri,
+                            AlbumImageUrl = fullTrack.Album?.Images?.FirstOrDefault()?.Url
+                        });
+                    }
+                }
+            }
+            result.Items = items;
+            return result;
         }
 
         /// <summary>

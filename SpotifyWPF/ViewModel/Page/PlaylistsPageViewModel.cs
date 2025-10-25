@@ -121,6 +121,7 @@ namespace SpotifyWPF.ViewModel.Page
                     
                     // Immediately stop the loading state for UI responsiveness
                     _isLoadingPlaylists = false;
+                    _isDeletingPlaylists = false;
                     UpdateLoadingUiState();
                 },
                 () => CanStop
@@ -744,42 +745,101 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
-                // Use parallel processing for better performance
-                const int maxWorkers = 8;
+                // Use parallel processing for better performance, with conservative rate limiting
+                const int maxWorkers = 6;
+                const int delayBetweenRequestsMs = 1000;
                 var workersCount = Math.Min(maxWorkers, playlists.Count);
                 var playlistsQueue = new ConcurrentQueue<PlaylistDto>(playlists);
                 var workers = new List<Task>();
 
                 for (var w = 0; w < workersCount; w++)
                 {
+                    var workerId = w; // Capture for logging
                     workers.Add(Task.Run(async () =>
                     {
+                        System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} started");
+                        var processedCount = 0;
+                        
                         while (playlistsQueue.TryDequeue(out var playlist))
                         {
-                            try
+                            if (_cancelRequested) 
                             {
-                                if (ownedPlaylists.Contains(playlist))
-                                {
-                                    // Delete owned playlist
-                                    await _spotify.DeletePlaylistAsync(playlist.Id!);
-                                }
-                                else
-                                {
-                                    // Unfollow not owned playlist
-                                    await _spotify.UnfollowPlaylistAsync(playlist.Id!);
-                                }
+                                System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} stopped: cancellation requested (processed {processedCount} playlists)");
+                                break;
+                            }
 
-                                // Remove from UI
-                                await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
-                                {
-                                    Playlists.Remove(playlist);
-                                    _playlistIds.Remove(playlist.Id!);
-                                }));
-                            }
-                            catch (Exception ex)
+                            // Retry logic for individual playlist operations
+                            const int maxPlaylistAttempts = 3;
+                            var playlistSuccess = false;
+                            
+                            for (var attempt = 1; attempt <= maxPlaylistAttempts && !playlistSuccess; attempt++)
                             {
-                                System.Diagnostics.Debug.WriteLine($"Failed to delete/unfollow playlist '{playlist.Name}': {ex.Message}");
+                                try
+                                {
+                                    if (ownedPlaylists.Contains(playlist))
+                                    {
+                                        // Delete owned playlist
+                                        await _spotify.DeletePlaylistAsync(playlist.Id!);
+                                    }
+                                    else
+                                    {
+                                        // Unfollow not owned playlist
+                                        await _spotify.UnfollowPlaylistAsync(playlist.Id!);
+                                    }
+
+                                    processedCount++;
+                                    System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} successfully processed playlist '{playlist.Name}' ({processedCount} total)");
+
+                                    // Remove from UI
+                                    await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                                    {
+                                        Playlists.Remove(playlist);
+                                        _playlistIds.Remove(playlist.Id!);
+                                        RaisePropertyChanged(nameof(PlaylistsHeader));
+                                    }));
+
+                                    playlistSuccess = true;
+
+                                    // Slow down subsequent calls to respect rate limits
+                                    var delay = delayBetweenRequestsMs + Random.Shared.Next(0, 250);
+                                    await Task.Delay(delay);
+                                }
+                                catch (Exception ex)
+                                {
+                                    var isRetryableError = ex.Message.Contains("502") || 
+                                                          ex.Message.Contains("500") || 
+                                                          ex.Message.Contains("503") || 
+                                                          ex.Message.Contains("504") ||
+                                                          ex.Message.Contains("Bad Gateway") ||
+                                                          ex.Message.Contains("Internal Server Error") ||
+                                                          ex.Message.Contains("Service Unavailable") ||
+                                                          ex.Message.Contains("Gateway Timeout");
+                                    
+                                    if (isRetryableError && attempt < maxPlaylistAttempts)
+                                    {
+                                        var backoffDelay = (int)(Math.Pow(2, attempt - 1) * 1000); // 1s, 2s, 4s
+                                        System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} retrying playlist '{playlist.Name}' in {backoffDelay}ms (attempt {attempt}/{maxPlaylistAttempts}): {ex.Message}");
+                                        await Task.Delay(backoffDelay);
+                                    }
+                                    else
+                                    {
+                                        if (isRetryableError)
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} failed to delete/unfollow playlist '{playlist.Name}' after {maxPlaylistAttempts} attempts: {ex.Message}");
+                                        }
+                                        else
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} failed to delete/unfollow playlist '{playlist.Name}' (non-retryable error): {ex.Message}");
+                                        }
+                                        break; // Don't retry non-retryable errors or max attempts reached
+                                    }
+                                }
                             }
+                        }
+                        
+                        if (!_cancelRequested)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} stopped: queue empty (processed {processedCount} playlists)");
                         }
                     }));
                 }

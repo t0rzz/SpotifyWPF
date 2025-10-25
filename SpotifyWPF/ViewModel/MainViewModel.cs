@@ -26,6 +26,7 @@ namespace SpotifyWPF.ViewModel
     private readonly LoginPageViewModel _loginPageViewModel;
         private readonly PlaylistsPageViewModel _playlistsPageViewModel;
         private readonly AlbumsPageViewModel _albumsPageViewModel;
+        private readonly PlaylistManagerPageViewModel _playlistManagerPageViewModel;
         private readonly DispatcherTimer _devicesRefreshTimer;
         private bool _isRefreshingDevicesMenu;
 
@@ -36,6 +37,7 @@ namespace SpotifyWPF.ViewModel
             PlaylistsPageViewModel playlistsPageViewModel,
             SearchPageViewModel searchPageViewModel,
             AlbumsPageViewModel albumsPageViewModel,
+            PlaylistManagerPageViewModel playlistManagerPageViewModel,
             ISpotify spotify,
             IMessageBoxService messageBoxService)
         {
@@ -43,6 +45,7 @@ namespace SpotifyWPF.ViewModel
             _playlistsPageViewModel = playlistsPageViewModel;
             _searchPageViewModel = searchPageViewModel;
             _albumsPageViewModel = albumsPageViewModel;
+            _playlistManagerPageViewModel = playlistManagerPageViewModel;
             _spotify = spotify;
             _mb = messageBoxService;
 
@@ -75,6 +78,8 @@ namespace SpotifyWPF.ViewModel
                         new MenuItemViewModel("Playlists",
                             new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)) {IsChecked = true},
                         new MenuItemViewModel("Albums",
+                            new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)),
+                        new MenuItemViewModel("Playlist Manager",
                             new RelayCommand<MenuItemViewModel>(SwitchViewFromMenuItem)),
                     }
                 },
@@ -250,6 +255,9 @@ namespace SpotifyWPF.ViewModel
                     break;
                 case "Albums":
                     CurrentPage = _albumsPageViewModel;
+                    break;
+                case "Playlist Manager":
+                    CurrentPage = _playlistManagerPageViewModel;
                     break;
                 default:
                     return;
