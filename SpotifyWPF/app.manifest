@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.1.4.0" name="SpotifyWPF.app" />
+  <!-- Trigger GitHub Actions workflow -->
 
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
