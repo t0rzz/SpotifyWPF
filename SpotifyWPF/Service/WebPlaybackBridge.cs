@@ -5,6 +5,7 @@ using System.Linq;
 using System.Globalization;
 using System.Threading.Tasks;
 using System.Text.Json;
+using System.Windows;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using SpotifyWPF.Model;
@@ -16,7 +17,7 @@ namespace SpotifyWPF.Service
     /// </summary>
     public class WebPlaybackBridge : IWebPlaybackBridge, IDisposable
     {
-        private readonly WebView2 _webView;
+        private readonly WebView2? _webView;
         private readonly ILoggingService _loggingService;
         private string _webPlaybackDeviceId = string.Empty;
         private bool _isInitialized = false;
@@ -25,6 +26,10 @@ namespace SpotifyWPF.Service
         {
             _webView = webView ?? throw new ArgumentNullException(nameof(webView));
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
+            
+            LoggingService.LogToFile("WebPlaybackBridge constructor called\n");
+            LoggingService.LogToFile($"WebPlaybackBridge: WebView2 is null: {_webView == null}\n");
+            LoggingService.LogToFile($"WebPlaybackBridge: WebView2.CoreWebView2 is null: {_webView?.CoreWebView2 == null}\n");
         }
 
         public event Action<PlayerState>? OnPlayerStateChanged;
@@ -43,133 +48,89 @@ namespace SpotifyWPF.Service
         /// </summary>
         public async Task InitializeAsync(string accessToken, string localHtmlPath)
         {
-            if (_isInitialized) return;
+            if (_isInitialized)
+            {
+                LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - Already initialized, updating token only\n");
+                // If already initialized, just update the token on UI thread
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        var initScript = $"window.initializePlayer('{accessToken}');";
+                        var initResult = await _webView.CoreWebView2.ExecuteScriptAsync(initScript);
+                        LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Token updated: {initResult}\n");
+                    }
+                });
+                return;
+            }
 
-            System.Diagnostics.Debug.WriteLine("WebPlaybackBridge.InitializeAsync - Starting");
-            
+            LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - Starting\n");
+
             try
             {
-                // Create a user data folder in a writable location to avoid access denied errors
-                var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                var userDataFolder = Path.Combine(appDataPath, "SpotifyWPF", "WebView2");
-                
-                // Ensure the directory exists
-                Directory.CreateDirectory(userDataFolder);
-                
-                System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.InitializeAsync - Using user data folder: {userDataFolder}");
-                
-                // Check if WebView2 is already initialized
-                bool isFirstInit = _webView.CoreWebView2 == null;
-                if (isFirstInit)
+                // Ensure all WebView2 operations are performed on the UI thread
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
-                    System.Diagnostics.Debug.WriteLine("WebPlaybackBridge.InitializeAsync - Initializing WebView2 for first time");
-                    // Initialize WebView2 with custom environment
-                    var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
-                    var environment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
-                    await _webView.EnsureCoreWebView2Async(environment);
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("WebPlaybackBridge.InitializeAsync - WebView2 already initialized, skipping");
-                }
-                
-                System.Diagnostics.Debug.WriteLine("WebPlaybackBridge.InitializeAsync - CoreWebView2 ensured");
-
-                // Configure WebView2 settings (only if not already configured)
-                if (_webView.CoreWebView2 != null)
-                {
-                    _webView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
-                    // Disable DevTools for normal usage
-                    _webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
-                    
-                    // Ensure audio is allowed and not muted
-                    _webView.CoreWebView2.IsMuted = false;
-                
-                    // **CRITICAL: Set Chrome User-Agent for Spotify compatibility**
-                    _webView.CoreWebView2.Settings.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-                    System.Diagnostics.Debug.WriteLine($"🌐 WebView2 User-Agent set to Chrome for Spotify compatibility");
-                    
-                    // **NEW: Enable external resource loading**
-                    _webView.CoreWebView2.Settings.IsGeneralAutofillEnabled = true;
-                    _webView.CoreWebView2.Settings.IsPasswordAutosaveEnabled = false;
-                    _webView.CoreWebView2.Settings.IsSwipeNavigationEnabled = false;
-                    
-                    // Allow media playback as much as possible
-                    _webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-                    
-                    // Grant media permissions
-                    _webView.CoreWebView2.PermissionRequested += (s, e) =>
+                    // Wait for CoreWebView2 to be available if it's not already
+                    if (_webView == null || _webView.CoreWebView2 == null)
                     {
-                        if (e.PermissionKind == CoreWebView2PermissionKind.Camera ||
-                            e.PermissionKind == CoreWebView2PermissionKind.Microphone)
+                        LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - CoreWebView2 is null, waiting...\n");
+                        int attempts = 0;
+                        while ((_webView == null || _webView.CoreWebView2 == null) && attempts < 100) // Max 10 seconds
                         {
-                            e.State = CoreWebView2PermissionState.Allow;
-                        }
-                    };
-                    
-                    // **NEW: Allow all web resource requests (including external CDN)**
-                    _webView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-                    _webView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
-
-                    // Subscribe to web messages from JavaScript
-                    _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-
-                    // Try to clear cached data to avoid stale JS/HTML being used
-                    try
-                    {
-                        // Use a version-tolerant approach: prefer "All" when available, otherwise OR known kinds by reflection
-                        CoreWebView2BrowsingDataKinds kinds;
-                        if (Enum.TryParse("All", out kinds))
-                        {
-                            _ = _webView.CoreWebView2.Profile.ClearBrowsingDataAsync(kinds);
-                        }
-                        else
-                        {
-                            // Build a combined mask of commonly used kinds if "All" is not present in this SDK version
-                            ulong combined = 0UL;
-                            string[] names = new[] { "Cookies", "CacheStorage", "DomStorage", "FileSystems", "IndexedDb", "ServiceWorkers", "WebSql", "AllSite" };
-                            foreach (var name in names)
+                            await Task.Delay(100);
+                            attempts++;
+                            if (attempts % 10 == 0) // Log every second
                             {
-                                if (Enum.TryParse(typeof(CoreWebView2BrowsingDataKinds), name, out var valueObj) && valueObj is Enum)
-                                {
-                                    combined |= Convert.ToUInt64(valueObj);
-                                }
-                            }
-
-                            if (combined != 0UL)
-                            {
-                                var combinedKinds = (CoreWebView2BrowsingDataKinds)combined;
-                                _ = _webView.CoreWebView2.Profile.ClearBrowsingDataAsync(combinedKinds);
+                                LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Still waiting for CoreWebView2... attempt {attempts}\n");
                             }
                         }
 
-                        System.Diagnostics.Debug.WriteLine("🧹 Requested WebView2 cache clear (Profile.ClearBrowsingDataAsync)");
+                        if (_webView == null || _webView.CoreWebView2 == null)
+                        {
+                            throw new InvalidOperationException("CoreWebView2 is still null after waiting");
+                        }
+                        LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - CoreWebView2 is now available\n");
                     }
-                    catch (Exception cacheEx)
+                    else
                     {
-                        System.Diagnostics.Debug.WriteLine($"⚠️ Could not clear WebView2 cache: {cacheEx.Message}");
+                        LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - CoreWebView2 already available\n");
                     }
-                }
 
-                // Navigate to the player HTML (only on first init)
-                if (isFirstInit)
-                {
-                    System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.InitializeAsync - Navigating to: {localHtmlPath}");
-                    if (_webView.CoreWebView2 != null)
+                    // Check if WebView2 is already initialized at the control level
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - WebView2 control already initialized by MainWindow, configuring for playback\n");
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("WebView2 should be initialized by MainWindow first");
+                    }
+
+                    LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - CoreWebView2 ensured\n");
+
+                    // Configure WebView2 settings (only if not already configured)
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        // Subscribe to web messages from JavaScript (only if not already subscribed)
+                        _webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+
+                        LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - WebMessageReceived handler attached\n");
+                    }                    // Navigate to the player HTML file
+                    LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Navigating to: {localHtmlPath}\n");
+                    if (_webView != null && _webView.CoreWebView2 != null)
                     {
                         try
                         {
-                            // Map a virtual HTTPS host to the local app directory to satisfy EME/CORS if needed
-                            var appDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!;
-                            _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                                "app",
-                                appDir,
-                                CoreWebView2HostResourceAccessKind.Allow);
-                            // Use https://app for local assets
-                            // Append a cache-busting query to avoid stale cached HTML/JS
-                            var cacheBust = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                            var httpsUrl = $"https://app/Assets/player.html?v={cacheBust}";
-                            _webView.CoreWebView2.Navigate(httpsUrl);
+                            // Navigate directly to the file URL for now to avoid virtual host mapping issues
+                            var assemblyDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!;
+                            var binDir = Path.GetDirectoryName(assemblyDir)!;
+                            var debugDir = Path.GetDirectoryName(binDir)!;
+                            var projectDir = Path.GetDirectoryName(debugDir)!;
+                            var playerHtmlPath = Path.Combine(projectDir, "Assets", "player.html");
+                            var fileUrl = $"file:///{playerHtmlPath.Replace("\\", "/")}";
+                            LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Navigating to: {fileUrl}\n");
+                            _webView.CoreWebView2.Navigate(fileUrl);
                         }
                         catch
                         {
@@ -178,32 +139,36 @@ namespace SpotifyWPF.Service
                         }
                     }
 
-                    // Wait for navigation to complete (only on first init)
-                    await WaitForNavigationComplete();
-                    System.Diagnostics.Debug.WriteLine("WebPlaybackBridge.InitializeAsync - Navigation complete");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("WebPlaybackBridge.InitializeAsync - Skipping navigation (already initialized)");
-                }
+                    // Wait for navigation to complete (or just delay for file URLs)
+                    try
+                    {
+                        await WaitForNavigationComplete();
+                        LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - Navigation complete\n");
+                    }
+                    catch (Exception navEx)
+                    {
+                        LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Navigation wait failed: {navEx.Message}, continuing anyway\n");
+                        await Task.Delay(1000); // Give it a second to load
+                    }
 
-                // Initialize the player with access token
-                // CRITICAL: Get fresh token to ensure it's valid for Web Playback SDK
-                System.Diagnostics.Debug.WriteLine("🔑 Using provided access token for player initialization");
-                var initScript = $"window.initializePlayer('{accessToken}');";
-                System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.InitializeAsync - Calling initializePlayer script");
-                
-                if (_webView.CoreWebView2 != null)
-                {
-                    var initResult = await _webView.CoreWebView2.ExecuteScriptAsync(initScript);
-                    System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.InitializeAsync - InitializePlayer returned: {initResult}");
-                }
+                    // Initialize the player with access token
+                    // CRITICAL: Get fresh token to ensure it's valid for Web Playback SDK
+                    LoggingService.LogToFile("🔑 Using provided access token for player initialization\n");
+                    var initScript = $"window.initializePlayer('{accessToken}');";
+                    LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Calling initializePlayer script\n");
+
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        var initResult = await _webView.CoreWebView2.ExecuteScriptAsync(initScript);
+                        LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - InitializePlayer returned: {initResult}\n");
+                    }
+                });
 
                 _isInitialized = true;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.InitializeAsync failed: {ex.Message}");
+                LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync failed: {ex.Message}\n");
                 throw;
             }
         }
@@ -214,17 +179,27 @@ namespace SpotifyWPF.Service
         public async Task ConnectAsync()
         {
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
-            
+
             System.Diagnostics.Debug.WriteLine("WebPlaybackBridge.ConnectAsync - Calling JavaScript connect()");
-            
+
             try
             {
-                var result = await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.connect()");
-                System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.ConnectAsync - JavaScript returned: {result}");
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        var result = await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.connect()");
+                        LoggingService.LogToFile($"WebPlaybackBridge.ConnectAsync - JavaScript returned: {result}\n");
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("WebView2 CoreWebView2 is null");
+                    }
+                });
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.ConnectAsync error: {ex.Message}");
+                LoggingService.LogToFile($"WebPlaybackBridge.ConnectAsync error: {ex.Message}\n");
                 throw;
             }
         }
@@ -243,14 +218,20 @@ namespace SpotifyWPF.Service
         public async Task UpdateTokenAsync(string newAccessToken)
         {
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
-            
+
             System.Diagnostics.Debug.WriteLine("🔑 Updating player token...");
-            
+
             try
             {
-                var script = $"window.spotifyBridge && window.spotifyBridge.updateToken && window.spotifyBridge.updateToken('{newAccessToken}')";
-                var result = await _webView.CoreWebView2.ExecuteScriptAsync(script);
-                System.Diagnostics.Debug.WriteLine($"🔑 Token update result: {result}");
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        var script = $"window.spotifyBridge && window.spotifyBridge.updateToken && window.spotifyBridge.updateToken('{newAccessToken}')";
+                        var result = await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                        System.Diagnostics.Debug.WriteLine($"🔑 Token update result: {result}");
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -267,18 +248,24 @@ namespace SpotifyWPF.Service
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
 
             var urisArray = uris.ToArray();
-            
+
             try
             {
-                // CRITICAL: Enable audio context first for modern browsers
-                await _webView.CoreWebView2.ExecuteScriptAsync("window.enableSpotifyAudio && window.enableSpotifyAudio()");
-                
-                var urisJson = JsonSerializer.Serialize(urisArray);
-                var escapedJson = urisJson.Replace("\\", "\\\\").Replace("'", "\\'");
-                var script = $"window.spotifyBridge.play({escapedJson})";
-                
-                var result = await _webView.CoreWebView2.ExecuteScriptAsync(script);
-                System.Diagnostics.Debug.WriteLine($"🎵 Play command sent: {result}");
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        // CRITICAL: Enable audio context first for modern browsers
+                        await _webView.CoreWebView2.ExecuteScriptAsync("window.enableSpotifyAudio && window.enableSpotifyAudio()");
+
+                        var urisJson = JsonSerializer.Serialize(urisArray);
+                        var escapedJson = urisJson.Replace("\\", "\\\\").Replace("'", "\\'");
+                        var script = $"window.spotifyBridge.play({escapedJson})";
+
+                        var result = await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                        System.Diagnostics.Debug.WriteLine($"🎵 Play command sent: {result}");
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -293,11 +280,25 @@ namespace SpotifyWPF.Service
         public async Task PauseAsync()
         {
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
-            
-            // Enable audio context for user interaction
-            await _webView.CoreWebView2.ExecuteScriptAsync("window.enableSpotifyAudio && window.enableSpotifyAudio()");
-            
-            await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.pause()");
+
+            try
+            {
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        // Enable audio context for user interaction
+                        await _webView.CoreWebView2.ExecuteScriptAsync("window.enableSpotifyAudio && window.enableSpotifyAudio()");
+
+                        await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.pause()");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ PauseAsync error: {ex.Message}");
+                throw;
+            }
         }
 
         /// <summary>
@@ -306,11 +307,25 @@ namespace SpotifyWPF.Service
         public async Task ResumeAsync()
         {
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
-            
-            // Enable audio context for user interaction
-            await _webView.CoreWebView2.ExecuteScriptAsync("window.enableSpotifyAudio && window.enableSpotifyAudio()");
-            
-            await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.resume()");
+
+            try
+            {
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        // Enable audio context for user interaction
+                        await _webView.CoreWebView2.ExecuteScriptAsync("window.enableSpotifyAudio && window.enableSpotifyAudio()");
+
+                        await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.resume()");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ ResumeAsync error: {ex.Message}");
+                throw;
+            }
         }
 
         /// <summary>
@@ -319,9 +334,23 @@ namespace SpotifyWPF.Service
         public async Task SeekAsync(int positionMs)
         {
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
-            
-            var script = $"window.spotifyBridge.seek({positionMs})";
-            await _webView.CoreWebView2.ExecuteScriptAsync(script);
+
+            try
+            {
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        var script = $"window.spotifyBridge.seek({positionMs})";
+                        await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ SeekAsync error: {ex.Message}");
+                throw;
+            }
         }
 
         /// <summary>
@@ -330,12 +359,26 @@ namespace SpotifyWPF.Service
         public async Task SetVolumeAsync(double volume)
         {
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
-            
-            // Use invariant culture and higher precision to avoid unintended zeroing at low volumes
-            var volString = volume.ToString("0.#####", CultureInfo.InvariantCulture);
-            var script = $"window.spotifyBridge.setVolume({volString})";
-            System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge: setVolume({volString})");
-            await _webView.CoreWebView2.ExecuteScriptAsync(script);
+
+            try
+            {
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    if (_webView != null && _webView.CoreWebView2 != null)
+                    {
+                        // Use invariant culture and higher precision to avoid unintended zeroing at low volumes
+                        var volString = volume.ToString("0.#####", CultureInfo.InvariantCulture);
+                        var script = $"window.spotifyBridge.setVolume({volString})";
+                        System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge: setVolume({volString})");
+                        await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ SetVolumeAsync error: {ex.Message}");
+                throw;
+            }
         }
 
         /// <summary>
@@ -344,37 +387,45 @@ namespace SpotifyWPF.Service
         public async Task<PlayerState?> GetStateAsync()
         {
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
-            
+
             try
             {
-                var result = await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.getState()");
-                if (string.IsNullOrWhiteSpace(result) || result == "null")
-                    return null;
-
-                // WebView2 returns a JSON representation as a string. If it's quoted, unescape first.
-                string json;
-                if (result.Length > 0 && result[0] == '"')
+                PlayerState? result = null;
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
-                    // Deserialize to string to unescape inner JSON
-                    try
+                    if (_webView != null && _webView.CoreWebView2 != null)
                     {
-                        json = JsonSerializer.Deserialize<string>(result) ?? string.Empty;
-                    }
-                    catch
-                    {
-                        // Fallback: trim quotes if deserialization fails
-                        json = result.Trim('"');
-                    }
-                }
-                else
-                {
-                    json = result;
-                }
+                        var scriptResult = await _webView.CoreWebView2.ExecuteScriptAsync("window.spotifyBridge.getState()");
+                        if (string.IsNullOrWhiteSpace(scriptResult) || scriptResult == "null")
+                            return;
 
-                if (string.IsNullOrWhiteSpace(json) || json == "null")
-                    return null;
+                        // WebView2 returns a JSON representation as a string. If it's quoted, unescape first.
+                        string json;
+                        if (scriptResult.Length > 0 && scriptResult[0] == '"')
+                        {
+                            // Deserialize to string to unescape inner JSON
+                            try
+                            {
+                                json = JsonSerializer.Deserialize<string>(scriptResult) ?? string.Empty;
+                            }
+                            catch
+                            {
+                                // Fallback: trim quotes if deserialization fails
+                                json = scriptResult.Trim('"');
+                            }
+                        }
+                        else
+                        {
+                            json = scriptResult;
+                        }
 
-                return JsonSerializer.Deserialize<PlayerState>(json);
+                        if (string.IsNullOrWhiteSpace(json) || json == "null")
+                            return;
+
+                        result = JsonSerializer.Deserialize<PlayerState>(json);
+                    }
+                });
+                return result;
             }
             catch (Exception ex)
             {
@@ -390,13 +441,13 @@ namespace SpotifyWPF.Service
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"=== OnWebMessageReceived CALLED ===");
+                LoggingService.LogToFile($"=== OnWebMessageReceived CALLED ===\n");
                 var message = e.TryGetWebMessageAsString();
-                System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge received message: {message}");
+                LoggingService.LogToFile($"WebPlaybackBridge received message: {message}\n");
 
                 if (string.IsNullOrEmpty(message)) 
                 {
-                    System.Diagnostics.Debug.WriteLine("Message is null or empty!");
+                    LoggingService.LogToFile("Message is null or empty!\n");
                     return;
                 }
 
@@ -405,8 +456,8 @@ namespace SpotifyWPF.Service
                 if (messageJson.TryGetProperty("type", out var typeProperty))
                 {
                     var messageType = typeProperty.GetString();
-                    System.Diagnostics.Debug.WriteLine($"=== WebPlaybackBridge message received ===");
-                    System.Diagnostics.Debug.WriteLine($"Message type: {messageType}");
+                    LoggingService.LogToFile($"=== WebPlaybackBridge message received ===\n");
+                    LoggingService.LogToFile($"Message type: {messageType}\n");
                     
                     switch (messageType)
                     {
@@ -414,7 +465,7 @@ namespace SpotifyWPF.Service
                             if (messageJson.TryGetProperty("device_id", out var deviceProperty))
                             {
                                 var deviceId = deviceProperty.GetString() ?? string.Empty;
-                                System.Diagnostics.Debug.WriteLine($"🎵 WebPlaybackBridge received device ID: {deviceId}");
+                                LoggingService.LogToFile($"🎵 WebPlaybackBridge received device ID: {deviceId}\n");
                                 _webPlaybackDeviceId = deviceId;
                                 OnReadyDeviceId?.Invoke(deviceId);
                             }
@@ -423,25 +474,25 @@ namespace SpotifyWPF.Service
                         case "state":
                             if (messageJson.TryGetProperty("state", out var stateProperty))
                             {
-                                System.Diagnostics.Debug.WriteLine($"📡 WebPlaybackBridge received state update: {stateProperty.GetRawText()}");
+                                LoggingService.LogToFile($"📡 WebPlaybackBridge received state update: {stateProperty.GetRawText()}\n");
                                 
                                 try
                                 {
                                     var playerState = JsonSerializer.Deserialize<PlayerState>(stateProperty.GetRawText());
                                     if (playerState != null)
                                     {
-                                        System.Diagnostics.Debug.WriteLine($"🎵 Parsed player state - Track: {playerState.TrackName}, Playing: {playerState.IsPlaying}, Position: {playerState.PositionMs}ms");
+                                        LoggingService.LogToFile($"🎵 Parsed player state - Track: {playerState.TrackName}, Playing: {playerState.IsPlaying}, Position: {playerState.PositionMs}ms\n");
                                         OnPlayerStateChanged?.Invoke(playerState);
                                     }
                                     else
                                     {
-                                        System.Diagnostics.Debug.WriteLine("⚠️ Player state is null");
+                                        LoggingService.LogToFile("⚠️ Player state is null\n");
                                     }
                                 }
                                 catch (JsonException jsonEx)
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"❌ Error deserializing player state: {jsonEx.Message}");
-                                    System.Diagnostics.Debug.WriteLine($"Raw JSON: {stateProperty.GetRawText()}");
+                                    LoggingService.LogToFile($"❌ Error deserializing player state: {jsonEx.Message}\n");
+                                    LoggingService.LogToFile($"Raw JSON: {stateProperty.GetRawText()}\n");
                                 }
                             }
                             break;
@@ -449,7 +500,7 @@ namespace SpotifyWPF.Service
                         case "state_changed": // Legacy support
                             if (messageJson.TryGetProperty("state", out var legacyStateProperty))
                             {
-                                System.Diagnostics.Debug.WriteLine($"📡 WebPlaybackBridge received legacy state_changed: {legacyStateProperty.GetRawText()}");
+                                LoggingService.LogToFile($"📡 WebPlaybackBridge received legacy state_changed: {legacyStateProperty.GetRawText()}\n");
                                 var playerState = JsonSerializer.Deserialize<PlayerState>(legacyStateProperty.GetRawText());
                                 if (playerState != null)
                                 {
@@ -462,24 +513,27 @@ namespace SpotifyWPF.Service
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"WebPlaybackBridge.OnWebMessageReceived error: {ex.Message}");
+                LoggingService.LogToFile($"WebPlaybackBridge.OnWebMessageReceived error: {ex.Message}\n");
             }
         }
 
-        /// <summary>
-        /// Wait for navigation to complete
-        /// </summary>
         private async Task WaitForNavigationComplete()
         {
             var completionSource = new TaskCompletionSource<bool>();
             
             void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
             {
-                _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                if (_webView != null && _webView.CoreWebView2 != null)
+                {
+                    _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                }
                 completionSource.SetResult(e.IsSuccess);
             }
             
-            _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+            if (_webView != null && _webView.CoreWebView2 != null)
+            {
+                _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+            }
             
             // Wait up to 10 seconds for navigation to complete
             var timeoutTask = Task.Delay(10000);
@@ -487,7 +541,10 @@ namespace SpotifyWPF.Service
             
             if (completedTask == timeoutTask)
             {
-                _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                if (_webView != null && _webView.CoreWebView2 != null)
+                {
+                    _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                }
                 throw new TimeoutException("Navigation timed out");
             }
             
@@ -511,7 +568,15 @@ namespace SpotifyWPF.Service
         }
 
         /// <summary>
-        /// Dispose implementation
+        /// Finalizer for safety net (though not strictly necessary for managed resources)
+        /// </summary>
+        ~WebPlaybackBridge()
+        {
+            Dispose(false);
+        }
+
+        /// <summary>
+        /// Dispose implementation with proper resource ordering
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {
@@ -520,21 +585,56 @@ namespace SpotifyWPF.Service
 
             if (disposing)
             {
-                // Dispose WebView2 resources
+                // Dispose managed resources in reverse order of creation/allocation
+
                 try
                 {
+                    // 1. First, clean up event handlers to prevent any further callbacks
                     if (_webView?.CoreWebView2 != null)
                     {
-                        // Remove event handlers
                         _webView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
                         _webView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _loggingService?.LogError($"Error disposing WebPlaybackBridge: {ex.Message}");
+                    LoggingService.LogToFile($"Error removing event handlers in WebPlaybackBridge.Dispose: {ex.Message}\n");
                 }
+
+                try
+                {
+                    // 2. Stop any ongoing WebView2 operations
+                    if (_webView?.CoreWebView2 != null)
+                    {
+                        _webView.CoreWebView2.Stop();
+
+                        // Navigate to blank page to stop any ongoing operations
+                        _webView.CoreWebView2.Navigate("about:blank");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.LogToFile($"Error stopping WebView2 operations in WebPlaybackBridge.Dispose: {ex.Message}\n");
+                }
+
+                try
+                {
+                    // 3. Dispose the WebView2 control itself
+                    _webView?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.LogToFile($"Error disposing WebView2 control in WebPlaybackBridge.Dispose: {ex.Message}\n");
+                }
+
+                // 4. Clear event handlers to prevent memory leaks
+                OnPlayerStateChanged = null;
+                OnReadyDeviceId = null;
             }
+
+            // 5. Reset state variables
+            _webPlaybackDeviceId = string.Empty;
+            _isInitialized = false;
 
             _disposed = true;
         }

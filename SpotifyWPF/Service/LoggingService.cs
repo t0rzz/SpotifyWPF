@@ -2,7 +2,9 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace SpotifyWPF.Service
 {
@@ -21,6 +23,7 @@ namespace SpotifyWPF.Service
     {
         private readonly ConcurrentQueue<LogEntry> _logEntries = new();
         private const int MaxLogEntries = 1000;
+        private static readonly object _fileLock = new object();
 
         public ObservableCollection<LogEntry> LogEntries { get; } = new();
 
@@ -49,6 +52,28 @@ namespace SpotifyWPF.Service
             var fullMessage = ex != null ? $"{message}: {ex.Message}" : message;
             AddLogEntry(LogLevel.Error, fullMessage, caller);
             System.Diagnostics.Debug.WriteLine($"[{caller}] ERROR: {fullMessage}");
+        }
+
+        /// <summary>
+        /// Thread-safe file logging to prevent concurrent access issues
+        /// </summary>
+        public static void LogToFile(string message, string filePath = @"d:\spotifywpf\debug.log")
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"LogToFile called with: {message.Trim()}");
+                lock (_fileLock)
+                {
+                    File.AppendAllText(filePath, message);
+                }
+                System.Diagnostics.Debug.WriteLine("LogToFile completed successfully");
+            }
+            catch (Exception ex)
+            {
+                // If file logging fails, fall back to debug output
+                System.Diagnostics.Debug.WriteLine($"File logging failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Original message: {message}");
+            }
         }
 
         private void AddLogEntry(LogLevel level, string message, string? caller)

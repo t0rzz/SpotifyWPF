@@ -143,6 +143,11 @@ namespace GalaSoft.MvvmLight.Command
                     RaiseCanExecuteChanged();
                     await _execute();
                 }
+                catch (Exception ex)
+                {
+                    // Log unobserved exceptions to prevent UnobservedTaskException
+                    System.Diagnostics.Debug.WriteLine($"AsyncRelayCommand.Execute error: {ex.Message}");
+                }
                 finally
                 {
                     _isExecuting = false;
@@ -188,6 +193,11 @@ namespace GalaSoft.MvvmLight.Command
                     RaiseCanExecuteChanged();
                     var param = ConvertParam(parameter);
                     await _execute(param);
+                }
+                catch (Exception ex)
+                {
+                    // Log unobserved exceptions to prevent UnobservedTaskException
+                    System.Diagnostics.Debug.WriteLine($"AsyncRelayCommand<T>.Execute error: {ex.Message}");
                 }
                 finally
                 {

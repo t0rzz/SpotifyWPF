@@ -1,0 +1,262 @@
+<Window x:Class="SpotifyWPF.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:SpotifyWPF.Views"
+        mc:Ignorable="d"
+        Title="Settings"
+        Height="600"
+        Width="600"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Icon="/icon.ico">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <local:BoolToBrushConverter x:Key="BoolToBrushConverter"/>
+            <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource CardBrush}"
+            BorderBrush="{DynamicResource ControlBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Margin="20">
+
+        <Grid>
+            <!-- Custom title bar -->
+            <Border Background="{DynamicResource SurfaceBrush}"
+                    Height="50"
+                    VerticalAlignment="Top"
+                    CornerRadius="12,12,0,0">
+                <Grid>
+                    <TextBlock Text="Settings"
+                               Foreground="{DynamicResource ControlForegroundBrush}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+
+                    <!-- Close button -->
+                    <Button x:Name="CloseButton"
+                            Content="✕"
+                            Width="30"
+                            Height="30"
+                            Background="Transparent"
+                            Foreground="{DynamicResource SubtleForegroundBrush}"
+                            BorderThickness="0"
+                            FontSize="14"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,15,0"
+                            Cursor="Hand"
+                            Click="CloseButton_Click">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="15">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource OnColorForegroundBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Main content -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Margin="0,50,0,80">
+                <StackPanel Margin="30,20,30,20">
+
+                    <!-- Performance Settings Section -->
+                    <TextBlock Text="Performance Settings"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryBrush}"
+                               Margin="0,15,0,10"
+                               FontFamily="Segoe UI"
+                               TextWrapping="Wrap"/>
+
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            CornerRadius="8"
+                            Padding="15"
+                            Margin="0,0,0,15">
+                        <StackPanel>
+                            <!-- Thread Count for Operations -->
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,0,0,15">
+                                <TextBlock Text="Max Threads for Operations:"
+                                           Width="180"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"
+                                           Foreground="{DynamicResource ControlForegroundBrush}"
+                                           FontFamily="Segoe UI"
+                                           TextWrapping="Wrap"/>
+                                <Border BorderThickness="1"
+                                        CornerRadius="3"
+                                        Background="{DynamicResource CardBrush}"
+                                        BorderBrush="{Binding IsMaxThreadsValid, Converter={StaticResource BoolToBrushConverter}, FallbackValue=#FFE91429}">
+                                    <TextBox x:Name="ThreadCountTextBox"
+                                             Width="80"
+                                             Height="30"
+                                             HorizontalAlignment="Left"
+                                             VerticalAlignment="Center"
+                                             VerticalContentAlignment="Center"
+                                             HorizontalContentAlignment="Center"
+                                             FontSize="14"
+                                             Padding="0"
+                                             Margin="0"
+                                             PreviewTextInput="ThreadCountTextBox_PreviewTextInput"
+                                             DataObject.Pasting="ThreadCountTextBox_Pasting"
+                                             Text="{Binding MaxThreadsForOperations, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Enter a number between 1 and 10"/>
+                                </Border>
+                                <TextBlock Text="Value must be between 1 and 10"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           Margin="5,0,0,0"
+                                           Foreground="{DynamicResource DangerBrush}"
+                                           Visibility="{Binding IsMaxThreadsValid, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           FontFamily="Segoe UI"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="(1-10)"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,10,0"
+                                           Foreground="{DynamicResource SubtleForegroundBrush}"
+                                           FontFamily="Segoe UI"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Text="Controls the maximum number of concurrent threads used for operations like playlist deletion, track removal, and bulk operations. Higher values may improve performance but could cause rate limiting."/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Future Settings Sections -->
+                    <TextBlock Text="General Settings"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource PrimaryBrush}"
+                               Margin="0,15,0,10"
+                               FontFamily="Segoe UI"
+                               TextWrapping="Wrap"/>
+
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            CornerRadius="8"
+                            Padding="15">
+                        <StackPanel>
+                            <!-- Default Market -->
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,0,0,15">
+                                <TextBlock Text="Default Market:"
+                                           Width="120"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"
+                                           Foreground="{DynamicResource ControlForegroundBrush}"
+                                           FontFamily="Segoe UI"
+                                           TextWrapping="Wrap"/>
+                                <TextBox Text="{Binding DefaultMarket}"
+                                         Width="100"
+                                         Height="30"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"
+                                         VerticalContentAlignment="Center"
+                                         HorizontalContentAlignment="Left"
+                                         FontSize="14"
+                                         Padding="8,0"
+                                         Margin="0"/>
+                                <TextBlock Text="(e.g., US, GB, DE)"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,0,0"
+                                           Foreground="{DynamicResource SubtleForegroundBrush}"
+                                           FontFamily="Segoe UI"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,15"
+                                       Text="Controls the market (country code) used for searching tracks, artists, albums, and playlists in 'Manage Tracks'. Leave empty to use your account's default country."/>
+
+                            <!-- Minimize to Tray on Close -->
+                            <CheckBox Content="Minimize to tray when closing window"
+                                      IsChecked="{Binding MinimizeToTrayOnClose}"
+                                      Margin="0,0,0,10"
+                                      FontSize="14"
+                                      Foreground="{DynamicResource ControlForegroundBrush}"
+                                      FontFamily="Segoe UI"/>
+
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,15"
+                                       Text="When enabled, clicking the window's close button (X) will minimize the application to the system tray instead of closing it completely. You can still exit the application from the tray icon menu."/>
+
+                            <TextBlock FontSize="13"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Text="Additional settings will be available in future updates."/>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Bottom button area -->
+            <Border Background="{DynamicResource SurfaceBrush}"
+                    Height="80"
+                    VerticalAlignment="Bottom"
+                    CornerRadius="0,0,12,12">
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <Button Content="Save"
+                            Width="100"
+                            Height="36"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Cursor="Hand"
+                            Margin="5"
+                            Click="SaveButton_Click"/>
+                    <Button Content="Cancel"
+                            Width="100"
+                            Height="36"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Cursor="Hand"
+                            Margin="5"
+                            Click="CancelButton_Click"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

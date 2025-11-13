@@ -2,6 +2,7 @@
 {
     public enum MessageType
     {
-        LoginSuccessful
+        LoginSuccessful,
+        AuthenticationRequired
     }
 }

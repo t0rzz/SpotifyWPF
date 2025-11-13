@@ -182,7 +182,7 @@
                                 </Grid>
                             </Border>
 
-                            <DataGrid x:Name="PlaylistsDataGrid" ItemsSource="{Binding FilteredPlaylists}" AutoGenerateColumns="False" CanUserAddRows="False" Height="240">
+                            <DataGrid x:Name="PlaylistsDataGrid" ItemsSource="{Binding FilteredPlaylists}" AutoGenerateColumns="False" CanUserAddRows="False" MaxHeight="240" ScrollViewer.VerticalScrollBarVisibility="Auto">
                             <DataGrid.InputBindings>
                                 <MouseBinding Gesture="LeftDoubleClick"
                                               Command="{Binding LoadTracksCommand}"
@@ -437,7 +437,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Users/Artists">
+            <TabItem Header="{Binding ArtistsHeader}">
                 <DockPanel>
                     <DockPanel.Resources>
                         <ContextMenu x:Key="ArtistsContextMenu" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}">
@@ -502,7 +502,58 @@
                         <Button Content="Stop" Command="{Binding StopLoadFollowedArtistsCommand}" Margin="0,0,8,0"/>
                         <Button Content="Unfollow Selected" Command="{Binding UnfollowArtistsCommand}" CommandParameter="{Binding ElementName=ArtistsDataGrid, Path=SelectedItems}"/>
                     </StackPanel>
-                    <DataGrid x:Name="ArtistsDataGrid" ItemsSource="{Binding FollowedArtists}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" Height="290" SelectionChanged="ArtistsDataGrid_SelectionChanged">
+
+                    <!-- Search Panel for Artists -->
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,8">
+                        <Grid Margin="8,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Search Icon -->
+                            <Viewbox Grid.Column="0" Width="16" Height="16" Margin="0,0,8,0">
+                                <Path Fill="{DynamicResource ControlForegroundBrush}" Opacity="0.6"
+                                      Data="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                            </Viewbox>
+
+                            <!-- Search TextBox -->
+                            <TextBox Grid.Column="1" x:Name="ArtistsSearchTextBox"
+                                     Text="{Binding ArtistsFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="Transparent" BorderThickness="0"
+                                     Foreground="{DynamicResource ControlForegroundBrush}"
+                                     FontSize="12" Padding="0"
+                                     VerticalContentAlignment="Center"
+                                     Tag="Filter artists by name...">
+                                <TextBox.Style>
+                                    <Style TargetType="TextBox">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="TextBox">
+                                                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                                                        <ScrollViewer x:Name="PART_ContentHost"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="Text" Value="">
+                                                <Setter Property="Foreground" Value="{DynamicResource ControlForegroundBrush}"/>
+                                                <Setter Property="Opacity" Value="0.6"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBox.Style>
+                            </TextBox>
+                        </Grid>
+                    </Border>
+
+                    <DataGrid x:Name="ArtistsDataGrid" ItemsSource="{Binding FilteredFollowedArtists}" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Extended" Height="290" SelectionChanged="ArtistsDataGrid_SelectionChanged">
+                        <DataGrid.InputBindings>
+                            <KeyBinding Key="Delete"
+                                        Command="{Binding UnfollowArtistsCommand}"
+                                        CommandParameter="{Binding ElementName=ArtistsDataGrid, Path=SelectedItems}"/>
+                        </DataGrid.InputBindings>
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow">
                                 <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>

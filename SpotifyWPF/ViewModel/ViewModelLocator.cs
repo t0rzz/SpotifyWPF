@@ -23,18 +23,23 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<ISpotify, Spotify>();
             SimpleIoc.Default.Register<IMessageBoxService, MessageBoxService>();
             SimpleIoc.Default.Register<IConfirmationDialogService, ConfirmationDialogService>();
+            SimpleIoc.Default.Register<IEditPlaylistDialogService, EditPlaylistDialogService>();
 
             SimpleIoc.Default.Register<MainViewModel>();
             SimpleIoc.Default.Register<LoginPageViewModel>();
             SimpleIoc.Default.Register<PlaylistsPageViewModel>();
+            SimpleIoc.Default.Register<PlaylistManagerPageViewModel>();
             SimpleIoc.Default.Register<SearchPageViewModel>();
             SimpleIoc.Default.Register<AlbumsPageViewModel>();
+            SimpleIoc.Default.Register<SettingsViewModel>();
             SimpleIoc.Default.Register(() => new StatusBarViewModel(SimpleIoc.Default.GetInstance<MainViewModel>()));
         }
 
         public MainViewModel Main => ServiceLocator.Current.GetInstance<MainViewModel>();
 
         public PlaylistsPageViewModel PlaylistsPage => ServiceLocator.Current.GetInstance<PlaylistsPageViewModel>();
+
+        public PlaylistManagerPageViewModel PlaylistManagerPage => ServiceLocator.Current.GetInstance<PlaylistManagerPageViewModel>();
 
         public SearchPageViewModel Search => ServiceLocator.Current.GetInstance<SearchPageViewModel>();
 

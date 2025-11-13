@@ -25,7 +25,10 @@ This repository contains **two implementations** of the same core Spotify manage
 ### **Core Features**
 - ✅ **Bulk playlist operations** (delete, unfollow, manage multiple playlists)
 - ✅ **Album management** (view saved albums, bulk deletion, sorting/filtering)
+- ✅ **Playlist creation & management** (create custom playlists, add tracks, set images/descriptions)
+- ✅ **Advanced search** (tracks, artists, albums, playlists with real-time results)
 - ✅ **Device management** (list devices, transfer playback, "Play To" functionality)
+- ✅ **Settings & configuration** (performance tuning, regional settings, window behavior)
 - ✅ **Artist management** (follow/unfollow, bulk operations)
 - ✅ **OAuth authentication** with Spotify
 - ✅ **Web Playback SDK integration** for local playback
@@ -46,6 +49,26 @@ This repository contains **two implementations** of the same core Spotify manage
 - Sort by name, artist, track count, or release date
 - Search and filter collection
 - Direct playback from management interface
+
+### Playlist Creation & Management
+- Create custom playlists with names, descriptions, and cover images
+- Advanced track search and selection across multiple content types
+- Playlist generation based on genres with configurable parameters
+- Track management within playlists (add, remove, reorder)
+- Support for public, private, and collaborative playlists
+- Generated playlist management and editing capabilities
+
+### Search & Discovery
+- Multi-type search across tracks, artists, albums, and playlists
+- Real-time search results with pagination
+- Context menu actions for search results
+- Advanced filtering and sorting options
+
+### Settings & Configuration
+- Performance optimization (thread count configuration)
+- Regional settings (default market/country)
+- Window behavior (minimize-to-tray options)
+- User preferences and customization
 
 ### Device Management & Playback
 - Automatic device discovery
@@ -194,25 +217,23 @@ chmod +x build_dmg.sh
 ### CI/CD
 The repository includes GitHub Actions workflows that automatically build both platforms. All builds are triggered on pushes to `main`/`master` branches and releases are automatically created with cross-platform artifacts.
 
-## 📋 Recent Changes (v3.0.7)
+## 📋 Recent Changes (v4.0.0)
 
 ### Cross-Platform Features
-- **Album Management Feature**: Complete album library management with saved albums viewing and bulk operations
-- **Enhanced UI Consistency**: Unified styling between playlists and albums sections with proper table layouts
-- **User Profile Integration**: Display user profile name and avatar in header when available
-- **Improved Error Handling**: Better handling of DELETE API responses and broken/missing images
-- **Responsive Design**: Enhanced mobile device support and layout improvements
+- **Enhanced Windows User Experience**: Global media key support, system tray functionality, and improved window management
+- **System Integration**: Seamless system tray integration with playback controls and window state preservation
+- **Global Media Keys**: System-wide hotkey support for play/pause, next track, previous track, and volume control
+- **Personalized User Experience**: Consistent user greeting display across all views with proper user name integration
+- **Playlist Manager**: Complete playlist creation and management system with advanced features
+- **Settings & Configuration**: Comprehensive settings window for performance and behavior customization
+- **Advanced Search**: Multi-type search functionality with real-time results and context menus
 
-### Windows-Specific (v3.0.7)
-- **Bulk Album Operations**: Delete multiple albums with confirmation dialogs and progress feedback
-- **Sortable Album Table**: Columns for name, artist, track count, and release date
-- **Real-time Search**: Album filtering and search functionality
-- **Album Playback**: Direct playback integration with Spotify Web Playback SDK
-
-### macOS-Specific (v3.0.7)
-- **Album Management UI**: Consistent table layouts and styling for album management
-- **Profile Display**: User avatar and name integration in macOS interface
-- **Enhanced Error Handling**: Improved API response handling for album operations
+### Windows-Specific (v4.0.0)
+- **Global Media Key Support**: Control playback from any application using system-wide hotkeys
+- **System Tray Integration**: Minimize to tray with playback controls and window state preservation
+- **Playlist Creation Tools**: Full-featured playlist manager with image upload and track selection
+- **User Settings**: Configurable performance settings, regional preferences, and window behavior
+- **Enhanced Albums View**: Personalized greeting with user name display instead of generic text
 
 ## 📁 Project Structure
 
@@ -275,4 +296,4 @@ This project is licensed under the GPL v3 License - see the [LICENSE](LICENSE) f
 
 ---
 
-*Last updated: October 1, 2025*
+*Last updated: November 14, 2025*

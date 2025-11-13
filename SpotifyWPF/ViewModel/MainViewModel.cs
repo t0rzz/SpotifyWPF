@@ -18,7 +18,7 @@ using SpotifyWPF.Views;
 
 namespace SpotifyWPF.ViewModel
 {
-    public class MainViewModel : ViewModelBase
+    public class MainViewModel : ViewModelBase, IDisposable
     {
     private readonly SearchPageViewModel _searchPageViewModel;
     private readonly ISpotify _spotify;
@@ -29,6 +29,7 @@ namespace SpotifyWPF.ViewModel
         private readonly PlaylistManagerPageViewModel _playlistManagerPageViewModel;
         private readonly DispatcherTimer _devicesRefreshTimer;
         private bool _isRefreshingDevicesMenu;
+        private bool _isPlayerInitialized;
 
         private ViewModelBase? _currentPage;
         private PlayerViewModel? _player;
@@ -59,6 +60,7 @@ namespace SpotifyWPF.ViewModel
             _devicesRefreshTimer.Tick += OnDevicesRefreshTimerTick;
 
             MessengerInstance.Register<object>(this, MessageType.LoginSuccessful, LoginSuccessful);
+            MessengerInstance.Register<object>(this, MessageType.AuthenticationRequired, OnAuthenticationRequired);
 
             MenuItems = new ObservableCollection<MenuItemViewModel>
             {
@@ -87,13 +89,7 @@ namespace SpotifyWPF.ViewModel
                 {
                     MenuItems = new ObservableCollection<MenuItemViewModel>()
                 },
-                new MenuItemViewModel("Debug", new RelayCommand(ShowDebugWindow))
-                {
-                    MenuItems = new ObservableCollection<MenuItemViewModel>
-                    {
-                        new MenuItemViewModel("Show Debug Console", new RelayCommand(ShowDebugWindow))
-                    }
-                }
+                new MenuItemViewModel("Settings", new RelayCommand(ShowSettings)),
             };
 
             // Help menu with About and Logout
@@ -168,15 +164,70 @@ namespace SpotifyWPF.ViewModel
                     });
                     
                     // Initialize devices and other data
-                    _ = LoadDevicesMenuAsync();
-                    _ = _playlistsPageViewModel.LoadGreetingAsync();
-                    _ = _playlistsPageViewModel.RefreshDevicesForTracksMenuAsync();
-                    
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await LoadDevicesMenuAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error loading devices menu: {ex.Message}");
+                        }
+                    });
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _playlistsPageViewModel.LoadGreetingAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error loading greeting: {ex.Message}");
+                        }
+                    });
+
+                    // Also load greeting for albums page
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _albumsPageViewModel.LoadGreetingAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error loading greeting for albums: {ex.Message}");
+                        }
+                    });
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _playlistsPageViewModel.RefreshDevicesForTracksMenuAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error refreshing devices for tracks menu: {ex.Message}");
+                        }
+                    });
+
                     // Set up logging for TracksDataGridViewModel in SearchPage
                     _searchPageViewModel.TracksDataGridViewModel.SetLogAction(msg => System.Diagnostics.Debug.WriteLine(msg));
-                    
+
                     // Initialize the player
-                    _ = InitializePlayerAfterLoginAsync();
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await InitializePlayerAfterLoginAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error initializing player: {ex.Message}");
+                        }
+                    });
                 }
                 else
                 {
@@ -194,21 +245,82 @@ namespace SpotifyWPF.ViewModel
         {
             CurrentPage = _playlistsPageViewModel;
             // Populate devices after login
-            _ = LoadDevicesMenuAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await LoadDevicesMenuAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error loading devices menu after login: {ex.Message}");
+                }
+            });
+
             // Load greeting/profile once logged in
-            _ = _playlistsPageViewModel.LoadGreetingAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _playlistsPageViewModel.LoadGreetingAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error loading greeting after login: {ex.Message}");
+                }
+            });
+
+            // Also load greeting for albums page
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _albumsPageViewModel.LoadGreetingAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error loading greeting for albums after login: {ex.Message}");
+                }
+            });
+
             // Also refresh devices collection used by Play To menu under Tracks grid
-            _ = _playlistsPageViewModel.RefreshDevicesForTracksMenuAsync();
-            
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _playlistsPageViewModel.RefreshDevicesForTracksMenuAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error refreshing devices for tracks menu after login: {ex.Message}");
+                }
+            });
+
             // Set up logging for TracksDataGridViewModel in SearchPage
             _searchPageViewModel.TracksDataGridViewModel.SetLogAction(msg => System.Diagnostics.Debug.WriteLine(msg));
-            
+
             // Start periodic devices refresh timer (every 30 seconds)
             _devicesRefreshTimer.Start();
             System.Diagnostics.Debug.WriteLine("Started periodic devices refresh timer (30 seconds interval)");
-            
+
             // Initialize the player after login
-            _ = InitializePlayerAfterLoginAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await InitializePlayerAfterLoginAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error initializing player after login: {ex.Message}");
+                }
+            });
+        }
+
+        private void OnAuthenticationRequired(object o)
+        {
+            // Navigate to login page when authentication is required
+            CurrentPage = _loginPageViewModel;
         }
 
         /// <summary>
@@ -216,26 +328,45 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         private async Task InitializePlayerAfterLoginAsync()
         {
+            // Prevent duplicate initialization
+            if (_isPlayerInitialized)
+            {
+                LoggingService.LogToFile("MainViewModel: Player already initialized, skipping duplicate call\n");
+                return;
+            }
+
             try
             {
-                // Find the MainWindow and initialize the player
-                var mainWindow = Application.Current.MainWindow as SpotifyWPF.Views.MainWindow;
+                LoggingService.LogToFile("MainViewModel: InitializePlayerAfterLoginAsync called\n");
+                
+                // Find the MainWindow - must be done on UI thread
+                var mainWindowTask = Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    return Application.Current.MainWindow as SpotifyWPF.Views.MainWindow;
+                });
+                var mainWindow = await mainWindowTask;
+                
                 if (mainWindow != null)
                 {
-                    await mainWindow.InitializePlayerAfterLoginAsync();
-
-                    // Ensure Player is set and proactively load Top Tracks
-                    if (Player != null)
+                    LoggingService.LogToFile("MainViewModel: Calling mainWindow.InitializePlayerAfterLoginAsync()\n");
+                    await Application.Current.Dispatcher.InvokeAsync(async () =>
                     {
-                        System.Diagnostics.Debug.WriteLine("MainViewModel: Loading user's top tracks after player init...");
-                        await Player.LoadTopTracksAsync();
-                    }
+                        await mainWindow.InitializePlayerAfterLoginAsync();
+                    });
+                    LoggingService.LogToFile("MainViewModel: mainWindow.InitializePlayerAfterLoginAsync() completed\n");
+                    
+                    // Mark as initialized
+                    _isPlayerInitialized = true;
+                }
+                else
+                {
+                    LoggingService.LogToFile("MainViewModel: MainWindow is null\n");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to initialize player: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"Player initialization error: {ex}");
+                LoggingService.LogToFile($"Failed to initialize player: {ex.Message}\n");
+                LoggingService.LogToFile($"Player initialization error: {ex}\n");
             }
         }
 
@@ -245,8 +376,29 @@ namespace SpotifyWPF.ViewModel
             {
                 case "Playlists":
                     CurrentPage = _playlistsPageViewModel;
-                    _ = _playlistsPageViewModel.LoadGreetingAsync();
-                    _ = _playlistsPageViewModel.RefreshDevicesForTracksMenuAsync();
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _playlistsPageViewModel.LoadGreetingAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error loading greeting in SwitchView: {ex.Message}");
+                        }
+                    });
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _playlistsPageViewModel.RefreshDevicesForTracksMenuAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error refreshing devices for tracks menu in SwitchView: {ex.Message}");
+                        }
+                    });
                     break;
                 case "Search":
                     CurrentPage = _searchPageViewModel;
@@ -255,6 +407,18 @@ namespace SpotifyWPF.ViewModel
                     break;
                 case "Albums":
                     CurrentPage = _albumsPageViewModel;
+                    // Load greeting when switching to albums view
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _albumsPageViewModel.LoadGreetingAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error loading greeting for albums: {ex.Message}");
+                        }
+                    });
                     break;
                 case "Playlist Manager":
                     CurrentPage = _playlistManagerPageViewModel;
@@ -507,18 +671,89 @@ namespace SpotifyWPF.ViewModel
             return false;
         }
 
-        private void ShowDebugWindow()
+        private void ShowSettings()
         {
             try
             {
-                var debugWindow = new SpotifyWPF.View.DebugWindow();
-                debugWindow.Show();
+                var settingsWindow = new SpotifyWPF.Views.SettingsWindow
+                {
+                    Owner = Application.Current.MainWindow
+                };
+                settingsWindow.ShowDialog();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Failed to show debug window: {ex.Message}");
-                _mb.ShowMessageBox($"Failed to open debug window: {ex.Message}", "Debug Window Error", MessageBoxButton.OK, MessageBoxIcon.Error);
+                System.Diagnostics.Debug.WriteLine($"Failed to show settings window: {ex.Message}");
+                _mb.ShowMessageBox($"Failed to open settings window: {ex.Message}", "Settings Window Error", MessageBoxButton.OK, MessageBoxIcon.Error);
             }
         }
+
+    #region IDisposable Implementation
+
+    private bool _disposed = false;
+
+    /// <summary>
+    /// Dispose resources used by the MainViewModel
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Finalizer for safety net
+    /// </summary>
+    ~MainViewModel()
+    {
+        Dispose(false);
+    }
+
+    /// <summary>
+    /// Dispose implementation with proper resource ordering
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Dispose managed resources in reverse order of typical usage/allocation
+
+            try
+            {
+                // 1. Stop timer first to prevent further callbacks
+                _devicesRefreshTimer?.Stop();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error stopping devices refresh timer: {ex.Message}");
+            }
+
+            try
+            {
+                // 2. Dispose Player ViewModel (most complex resource)
+                if (Player != null && Player is IDisposable disposablePlayer)
+                {
+                    disposablePlayer.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error disposing Player ViewModel: {ex.Message}");
+            }
+
+            // 3. Clear references to prevent memory leaks
+            _currentPage = null;
+            _player = null;
+        }
+
+        _disposed = true;
+    }
+
+    #endregion
 }
+}
+
+

@@ -97,4 +97,53 @@
             return viewModel.Result;
         }
     }
+
+    public interface IEditPlaylistDialogService
+    {
+        (bool? result, string name, bool isPublic) ShowEditPlaylistDialog(string currentName, bool currentIsPublic);
+    }
+
+    public class EditPlaylistDialogService : IEditPlaylistDialogService
+    {
+        public (bool? result, string name, bool isPublic) ShowEditPlaylistDialog(string currentName, bool currentIsPublic)
+        {
+            var dialog = new System.Windows.Window
+            {
+                Title = "Edit Playlist",
+                Content = new EditPlaylistDialog(),
+                SizeToContent = SizeToContent.WidthAndHeight,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                Topmost = true
+            };
+
+            // Set owner to main window for proper centering
+            var mainWindow = System.Windows.Application.Current.MainWindow;
+            if (mainWindow != null)
+            {
+                dialog.Owner = mainWindow;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+
+            var viewModel = new EditPlaylistDialogViewModel
+            {
+                PlaylistName = currentName,
+                IsPublic = currentIsPublic
+            };
+
+            var dialogControl = (EditPlaylistDialog)dialog.Content;
+            dialogControl.DataContext = viewModel;
+
+            // Set close action
+            viewModel.CloseAction = () => dialog.Close();
+
+            dialog.ShowDialog();
+
+            return (viewModel.Result, viewModel.PlaylistName, viewModel.IsPublic);
+        }
+    }
 }

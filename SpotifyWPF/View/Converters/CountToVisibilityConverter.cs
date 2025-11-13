@@ -12,16 +12,26 @@ namespace SpotifyWPF.View.Converters
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is int count && parameter is string mode)
+            if (value is int count)
             {
-                switch (mode)
+                if (parameter is string mode)
                 {
-                    case "single":
-                        return count == 1 ? Visibility.Visible : Visibility.Collapsed;
-                    case "multiple":
-                        return count > 1 ? Visibility.Visible : Visibility.Collapsed;
-                    default:
-                        return Visibility.Collapsed;
+                    switch (mode)
+                    {
+                        case "single":
+                            return count == 1 ? Visibility.Visible : Visibility.Collapsed;
+                        case "multiple":
+                            return count > 1 ? Visibility.Visible : Visibility.Collapsed;
+                        case "show":
+                            return count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                        default:
+                            return Visibility.Collapsed;
+                    }
+                }
+                else
+                {
+                    // Default behavior: show when count > 0
+                    return count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 }
             }
             return Visibility.Collapsed;

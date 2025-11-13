@@ -29,13 +29,15 @@ namespace SpotifyWPF.Service
         Task DeletePlaylistAsync(string playlistId);
         // Playlist management
         Task<PlaylistDto> CreatePlaylistAsync(string name, string description, bool isPublic, bool isCollaborative);
-        Task UploadPlaylistImageAsync(string playlistId, string imagePath);
+        Task UpdatePlaylistAsync(string playlistId, string name, bool isPublic);
+        Task UploadPlaylistImageAsync(string playlistId, string base64Image);
         Task<PagingDto<SearchResultDto>> SearchItemsPageAsync(string query, List<string> types, int offset, int limit);
         Task AddTracksToPlaylistAsync(string playlistId, IEnumerable<string> trackUris);
         Task<PagingDto<TrackDto>> GetPlaylistTracksPageAsync(string playlistId, int offset, int limit);
 
         // Playlist tracks management
         Task RemoveTracksFromPlaylistAsync(string playlistId, IEnumerable<string> trackUris);
+        Task ReorderPlaylistTracksAsync(string playlistId, int rangeStart, int insertBefore, int rangeLength = 1, string? snapshotId = null);
 
         // Saved albums management
         Task<PagingDto<AlbumDto>> GetMySavedAlbumsPageAsync(int offset, int limit);
@@ -57,6 +59,7 @@ namespace SpotifyWPF.Service
     Task<bool> SetShuffleAsync(bool state, string? deviceId = null);
     Task<bool> SetRepeatAsync(string state, string? deviceId = null);
     Task<bool> SkipToNextAsync(string? deviceId = null);
+    Task<bool> SkipToPrevAsync(string? deviceId = null);
 
     // Logout clears tokens and current client
     void Logout();
@@ -64,11 +67,20 @@ namespace SpotifyWPF.Service
     // Get current access token for Web Playback SDK
     Task<string?> GetCurrentAccessTokenAsync();
 
-    // Get user's top tracks from Spotify API
+        // Get user's top tracks from Spotify API
     Task<PagingDto<TrackDto>> GetUserTopTracksAsync(int limit = 20, int offset = 0, string timeRange = "medium_term");
 
         // Followed artists (cursor paging)
         Task<SpotifyWPF.Model.Dto.FollowedArtistsPage> GetFollowedArtistsPageAsync(string? after, int limit);
         Task UnfollowArtistsAsync(IEnumerable<string> artistIds);
+
+        // Get artist's top tracks
+        Task<List<TrackDto>> GetArtistTopTracksAsync(string artistId, string market = "US");
+
+        // Browse new releases
+        Task<PagingDto<AlbumDto>> GetNewReleasesPageAsync(int offset, int limit);
+
+        // Get album tracks
+        Task<List<TrackDto>> GetAlbumTracksAsync(string albumId);
     }
 }

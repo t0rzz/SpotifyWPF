@@ -22,9 +22,12 @@ namespace SpotifyWPF.Views
         private ViewModelLocator? _locator;
         private WebPlaybackBridge? _webPlaybackBridge;
         private ILoggingService? _loggingService;
+        private TaskCompletionSource<bool> _webView2Initialized = new TaskCompletionSource<bool>();
 
         public MainWindow()
         {
+            LoggingService.LogToFile("=== APPLICATION START ===\n");
+
             // Get logging service first
             var locatorObj = Application.Current?.Resources["Locator"];
             _locator = locatorObj as SpotifyWPF.ViewModel.ViewModelLocator;
@@ -34,15 +37,119 @@ namespace SpotifyWPF.Views
                 _loggingService = GalaSoft.MvvmLight.Ioc.SimpleIoc.Default.GetInstance<ILoggingService>();
             }
 
-            _loggingService?.LogInfo("MainWindow constructor called");
+            LoggingService.LogToFile("MainWindow constructor called\n");
             InitializeComponent();
             
             // Set window title with version
             SetWindowTitleWithVersion();
             
-            // Check for auto-login after the window is loaded
+            // Initialize WebView2 after the window is loaded (when controls are ready)
             this.Loaded += MainWindow_Loaded;
             this.Closed += MainWindow_Closed;
+            this.Closing += MainWindow_Closing;
+            this.StateChanged += MainWindow_StateChanged;
+        }
+
+        /// <summary>
+        /// Initialize WebView2 once for the lifetime of the application
+        /// </summary>
+        private async Task InitializeWebView2Async()
+        {
+            try
+            {
+                LoggingService.LogToFile("InitializeWebView2Async: Starting WebView2 initialization in Loaded event\n");
+
+                // Ensure WebView2 operations are performed on the UI thread
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Checking if already initialized\n");
+                    // Check if WebView2 is already initialized
+                    if (WebPlaybackWebView.CoreWebView2 != null)
+                    {
+                        LoggingService.LogToFile("InitializeWebView2Async: WebView2 already initialized, skipping\n");
+                        return;
+                    }
+
+                    LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Creating environment\n");
+
+                    // Create a user data folder in a writable location to avoid access denied errors
+                    var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                    var userDataFolder = Path.Combine(appDataPath, "SpotifyWPF", "WebView2");
+
+                    // Ensure the directory exists
+                    Directory.CreateDirectory(userDataFolder);
+                    LoggingService.LogToFile($"InitializeWebView2Async: WebView2 initialization: User data folder: {userDataFolder}\n");
+
+                    // Initialize WebView2 with custom environment
+                    var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
+                    var environment = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
+                    LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Environment created\n");
+
+                    LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Calling EnsureCoreWebView2Async\n");
+                    await WebPlaybackWebView.EnsureCoreWebView2Async(environment);
+                    LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: EnsureCoreWebView2Async completed\n");
+
+                    // Wait until CoreWebView2 is actually available
+                    LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Waiting for CoreWebView2 to be available\n");
+                    int attempts = 0;
+                    while (WebPlaybackWebView.CoreWebView2 == null && attempts < 50) // Max 5 seconds
+                    {
+                        await Task.Delay(100);
+                        attempts++;
+                        LoggingService.LogToFile($"InitializeWebView2Async: WebView2 initialization: Waiting for CoreWebView2... attempt {attempts}, CoreWebView2 is null: {WebPlaybackWebView.CoreWebView2 == null}\n");
+                    }
+
+                    if (WebPlaybackWebView.CoreWebView2 == null)
+                    {
+                        throw new InvalidOperationException("CoreWebView2 failed to initialize within timeout");
+                    }
+
+                    LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: CoreWebView2 is now available\n");
+
+                    // Configure WebView2 settings
+                    if (WebPlaybackWebView.CoreWebView2 != null)
+                    {
+                        WebPlaybackWebView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
+                        WebPlaybackWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                        WebPlaybackWebView.CoreWebView2.IsMuted = false;
+
+                        // Set Chrome User-Agent for Spotify compatibility
+                        WebPlaybackWebView.CoreWebView2.Settings.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+                        // Enable external resource loading
+                        WebPlaybackWebView.CoreWebView2.Settings.IsGeneralAutofillEnabled = true;
+                        WebPlaybackWebView.CoreWebView2.Settings.IsPasswordAutosaveEnabled = false;
+                        WebPlaybackWebView.CoreWebView2.Settings.IsSwipeNavigationEnabled = false;
+                        WebPlaybackWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+
+                        // Grant media permissions
+                        WebPlaybackWebView.CoreWebView2.PermissionRequested += (s, e) =>
+                        {
+                            if (e.PermissionKind == Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Camera ||
+                                e.PermissionKind == Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Microphone)
+                            {
+                                e.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow;
+                            }
+                        };
+
+                        // Allow all web resource requests
+                        WebPlaybackWebView.CoreWebView2.AddWebResourceRequestedFilter("*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All);
+
+                        LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Settings configured\n");
+                    }
+                });
+
+                LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Setting TaskCompletionSource to success\n");
+                // Signal that WebView2 initialization is complete
+                _webView2Initialized.TrySetResult(true);
+                LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: COMPLETED SUCCESSFULLY\n");
+            }
+            catch (Exception ex)
+            {
+                LoggingService.LogToFile($"InitializeWebView2Async: WebView2 initialization failed: {ex.Message}\n");
+                LoggingService.LogToFile($"InitializeWebView2Async: WebView2 initialization stack trace: {ex.StackTrace}\n");
+                _webView2Initialized.TrySetException(ex);
+            }
         }
 
         /// <summary>
@@ -65,10 +172,18 @@ namespace SpotifyWPF.Views
         }
 
         /// <summary>
-        /// Handle window loaded event to check for auto-login
+        /// Handle window loaded event to check for auto-login and initialize WebView2
         /// </summary>
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            LoggingService.LogToFile("MainWindow_Loaded: Starting WebView2 initialization\n");
+
+            // Initialize WebView2 first since controls are now loaded
+            await InitializeWebView2Async();
+
+            LoggingService.LogToFile("MainWindow_Loaded: WebView2 initialization completed\n");
+
+            // Then check for auto-login
             if (_locator?.Main != null)
             {
                 await _locator.Main.CheckAutoLoginAndStartTimerAsync();
@@ -82,16 +197,30 @@ namespace SpotifyWPF.Views
         {
             _loggingService?.LogInfo("MainWindow closing, cleaning up resources");
 
+            // Dispose WebPlaybackBridge first to stop WebView2 operations
+            if (_webPlaybackBridge is IDisposable disposableBridge)
+            {
+                try
+                {
+                    disposableBridge.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error disposing WebPlaybackBridge: {ex.Message}");
+                }
+            }
+
             // Dispose PlayerViewModel
             if (_playerViewModel is IDisposable disposablePlayer)
             {
-                disposablePlayer.Dispose();
-            }
-
-            // Dispose WebPlaybackBridge
-            if (_webPlaybackBridge is IDisposable disposableBridge)
-            {
-                disposableBridge.Dispose();
+                try
+                {
+                    disposablePlayer.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error disposing PlayerViewModel: {ex.Message}");
+                }
             }
 
             // Clear references
@@ -102,13 +231,70 @@ namespace SpotifyWPF.Views
         }
 
         /// <summary>
+        /// Handle window closing event to check minimize-to-tray setting
+        /// </summary>
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            try
+            {
+                // Get settings provider from service locator
+                var settingsProvider = GalaSoft.MvvmLight.Ioc.SimpleIoc.Default.GetInstance<ISettingsProvider>();
+                if (settingsProvider != null && settingsProvider.MinimizeToTrayOnClose)
+                {
+                    // Minimize to tray instead of closing
+                    if (_playerViewModel?.TrayIconManager != null)
+                    {
+                        _playerViewModel.TrayIconManager.HideToTray();
+                    }
+                    else
+                    {
+                        // Fallback if no tray manager
+                        this.WindowState = WindowState.Minimized;
+                        this.Hide();
+                    }
+                    e.Cancel = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error handling window closing: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handle window state changes for tray integration
+        /// </summary>
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                // Notify TrayIconManager of window state changes
+                if (_playerViewModel?.TrayIconManager != null)
+                {
+                    _playerViewModel.TrayIconManager.HandleWindowStateChanged(this.WindowState);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error handling window state change: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Public method called by MainViewModel to initialize player after login
         /// </summary>
         public async Task InitializePlayerAfterLoginAsync()
         {
+            LoggingService.LogToFile($"MainWindow: InitializePlayerAfterLoginAsync called, _locator is {( _locator != null ? "not null" : "null")}\n");
             if (_locator != null)
             {
+                LoggingService.LogToFile("MainWindow: Calling InitializePlayerAsync\n");
                 await InitializePlayerAsync(_locator);
+                LoggingService.LogToFile("MainWindow: InitializePlayerAsync completed\n");
+            }
+            else
+            {
+                LoggingService.LogToFile("MainWindow: _locator is null, cannot initialize player\n");
             }
         }
 
@@ -117,59 +303,65 @@ namespace SpotifyWPF.Views
         /// </summary>
         private async Task InitializePlayerAsync(ViewModelLocator locator)
         {
-            _loggingService?.LogInfo($"InitializePlayerAsync called, _isInitialized={_isInitialized}");
+            LoggingService.LogToFile($"=== NEW RUN STARTED AT {DateTime.Now} ===\n");
+            LoggingService.LogToFile($"MainWindow: InitializePlayerAsync called, _isInitialized={_isInitialized}\n");
             try
             {
                 if (_isInitialized) 
                 {
-                    _loggingService?.LogInfo("InitializePlayerAsync: Already initialized, returning");
+                    LoggingService.LogToFile("MainWindow: InitializePlayerAsync: Already initialized, returning\n");
                     return;
                 }
 
-                _loggingService?.LogInfo("Starting Player Initialization");
+                LoggingService.LogToFile("MainWindow: Starting Player Initialization\n");
+
+                // Wait for WebView2 to be initialized first
+                LoggingService.LogToFile("MainWindow: Waiting for WebView2 initialization\n");
+                await _webView2Initialized.Task;
+                LoggingService.LogToFile("MainWindow: WebView2 initialization confirmed\n");
 
                 // Create WebPlaybackBridge with the WebView2 control (only if not already created)
                 if (_webPlaybackBridge == null)
                 {
                     _webPlaybackBridge = new WebPlaybackBridge(WebPlaybackWebView, _loggingService!);
-                    _loggingService?.LogInfo("WebPlaybackBridge created");
+                    LoggingService.LogToFile("MainWindow: WebPlaybackBridge created\n");
                 }
                 else
                 {
-                    _loggingService?.LogInfo("Reusing existing WebPlaybackBridge");
+                    LoggingService.LogToFile("MainWindow: Reusing existing WebPlaybackBridge\n");
                 }
                 
                 // Create PlayerViewModel
                 var spotify = locator.Main.GetSpotifyService();
                 _playerViewModel = new PlayerViewModel(spotify, _webPlaybackBridge, _loggingService!);
-                System.Diagnostics.Debug.WriteLine("PlayerViewModel created");
+                LoggingService.LogToFile("MainWindow: PlayerViewModel created\n");
                 
                 // Set player on MainViewModel
                 locator.Main.Player = _playerViewModel;
-                System.Diagnostics.Debug.WriteLine("Player set on MainViewModel");
+                LoggingService.LogToFile("MainWindow: Player set on MainViewModel\n");
                 
                 // Get access token and initialize
                 var accessToken = await GetAccessTokenAsync();
+                LoggingService.LogToFile($"MainWindow: Access token obtained: {!string.IsNullOrEmpty(accessToken)}\n");
                 if (!string.IsNullOrEmpty(accessToken))
                 {
-                    System.Diagnostics.Debug.WriteLine($"Access token obtained: {accessToken.Substring(0, Math.Min(20, accessToken.Length))}...");
                     var playerHtmlPath = GetPlayerHtmlPath();
-                    System.Diagnostics.Debug.WriteLine($"Player HTML path: {playerHtmlPath}");
+                    LoggingService.LogToFile($"MainWindow: Player HTML path: {playerHtmlPath}\n");
                     await _playerViewModel.InitializeAsync(accessToken, playerHtmlPath);
-                    System.Diagnostics.Debug.WriteLine("PlayerViewModel initialized successfully");
+                    LoggingService.LogToFile("MainWindow: PlayerViewModel initialized successfully\n");
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("ERROR: No access token available");
+                    LoggingService.LogToFile("MainWindow: ERROR: No access token available\n");
                 }
                 
                 _isInitialized = true;
-                System.Diagnostics.Debug.WriteLine("=== Player Initialization Complete ===");
+                LoggingService.LogToFile("MainWindow: === Player Initialization Complete ===\n");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Player initialization error: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                LoggingService.LogToFile($"MainWindow: Player initialization error: {ex.Message}\n");
+                LoggingService.LogToFile($"MainWindow: Stack trace: {ex.StackTrace}\n");
             }
         }
 
@@ -179,7 +371,10 @@ namespace SpotifyWPF.Views
         private string GetPlayerHtmlPath()
         {
             var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            var playerPath = Path.Combine(appDir!, "Assets", "player.html");
+            var debugDir = Path.GetDirectoryName(appDir);
+            var binDir = Path.GetDirectoryName(debugDir);
+            var projectDir = Path.GetDirectoryName(binDir);
+            var playerPath = Path.Combine(projectDir!, "Assets", "player.html");
             
             if (File.Exists(playerPath))
             {
@@ -203,7 +398,10 @@ namespace SpotifyWPF.Views
         {
             try
             {
-                if (this.DataContext is MainViewModel mainVm)
+                // Use the locator's Main property instead of DataContext
+                // since DataContext might not be set yet during initialization
+                var mainVm = _locator?.Main;
+                if (mainVm != null)
                 {
                     var spotify = mainVm.GetSpotifyService();
                     var token = await spotify.GetCurrentAccessTokenAsync();
@@ -211,8 +409,9 @@ namespace SpotifyWPF.Views
                 }
                 return string.Empty;
             }
-            catch
+            catch (Exception ex)
             {
+                LoggingService.LogToFile($"MainWindow: GetAccessTokenAsync error: {ex.Message}\n");
                 return string.Empty;
             }
         }
@@ -222,26 +421,40 @@ namespace SpotifyWPF.Views
         /// </summary>
         private async void MenuItem_SubmenuOpened(object sender, RoutedEventArgs e)
         {
-            // Only handle top-level "Devices" when it opens
-            if (e.OriginalSource is MenuItem mi && mi.Header is string header && header == "Devices")
+            try
             {
-                System.Diagnostics.Debug.WriteLine("=== DEVICES MENU SUBMENU OPENED ===");
-                if (this.DataContext is SpotifyWPF.ViewModel.MainViewModel vm)
+                // Only handle top-level "Devices" when it opens
+                if (e.OriginalSource is MenuItem mi && mi.Header is string header && header == "Devices")
                 {
-                    await vm.RefreshDevicesMenuAsync();
+                    System.Diagnostics.Debug.WriteLine("=== DEVICES MENU SUBMENU OPENED ===");
+                    if (this.DataContext is SpotifyWPF.ViewModel.MainViewModel vm)
+                    {
+                        await vm.RefreshDevicesMenuAsync();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"MenuItem_SubmenuOpened error: {ex.Message}");
             }
         }
 
         private async void MenuItem_MouseEnter(object sender, MouseEventArgs e)
         {
-            // Only handle top-level "Devices" when mouse enters
-            if (sender is MenuItem mi && mi.Header is string header && header == "Devices")
+            try
             {
-                if (this.DataContext is SpotifyWPF.ViewModel.MainViewModel vm)
+                // Only handle top-level "Devices" when mouse enters
+                if (sender is MenuItem mi && mi.Header is string header && header == "Devices")
                 {
-                    await vm.RefreshDevicesMenuAsync();
+                    if (this.DataContext is SpotifyWPF.ViewModel.MainViewModel vm)
+                    {
+                        await vm.RefreshDevicesMenuAsync();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"MenuItem_MouseEnter error: {ex.Message}");
             }
         }
 

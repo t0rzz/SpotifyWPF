@@ -23,7 +23,17 @@ namespace SpotifyWPF.ViewModel.Component
             _logAction = logAction;
             PlayToDeviceCommand = new RelayCommand<string>(async param => await PlayToAsync(param));
             // Preload devices (non-blocking)
-            _ = RefreshDevicesAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await RefreshDevicesAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error refreshing devices: {ex.Message}");
+                }
+            });
         }
 
         public void SetLogAction(Action<string>? logAction)

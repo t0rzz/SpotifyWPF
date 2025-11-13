@@ -30,7 +30,9 @@ namespace SpotifyWPF.ViewModel.Page
         private readonly IMapper _mapper;
         private readonly IMessageBoxService _messageBoxService;
         private readonly IConfirmationDialogService _confirmationDialogService;
+        private readonly IEditPlaylistDialogService _editPlaylistDialogService;
         private readonly ISpotify _spotify;
+        private readonly ISettingsProvider _settingsProvider;
 
         private Visibility _progressVisibility = Visibility.Hidden;
         private string _status = "Ready";
@@ -38,6 +40,7 @@ namespace SpotifyWPF.ViewModel.Page
         private bool _isLoadingPlaylists;
         private bool _isSearching;
         private bool _isLoadingTracks;
+        private bool _isGenerating;
 
         // Playlist Manager properties
         private string _newPlaylistName = string.Empty;
@@ -49,6 +52,20 @@ namespace SpotifyWPF.ViewModel.Page
         private ObservableCollection<SearchResultDto> _availableTracks = new ObservableCollection<SearchResultDto>();
         private ObservableCollection<SearchResultDto> _selectedTracks = new ObservableCollection<SearchResultDto>();
 
+        // Followed playlists collection
+        private ObservableCollection<PlaylistDto> _followedPlaylists = new();
+        private PlaylistDto? _editingPlaylist;
+        private ObservableCollection<TrackDto> _currentPlaylistTracks = new();
+
+        // Viewing state
+        private GeneratedPlaylistDto? _viewingGeneratedPlaylist;
+
+        // Playlist Generator properties
+        private ObservableCollection<GeneratedPlaylistDto> _generatedPlaylists = new ObservableCollection<GeneratedPlaylistDto>();
+        private GeneratedPlaylistDto? _selectedGeneratedPlaylist;
+        private int _selectedSongCount = 20;
+        private string _generatorGenre = string.Empty;
+
         // Search properties
         private string _searchQuery = string.Empty;
         private bool _searchTrack = true; // Default to track search
@@ -59,12 +76,24 @@ namespace SpotifyWPF.ViewModel.Page
         private bool _searchEpisode = false;
         private bool _searchAudiobook = false;
 
-        public PlaylistManagerPageViewModel(ISpotify spotify, IMapper mapper, IMessageBoxService messageBoxService, IConfirmationDialogService confirmationDialogService)
+        public PlaylistManagerPageViewModel(ISpotify spotify, IMapper mapper, IMessageBoxService messageBoxService, IConfirmationDialogService confirmationDialogService, IEditPlaylistDialogService editPlaylistDialogService, ISettingsProvider settingsProvider)
         {
             _spotify = spotify;
             _mapper = mapper;
             _messageBoxService = messageBoxService;
             _confirmationDialogService = confirmationDialogService;
+            _editPlaylistDialogService = editPlaylistDialogService;
+            _settingsProvider = settingsProvider;
+
+            System.Diagnostics.Debug.WriteLine("PlaylistManagerPageViewModel constructor called - ViewModel initialized successfully");
+
+            // Set up collection change notifications for count properties
+            _availableTracks.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(AvailableTracksCount));
+            _selectedTracks.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(SelectedTracksCount));
+            UserPlaylists.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(UserPlaylistsCount));
+            _currentPlaylistTracks.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(PlaylistTracksHeader));
+            _generatedPlaylists.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(HasGeneratedPlaylists));
+            _generatedPlaylists.CollectionChanged += (s, e) => RaisePropertyChanged(nameof(GeneratedPlaylistsCount));
 
             // Initialize commands
             CreatePlaylistCommand = new RelayCommand(async () => await CreatePlaylistAsync(), CanCreatePlaylist);
@@ -75,9 +104,23 @@ namespace SpotifyWPF.ViewModel.Page
             RemoveTrackFromSelectionCommand = new RelayCommand<SearchResultDto>(RemoveTrackFromSelection);
             AddSelectedTracksToPlaylistCommand = new RelayCommand(async () => await AddSelectedTracksToPlaylistAsync(), CanAddSelectedTracks);
             LoadUserPlaylistsCommand = new RelayCommand(async () => await LoadUserPlaylistsAsync());
+            EditPlaylistCommand = new RelayCommand<PlaylistDto>(EditPlaylist, CanEditPlaylist);
+            SavePlaylistChangesCommand = new RelayCommand(SavePlaylistChanges, CanSavePlaylistChanges);
+            DeletePlaylistCommand = new RelayCommand<PlaylistDto>(DeletePlaylist);
+            FollowPlaylistCommand = new RelayCommand<PlaylistDto>(FollowPlaylist);
+            UnfollowPlaylistCommand = new RelayCommand<PlaylistDto>(UnfollowPlaylist);
+            SelectPlaylistCommand = new RelayCommand<PlaylistDto>(SelectPlaylist, CanSelectPlaylist);
+            RemoveTrackFromPlaylistCommand = new RelayCommand<TrackDto>(RemoveTrackFromPlaylist, CanRemoveTrack);
+            MoveTrackUpCommand = new RelayCommand<TrackDto>(MoveTrackUp, CanMoveTrackUp);
+            MoveTrackDownCommand = new RelayCommand<TrackDto>(MoveTrackDown, CanMoveTrackDown);
+            LoadArtistTracksCommand = new RelayCommand<SearchResultDto>(LoadArtistTracks, CanLoadArtistTracks);
 
-            // Listen to SelectedTracks changes to update command availability
-            _selectedTracks.CollectionChanged += (s, e) => AddSelectedTracksToPlaylistCommand.RaiseCanExecuteChanged();
+            // Playlist Generator commands
+            GenerateRandomPlaylistCommand = new RelayCommand(async () => await GenerateRandomPlaylistAsync());
+            SaveGeneratedPlaylistCommand = new RelayCommand<GeneratedPlaylistDto>(SaveGeneratedPlaylist);
+            ViewGeneratedPlaylistCommand = new RelayCommand<GeneratedPlaylistDto>(ViewGeneratedPlaylist);
+            RemoveTrackFromGeneratedPlaylistCommand = new RelayCommand<TrackDto>(RemoveTrackFromGeneratedPlaylist);
+            DeleteGeneratedPlaylistCommand = new RelayCommand<GeneratedPlaylistDto>(DeleteGeneratedPlaylist);
         }
 
         // Properties
@@ -157,7 +200,13 @@ namespace SpotifyWPF.ViewModel.Page
                     _selectedPlaylist = value;
                     RaisePropertyChanged();
                     AddSelectedTracksToPlaylistCommand.RaiseCanExecuteChanged();
-                    _ = UpdateTracksInSelectedPlaylistAsync();
+                    _ = UpdateTracksInSelectedPlaylistAsync().ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error updating tracks in selected playlist: {t.Exception?.GetBaseException()?.Message}");
+                        }
+                    }, TaskContinuationOptions.OnlyOnFaulted);
                 }
             }
         }
@@ -165,6 +214,103 @@ namespace SpotifyWPF.ViewModel.Page
         public ObservableCollection<SearchResultDto> AvailableTracks => _availableTracks;
         public ObservableCollection<SearchResultDto> SelectedTracks => _selectedTracks;
         public ObservableCollection<PlaylistDto> UserPlaylists { get; } = new ObservableCollection<PlaylistDto>();
+        public ObservableCollection<TrackDto> CurrentPlaylistTracks => _currentPlaylistTracks;
+
+        // Playlist Generator properties
+        public ObservableCollection<GeneratedPlaylistDto> GeneratedPlaylists => _generatedPlaylists;
+        public GeneratedPlaylistDto? SelectedGeneratedPlaylist
+        {
+            get => _selectedGeneratedPlaylist;
+            set
+            {
+                if (_selectedGeneratedPlaylist != value)
+                {
+                    _selectedGeneratedPlaylist = value;
+                    RaisePropertyChanged();
+                    RaisePropertyChanged(nameof(IsGeneratedPlaylistPreviewVisible));
+                }
+            }
+        }
+        public List<int> SongCountOptions { get; } = new List<int> { 10, 20, 30, 50, 100 };
+        public int SelectedSongCount
+        {
+            get => _selectedSongCount;
+            set
+            {
+                if (_selectedSongCount != value)
+                {
+                    _selectedSongCount = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+        public string GeneratorGenre
+        {
+            get => _generatorGenre;
+            set
+            {
+                if (_generatorGenre != value)
+                {
+                    _generatorGenre = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
+        public bool HasGeneratedPlaylists => _generatedPlaylists.Count > 0;
+        public bool IsGeneratedPlaylistPreviewVisible => _selectedGeneratedPlaylist != null;
+
+        // Count of available tracks for display
+        public int AvailableTracksCount => _availableTracks.Count;
+
+        // Count properties for other collections
+        public int SelectedTracksCount => _selectedTracks.Count;
+        public int UserPlaylistsCount => UserPlaylists.Count;
+        public int CurrentPlaylistTracksCount => _currentPlaylistTracks.Count;
+        public int GeneratedPlaylistsCount => _generatedPlaylists.Count;
+
+        // Selected item for context menu
+        private SearchResultDto? _selectedAvailableTrack;
+        public SearchResultDto? SelectedAvailableTrack
+        {
+            get => _selectedAvailableTrack;
+            set
+            {
+                if (_selectedAvailableTrack != value)
+                {
+                    _selectedAvailableTrack = value;
+                    System.Diagnostics.Debug.WriteLine($"SelectedAvailableTrack set to: {_selectedAvailableTrack?.Name} (Type: {_selectedAvailableTrack?.Type})");
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        // Dynamic header for playlist tracks section
+        public string PlaylistTracksHeader
+        {
+            get
+            {
+                if (_viewingGeneratedPlaylist != null)
+                {
+                    return $"Generated Playlist: {_viewingGeneratedPlaylist.Name} ({_currentPlaylistTracks.Count})";
+                }
+                return _currentPlaylistTracks.Count > 0 
+                    ? $"Tracks in Playlist ({_currentPlaylistTracks.Count})" 
+                    : "Tracks in Playlist";
+            }
+        }
+
+        public PlaylistDto? EditingPlaylist
+        {
+            get => _editingPlaylist;
+            set
+            {
+                if (_editingPlaylist != value)
+                {
+                    _editingPlaylist = value;
+                    RaisePropertyChanged();
+                }
+            }
+        }
 
         // Search properties
         public string SearchQuery
@@ -288,6 +434,41 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand<SearchResultDto> RemoveTrackFromSelectionCommand { get; }
         public RelayCommand AddSelectedTracksToPlaylistCommand { get; }
         public RelayCommand LoadUserPlaylistsCommand { get; }
+        public RelayCommand<PlaylistDto> EditPlaylistCommand { get; }
+        public RelayCommand SavePlaylistChangesCommand { get; }
+        public RelayCommand<PlaylistDto> DeletePlaylistCommand { get; }
+        public RelayCommand<PlaylistDto> FollowPlaylistCommand { get; }
+        public RelayCommand<PlaylistDto> UnfollowPlaylistCommand { get; }
+        public RelayCommand<TrackDto> RemoveTrackFromPlaylistCommand { get; }
+        public RelayCommand<TrackDto> MoveTrackUpCommand { get; }
+        public RelayCommand<TrackDto> MoveTrackDownCommand { get; }
+        public RelayCommand<SearchResultDto> LoadArtistTracksCommand { get; }
+
+        private bool CanLoadArtistTracks(SearchResultDto searchResult)
+        {
+            bool canExecute = searchResult != null && searchResult.Type == "artist" && !string.IsNullOrEmpty(searchResult.Id);
+            System.Diagnostics.Debug.WriteLine($"CanLoadArtistTracks: {canExecute} (searchResult: {searchResult?.Name}, Type: {searchResult?.Type})");
+            return canExecute;
+        }
+
+        private bool CanSelectPlaylist(PlaylistDto playlist)
+        {
+            return playlist != null;
+        }
+
+        private bool CanEditPlaylist(PlaylistDto playlist)
+        {
+            return playlist != null;
+        }
+
+        public RelayCommand<PlaylistDto> SelectPlaylistCommand { get; }
+
+        // Playlist Generator commands
+        public RelayCommand GenerateRandomPlaylistCommand { get; }
+        public RelayCommand<GeneratedPlaylistDto> SaveGeneratedPlaylistCommand { get; }
+        public RelayCommand<GeneratedPlaylistDto> ViewGeneratedPlaylistCommand { get; }
+        public RelayCommand<TrackDto> RemoveTrackFromGeneratedPlaylistCommand { get; }
+        public RelayCommand<GeneratedPlaylistDto> DeleteGeneratedPlaylistCommand { get; }
 
         // UI Properties
         public Visibility ProgressVisibility
@@ -325,6 +506,19 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     _isLoadingTracks = value;
                     System.Diagnostics.Debug.WriteLine($"IsLoadingTracks changed to: {_isLoadingTracks}");
+                    RaisePropertyChanged();
+                }
+            }
+        }
+
+        public bool IsGenerating
+        {
+            get => _isGenerating;
+            set
+            {
+                if (_isGenerating != value)
+                {
+                    _isGenerating = value;
                     RaisePropertyChanged();
                 }
             }
@@ -368,6 +562,8 @@ namespace SpotifyWPF.ViewModel.Page
         {
             if (string.IsNullOrWhiteSpace(_newPlaylistName))
                 return;
+
+            System.Diagnostics.Debug.WriteLine($"CreatePlaylistAsync called with name: '{_newPlaylistName}'");
 
             try
             {
@@ -414,6 +610,13 @@ namespace SpotifyWPF.ViewModel.Page
                 NewPlaylistName = string.Empty;
                 NewPlaylistDescription = string.Empty;
                 SelectedImagePath = string.Empty;
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
             }
             catch (Exception ex)
             {
@@ -487,6 +690,13 @@ namespace SpotifyWPF.ViewModel.Page
 
                 Status = $"Loaded {_availableTracks.Count} available tracks";
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error loading available tracks: {ex.Message}");
@@ -530,8 +740,8 @@ namespace SpotifyWPF.ViewModel.Page
 
             try
             {
-                // Load up to 10,000 results by iterating through pages
-                const int maxResults = 10000;
+                // Load up to 1000 results (Spotify API offset limit) by iterating through pages
+                const int maxResults = 1000; // Spotify API limit: maximum offset is 1000
                 const int pageSize = 50;
 
                 StartBusy($"Searching for {typesString} (loading up to {maxResults} results)...", LoadingType.Search);
@@ -552,6 +762,13 @@ namespace SpotifyWPF.ViewModel.Page
                 var typeDescription = selectedTypes.Count == 1 ? $"{selectedTypes[0]}s" : "items";
                 Status = $"Found {totalLoaded} {typeDescription} matching '{_searchQuery}'";
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error searching: {ex.Message}");
@@ -569,15 +786,15 @@ namespace SpotifyWPF.ViewModel.Page
         {
             int totalLoaded = 0;
             int offset = 0;
+            const int maxOffset = 1000; // Spotify API limit: maximum offset is 1000
 
-            while (totalLoaded < maxResults)
+            while (totalLoaded < maxResults && offset <= maxOffset)
             {
                 // Update progress status
                 var typesString = string.Join(", ", types);
                 Status = $"Loading {typesString}... ({totalLoaded}/{maxResults})";
 
                 var trackResults = await _spotify.SearchItemsPageAsync(query, types, offset, pageSize);
-                System.Diagnostics.Debug.WriteLine($"Loaded page with offset {offset}, returned {trackResults?.Items?.Count ?? 0} results");
 
                 if (trackResults?.Items == null || trackResults.Items.Count == 0)
                 {
@@ -590,13 +807,12 @@ namespace SpotifyWPF.ViewModel.Page
                     if (totalLoaded >= maxResults)
                         break;
 
-                    System.Diagnostics.Debug.WriteLine($"Adding item: {item.Name} ({item.Type}), URI: {item.Uri}");
                     _availableTracks.Add(item);
                     totalLoaded++;
                 }
 
                 // Check if there are more pages
-                if (string.IsNullOrEmpty(trackResults.Next) || totalLoaded >= maxResults)
+                if (string.IsNullOrEmpty(trackResults.Next) || totalLoaded >= maxResults || offset >= maxOffset)
                 {
                     break;
                 }
@@ -607,7 +823,6 @@ namespace SpotifyWPF.ViewModel.Page
                 await Task.Delay(100);
             }
 
-            System.Diagnostics.Debug.WriteLine($"Total items loaded: {totalLoaded}");
             return totalLoaded;
         }
 
@@ -642,34 +857,72 @@ namespace SpotifyWPF.ViewModel.Page
                     return;
                 }
 
-                // Load all pages
-                while (offset < totalPlaylists)
-                {
-                    var page = await _spotify.GetMyPlaylistsPageAsync(offset, limit);
-                    if (page.Items != null)
-                    {
-                        allPlaylists.AddRange(page.Items);
-                    }
+        // Load all pages
+        while (offset < totalPlaylists)
+        {
+            var page = await _spotify.GetMyPlaylistsPageAsync(offset, limit);
+            if (page.Items != null)
+            {
+                allPlaylists.AddRange(page.Items);
+                System.Diagnostics.Debug.WriteLine($"Loaded page with offset {offset}, got {page.Items.Count} playlists. Total so far: {allPlaylists.Count}");
+            }
 
-                    offset += limit;
+            offset += limit;
 
-                    // Safety check to avoid infinite loops
-                    if (page.Items == null || page.Items.Count == 0)
-                        break;
-                }
+            // Safety check to avoid infinite loops
+            if (page.Items == null || page.Items.Count == 0)
+                break;
+        }
 
-                // Now filter by ownership
-                UserPlaylists.Clear();
-                foreach (var playlist in allPlaylists)
-                {
-                    // Only include playlists owned by the current user
-                    if (playlist.OwnerId == currentUser.Id)
-                    {
-                        UserPlaylists.Add(playlist);
-                    }
-                }
+        // Check for duplicates in allPlaylists
+        var duplicateIds = allPlaylists.GroupBy(p => p.Id).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        if (duplicateIds.Any())
+        {
+            System.Diagnostics.Debug.WriteLine($"WARNING: Found duplicate playlist IDs in API response: {string.Join(", ", duplicateIds)}");
+            foreach (var dupId in duplicateIds)
+            {
+                var duplicates = allPlaylists.Where(p => p.Id == dupId).ToList();
+                System.Diagnostics.Debug.WriteLine($"Duplicate ID {dupId}: {string.Join(", ", duplicates.Select(p => p.Name))}");
+            }
+        }
 
-                Status = $"Loaded {UserPlaylists.Count} owned playlists";
+        // Now include all playlists (owned and followed) - the Spotify API already distinguishes them by owner ID
+        // No additional API calls needed since /me/playlists returns both owned and followed playlists
+        System.Diagnostics.Debug.WriteLine($"Before filtering: UserPlaylists has {UserPlaylists.Count} items");
+        UserPlaylists.Clear();
+        System.Diagnostics.Debug.WriteLine($"After clearing: UserPlaylists has {UserPlaylists.Count} items");
+
+        foreach (var playlist in allPlaylists)
+        {
+            // Include both owned and followed playlists - ownership is determined by playlist.OwnerId vs currentUser.Id
+            // Check if we already have this playlist
+            if (UserPlaylists.Any(p => p.Id == playlist.Id))
+            {
+                System.Diagnostics.Debug.WriteLine($"WARNING: Duplicate playlist found when filtering: {playlist.Name} (ID: {playlist.Id})");
+                continue; // Skip duplicates
+            }
+
+            // Set ownership flag for UI display
+            playlist.IsOwned = playlist.OwnerId == currentUser.Id;
+
+            UserPlaylists.Add(playlist);
+            System.Diagnostics.Debug.WriteLine($"Added playlist: {playlist.Name} (ID: {playlist.Id}, Owner: {playlist.OwnerId}, IsOwned: {playlist.IsOwned})");
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Final UserPlaylists count: {UserPlaylists.Count}");
+        var finalDuplicateIds = UserPlaylists.GroupBy(p => p.Id).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        if (finalDuplicateIds.Any())
+        {
+            System.Diagnostics.Debug.WriteLine($"CRITICAL: Final UserPlaylists still has duplicates: {string.Join(", ", finalDuplicateIds)}");
+        }
+        Status = $"Loaded {UserPlaylists.Count} playlists";
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
             }
             catch (Exception ex)
             {
@@ -731,6 +984,13 @@ namespace SpotifyWPF.ViewModel.Page
                 // Update track status in selected playlist
                 await UpdateTracksInSelectedPlaylistAsync();
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error adding tracks to playlist: {ex.Message}");
@@ -739,6 +999,210 @@ namespace SpotifyWPF.ViewModel.Page
             finally
             {
                 EndBusy();
+            }
+        }
+
+        private void EditPlaylist(PlaylistDto playlist)
+        {
+            if (playlist == null) return;
+
+            var (result, newName, newIsPublic) = _editPlaylistDialogService.ShowEditPlaylistDialog(playlist.Name ?? string.Empty, playlist.IsPublic ?? false);
+
+            if (result == true)
+            {
+                // Set the editing playlist for SavePlaylistChanges to work with
+                EditingPlaylist = playlist;
+                // Update the playlist properties
+                playlist.Name = newName;
+                playlist.IsPublic = newIsPublic;
+
+                // Save the changes
+                SavePlaylistChanges();
+            }
+        }
+
+        private bool CanSavePlaylistChanges()
+        {
+            return EditingPlaylist != null && !string.IsNullOrWhiteSpace(EditingPlaylist.Name);
+        }
+
+        private async void SavePlaylistChanges()
+        {
+            if (EditingPlaylist == null) return;
+
+            try
+            {
+                StartBusy("Saving playlist changes...");
+
+                await _spotify.UpdatePlaylistAsync(
+                    EditingPlaylist.Id,
+                    EditingPlaylist.Name ?? string.Empty,
+                    EditingPlaylist.IsPublic ?? false);
+
+                // Update the playlist in the collection
+                var existingPlaylist = UserPlaylists.FirstOrDefault(p => p.Id == EditingPlaylist.Id);
+                if (existingPlaylist != null)
+                {
+                    existingPlaylist.Name = EditingPlaylist.Name;
+                    existingPlaylist.IsPublic = EditingPlaylist.IsPublic;
+                }
+
+                Status = "Playlist updated successfully";
+                EditingPlaylist = null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating playlist: {ex.Message}");
+                Status = $"Failed to update playlist: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private async void DeletePlaylist(PlaylistDto playlist)
+        {
+            if (playlist == null) return;
+
+            var result = _confirmationDialogService.ShowConfirmation(
+                "Delete Playlist",
+                $"Are you sure you want to delete the playlist '{playlist.Name}'?",
+                "Delete",
+                "Cancel");
+
+            if (result != true) return;
+
+            try
+            {
+                StartBusy("Deleting playlist...");
+
+                await _spotify.DeletePlaylistAsync(playlist.Id);
+                UserPlaylists.Remove(playlist);
+
+                Status = "Playlist deleted successfully";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error deleting playlist: {ex.Message}");
+                Status = $"Failed to delete playlist: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private void FollowPlaylist(PlaylistDto playlist)
+        {
+            if (playlist == null) return;
+
+            try
+            {
+                StartBusy("Following playlist...");
+
+                // Note: The ISpotify interface doesn't have a FollowPlaylistAsync method
+                // This would need to be added to the service
+                Status = "Follow playlist functionality not yet implemented in service";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error following playlist: {ex.Message}");
+                Status = $"Failed to follow playlist: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private async void UnfollowPlaylist(PlaylistDto playlist)
+        {
+            if (playlist == null) return;
+
+            try
+            {
+                StartBusy("Unfollowing playlist...");
+
+                await _spotify.UnfollowPlaylistAsync(playlist.Id);
+
+                Status = "Playlist unfollowed successfully";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error unfollowing playlist: {ex.Message}");
+                Status = $"Failed to unfollow playlist: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private void SelectPlaylist(PlaylistDto playlist)
+        {
+            _selectedPlaylist = playlist;
+            _viewingGeneratedPlaylist = null; // Clear generated playlist viewing state
+            RaisePropertyChanged(nameof(SelectedPlaylist));
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await LoadCurrentPlaylistTracksAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error loading current playlist tracks: {ex.Message}");
+                }
+            });
+        }
+
+        private async Task LoadCurrentPlaylistTracksAsync()
+        {
+            if (_selectedPlaylist == null) return;
+
+            try
+            {
+                StartBusy("Loading current playlist tracks...", LoadingType.LoadTracks);
+
+                _currentPlaylistTracks.Clear();
+                var offset = 0;
+                const int limit = 50;
+
+                while (true)
+                {
+                    var page = await _spotify.GetPlaylistTracksPageAsync(_selectedPlaylist.Id, offset, limit);
+                    if (page.Items == null || page.Items.Count == 0)
+                        break;
+
+                    foreach (var track in page.Items)
+                    {
+                        _currentPlaylistTracks.Add(track);
+                    }
+
+                    if (page.Items.Count < limit)
+                        break;
+
+                    offset += limit;
+                }
+
+                Status = $"Loaded {_currentPlaylistTracks.Count} tracks";
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading playlist tracks: {ex.Message}");
+                Status = $"Failed to load tracks: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy(LoadingType.LoadTracks);
             }
         }
 
@@ -756,6 +1220,11 @@ namespace SpotifyWPF.ViewModel.Page
                     System.Drawing.Imaging.Encoder.Quality, 85L); // 85% quality
 
                 var jpegEncoder = GetEncoder(System.Drawing.Imaging.ImageFormat.Jpeg);
+                if (jpegEncoder == null)
+                {
+                    throw new InvalidOperationException("JPEG encoder not found on this system");
+                }
+
                 resizedImage.Save(ms, jpegEncoder, encoderParameters);
 
                 var imageBytes = ms.ToArray();
@@ -772,17 +1241,34 @@ namespace SpotifyWPF.ViewModel.Page
 
                     if (imageBytes.Length > 262144)
                     {
-                        throw new InvalidOperationException($"Image is too large even after compression. Size: {imageBytes.Length} bytes. Maximum allowed: 256KB.");
+                        // Try even lower quality
+                        ms.SetLength(0);
+                        encoderParameters.Param[0] = new System.Drawing.Imaging.EncoderParameter(
+                            System.Drawing.Imaging.Encoder.Quality, 50L); // 50% quality
+                        resizedImage.Save(ms, jpegEncoder, encoderParameters);
+                        imageBytes = ms.ToArray();
+
+                        if (imageBytes.Length > 262144)
+                        {
+                            throw new InvalidOperationException($"Image is too large even after maximum compression. Size: {imageBytes.Length} bytes. Maximum allowed: 256KB.");
+                        }
                     }
                 }
 
+                // Verify the image data starts with JPEG header (0xFF 0xD8)
+                if (imageBytes.Length < 2 || imageBytes[0] != 0xFF || imageBytes[1] != 0xD8)
+                {
+                    throw new InvalidOperationException("Generated image is not a valid JPEG file");
+                }
+
+                System.Diagnostics.Debug.WriteLine($"Image converted to JPEG successfully. Size: {imageBytes.Length} bytes");
                 return imageBytes;
             }
         }
 
         private System.Drawing.Imaging.ImageCodecInfo GetEncoder(System.Drawing.Imaging.ImageFormat format)
         {
-            var codecs = System.Drawing.Imaging.ImageCodecInfo.GetImageDecoders();
+            var codecs = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders();
             foreach (var codec in codecs)
             {
                 if (codec.FormatID == format.Guid)
@@ -790,30 +1276,24 @@ namespace SpotifyWPF.ViewModel.Page
                     return codec;
                 }
             }
-            throw new InvalidOperationException("JPEG encoder not found on this system.");
+            throw new InvalidOperationException($"JPEG encoder not found on this system. Required for playlist image upload.");
         }
 
         private System.Drawing.Image ResizeImage(System.Drawing.Image image, int maxWidth, int maxHeight)
         {
-            var ratioX = (double)maxWidth / image.Width;
-            var ratioY = (double)maxHeight / image.Height;
-            var ratio = Math.Min(ratioX, ratioY);
+            if (image == null)
+                throw new ArgumentNullException(nameof(image));
 
-            // Only resize if image is larger than max dimensions
-            if (ratio >= 1.0)
-                return new System.Drawing.Bitmap(image); // Return copy if already small enough
+            // Calculate new size maintaining aspect ratio
+            float ratioX = (float)maxWidth / image.Width;
+            float ratioY = (float)maxHeight / image.Height;
+            float ratio = Math.Min(ratioX, ratioY);
 
-            var newWidth = (int)(image.Width * ratio);
-            var newHeight = (int)(image.Height * ratio);
+            int newWidth = (int)(image.Width * ratio);
+            int newHeight = (int)(image.Height * ratio);
 
-            var newImage = new System.Drawing.Bitmap(newWidth, newHeight);
-            using (var graphics = System.Drawing.Graphics.FromImage(newImage))
-            {
-                graphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                graphics.DrawImage(image, 0, 0, newWidth, newHeight);
-            }
+            // Resize image
+            var newImage = new System.Drawing.Bitmap(image, newWidth, newHeight);
 
             return newImage;
         }
@@ -884,7 +1364,7 @@ namespace SpotifyWPF.ViewModel.Page
                 // Get all tracks from the selected playlist
                 var playlistTrackIds = new HashSet<string>();
                 var offset = 0;
-                const int limit = 100;
+                const int limit = 50;
 
                 while (true)
                 {
@@ -912,6 +1392,13 @@ namespace SpotifyWPF.ViewModel.Page
                     item.IsInSelectedPlaylist = playlistTrackIds.Contains(item.Id);
                 }
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
             catch (Exception ex)
             {
                 // If we can't get playlist tracks, assume tracks are not in playlist
@@ -920,6 +1407,460 @@ namespace SpotifyWPF.ViewModel.Page
                     item.IsInSelectedPlaylist = false;
                 }
                 Status = $"Error checking playlist tracks: {ex.Message}";
+            }
+        }
+
+        private bool CanRemoveTrack(TrackDto track)
+        {
+            return track != null && _selectedPlaylist != null && _viewingGeneratedPlaylist == null;
+        }
+
+        private async void RemoveTrackFromPlaylist(TrackDto track)
+        {
+            if (track == null || _selectedPlaylist == null || string.IsNullOrEmpty(track.Uri)) return;
+
+            try
+            {
+                StartBusy("Removing track from playlist...");
+
+                await _spotify.RemoveTracksFromPlaylistAsync(_selectedPlaylist.Id, new[] { track.Uri });
+                _currentPlaylistTracks.Remove(track);
+
+                Status = "Track removed from playlist";
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error removing track: {ex.Message}");
+                Status = $"Failed to remove track: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private bool CanMoveTrackUp(TrackDto track)
+        {
+            return track != null && _currentPlaylistTracks.IndexOf(track) > 0 && _viewingGeneratedPlaylist == null;
+        }
+
+        private bool CanMoveTrackDown(TrackDto track)
+        {
+            return track != null && _currentPlaylistTracks.IndexOf(track) < _currentPlaylistTracks.Count - 1 && _viewingGeneratedPlaylist == null;
+        }
+
+        private async void MoveTrackUp(TrackDto track)
+        {
+            if (track == null || _selectedPlaylist == null) return;
+
+            var currentIndex = _currentPlaylistTracks.IndexOf(track);
+            if (currentIndex <= 0) return;
+
+            try
+            {
+                StartBusy("Moving track up...");
+
+                // Call Spotify API to reorder (use original positions)
+                await _spotify.ReorderPlaylistTracksAsync(_selectedPlaylist.Id, currentIndex, currentIndex - 1, 1);
+
+                // Update local collection
+                _currentPlaylistTracks.Move(currentIndex, currentIndex - 1);
+
+                Status = "Track moved up";
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error moving track up: {ex.Message}");
+                Status = $"Failed to move track: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private async void MoveTrackDown(TrackDto track)
+        {
+            if (track == null || _selectedPlaylist == null) return;
+
+            var currentIndex = _currentPlaylistTracks.IndexOf(track);
+            if (currentIndex < 0 || currentIndex >= _currentPlaylistTracks.Count - 1) return;
+
+            try
+            {
+                StartBusy("Moving track down...");
+
+                // Call Spotify API to reorder (use original positions)
+                await _spotify.ReorderPlaylistTracksAsync(_selectedPlaylist.Id, currentIndex, currentIndex + 2, 1);
+
+                // Update local collection
+                _currentPlaylistTracks.Move(currentIndex, currentIndex + 1);
+
+                Status = "Track moved down";
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error moving track down: {ex.Message}");
+                Status = $"Failed to move track: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private async void LoadArtistTracks(SearchResultDto searchResult)
+        {
+            System.Diagnostics.Debug.WriteLine($"LoadArtistTracks called with searchResult: {searchResult?.Name} (Type: {searchResult?.Type}, ID: {searchResult?.Id})");
+
+            if (searchResult == null)
+            {
+                System.Diagnostics.Debug.WriteLine("LoadArtistTracks: searchResult is null");
+                return;
+            }
+
+            if (searchResult.Type != "artist")
+            {
+                System.Diagnostics.Debug.WriteLine($"LoadArtistTracks: searchResult.Type is '{searchResult.Type}', expected 'artist'");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(searchResult.Id))
+            {
+                System.Diagnostics.Debug.WriteLine("LoadArtistTracks: searchResult.Id is null or empty");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"LoadArtistTracks: Processing artist '{searchResult.Name}' with ID '{searchResult.Id}'");
+
+            try
+            {
+                StartBusy($"Loading top tracks for '{searchResult.Name}'...", LoadingType.Search);
+
+                var artistTracks = await _spotify.GetArtistTopTracksAsync(searchResult.Id);
+
+                System.Diagnostics.Debug.WriteLine($"LoadArtistTracks: Retrieved {artistTracks.Count} tracks for artist '{searchResult.Name}'");
+
+                _availableTracks.Clear();
+
+                foreach (var track in artistTracks.OrderBy(t => t.Name))
+                {
+                    var searchResultDto = new SearchResultDto
+                    {
+                        Id = track.Id,
+                        Name = track.Name,
+                        Type = "track",
+                        Description = $"{track.Artists} - {track.AlbumName}",
+                        ImageUrl = track.AlbumImageUrl,
+                        Href = track.Href,
+                        Uri = track.Uri,
+                        CanAddToPlaylist = true,
+                        IsInSelectedPlaylist = false,
+                        OriginalDto = track
+                    };
+                    _availableTracks.Add(searchResultDto);
+                }
+
+                // Update track status for selected playlist
+                if (_selectedPlaylist != null)
+                {
+                    await UpdateTracksInSelectedPlaylistAsync();
+                }
+
+                Status = $"Loaded {artistTracks.Count} top tracks for '{searchResult.Name}'";
+                System.Diagnostics.Debug.WriteLine($"LoadArtistTracks: Successfully loaded {artistTracks.Count} tracks");
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading artist tracks: {ex.Message}");
+                Status = $"Failed to load artist tracks: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy(LoadingType.Search);
+            }
+        }
+
+        // Playlist Generator Methods
+        private async Task GenerateRandomPlaylistAsync()
+        {
+            try
+            {
+                IsGenerating = true;
+                StartBusy("Generating random playlist...");
+
+                // Generate random name
+                var randomNames = new[] { "Chill Vibes", "Party Mix", "Road Trip", "Workout Beats", "Study Session", "Late Night", "Morning Coffee", "Weekend Fun", "Random Hits", "Discovery Mode" };
+                var randomAdjectives = new[] { "Awesome", "Epic", "Fantastic", "Groovy", "Amazing", "Super", "Cool", "Fresh", "Hot", "Wild" };
+                var selectedBaseName = randomNames[new Random().Next(randomNames.Length)];
+                var selectedAdjective = randomAdjectives[new Random().Next(randomAdjectives.Length)];
+                var randomName = $"{selectedAdjective} {selectedBaseName}";
+
+                // Generate description that matches the vibe
+                var description = GenerateVibeDescription(selectedBaseName);
+
+                // Get tracks from new releases instead of random search
+                var tracks = new List<TrackDto>();
+                var allTracks = new List<TrackDto>();
+                
+                // Get new releases (may need multiple pages)
+                int albumOffset = 0;
+                const int albumsPerPage = 20; // Get more albums to have variety
+                int maxAlbums = Math.Min(albumsPerPage * 3, 100); // Limit to prevent too many API calls
+                
+                while (allTracks.Count < _selectedSongCount * 2 && albumOffset < maxAlbums)
+                {
+                    var newReleases = await _spotify.GetNewReleasesPageAsync(albumOffset, albumsPerPage);
+                    if (newReleases?.Items == null || newReleases.Items.Count == 0)
+                        break;
+
+                    // For each album, get its tracks
+                    foreach (var album in newReleases.Items)
+                    {
+                        if (album == null || string.IsNullOrEmpty(album.Id)) continue;
+                        
+                        var albumTracks = await _spotify.GetAlbumTracksAsync(album.Id);
+                        if (albumTracks != null)
+                        {
+                            // Set album information for each track
+                            foreach (var track in albumTracks)
+                            {
+                                track.AlbumName = album.Name;
+                                track.AlbumImageUrl = album.ImageUrl;
+                            }
+                            allTracks.AddRange(albumTracks);
+                        }
+                        
+                        // Break if we have enough tracks
+                        if (allTracks.Count >= _selectedSongCount * 2)
+                            break;
+                    }
+                    
+                    albumOffset += albumsPerPage;
+                    
+                    // Break if no more pages
+                    if (string.IsNullOrEmpty(newReleases.Next))
+                        break;
+                }
+
+                // Randomly select the required number of tracks
+                if (allTracks.Count > 0)
+                {
+                    var random = new Random();
+                    tracks = allTracks.OrderBy(t => random.Next()).Take(_selectedSongCount).ToList();
+                }
+
+                // Get random artwork from a free image service (using Lorem Picsum)
+                var randomImageId = new Random().Next(1, 1000);
+                var imageUrl = $"https://picsum.photos/300/300?random={randomImageId}";
+
+                // Create generated playlist
+                var generatedPlaylist = new GeneratedPlaylistDto
+                {
+                    Name = randomName,
+                    Genre = "New Releases", // Always new releases now
+                    TrackCount = tracks.Count,
+                    Tracks = new ObservableCollection<TrackDto>(tracks),
+                    ImageUrl = imageUrl,
+                    Description = description
+                };
+
+                // Set position numbers for tracks
+                for (int i = 0; i < generatedPlaylist.Tracks.Count; i++)
+                {
+                    generatedPlaylist.Tracks[i].Position = i + 1;
+                }
+
+                _generatedPlaylists.Add(generatedPlaylist);
+                Status = $"Generated playlist '{randomName}' with {tracks.Count} tracks";
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error generating playlist: {ex.Message}");
+                Status = $"Failed to generate playlist: {ex.Message}";
+            }
+            finally
+            {
+                IsGenerating = false;
+                EndBusy();
+            }
+        }
+
+        private string GenerateVibeDescription(string baseName)
+        {
+            return baseName switch
+            {
+                "Chill Vibes" => "Relax and unwind with these mellow, atmospheric tracks perfect for downtime",
+                "Party Mix" => "Get the party started with high-energy beats and danceable rhythms",
+                "Road Trip" => "Perfect soundtrack for your next adventure with upbeat and scenic vibes",
+                "Workout Beats" => "Power through your workout with motivating rhythms and driving beats",
+                "Study Session" => "Focus and concentrate with instrumental tracks and ambient sounds",
+                "Late Night" => "Wind down your day with smooth, introspective melodies and chill vibes",
+                "Morning Coffee" => "Start your day right with refreshing tunes and positive energy",
+                "Weekend Fun" => "Make the most of your weekend with carefree and joyful melodies",
+                "Random Hits" => "A eclectic mix of popular tracks spanning different genres and eras",
+                "Discovery Mode" => "Explore new sounds and artists with fresh, exciting discoveries",
+                _ => "A curated collection of tracks with great vibes"
+            };
+        }
+
+        private async void SaveGeneratedPlaylist(GeneratedPlaylistDto playlist)
+        {
+            if (playlist == null) return;
+
+            try
+            {
+                StartBusy($"Saving playlist '{playlist.Name}'...");
+
+                // Create the playlist on Spotify
+                var createdPlaylist = await _spotify.CreatePlaylistAsync(
+                    playlist.Name,
+                    playlist.Description,
+                    true, // public
+                    false // not collaborative
+                );
+
+                // Add tracks to the playlist
+                if (playlist.Tracks.Count > 0)
+                {
+                    var trackUris = playlist.Tracks.Where(t => !string.IsNullOrEmpty(t.Uri)).Select(t => t.Uri!).ToList();
+                    await _spotify.AddTracksToPlaylistAsync(createdPlaylist.Id, trackUris);
+                }
+
+                // Try to upload the random image
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(playlist.ImageUrl))
+                    {
+                        // Download the image from the URL
+                        using (var client = new System.Net.Http.HttpClient())
+                        {
+                            var imageBytes = await client.GetByteArrayAsync(playlist.ImageUrl);
+                            var base64Image = Convert.ToBase64String(imageBytes);
+                            await _spotify.UploadPlaylistImageAsync(createdPlaylist.Id, base64Image);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to upload playlist image: {ex.Message}");
+                    // Don't fail the whole operation if image upload fails
+                }
+
+                // Add to user playlists
+                UserPlaylists.Insert(0, createdPlaylist);
+                SelectedPlaylist = createdPlaylist;
+
+                // Remove from generated playlists
+                _generatedPlaylists.Remove(playlist);
+
+                Status = $"Playlist '{playlist.Name}' saved to Spotify!";
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+            {
+                // Authentication required - navigate to login page
+                System.Diagnostics.Debug.WriteLine("Authentication required - navigating to login page");
+                MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                Status = "Please log in to continue";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving playlist: {ex.Message}");
+                Status = $"Failed to save playlist: {ex.Message}";
+            }
+            finally
+            {
+                EndBusy();
+            }
+        }
+
+        private void ViewGeneratedPlaylist(GeneratedPlaylistDto playlist)
+        {
+            if (playlist == null) return;
+
+            // Clear current tracks and set viewing state
+            _currentPlaylistTracks.Clear();
+            _viewingGeneratedPlaylist = playlist;
+
+            // Add all tracks from the generated playlist
+            foreach (var track in playlist.Tracks)
+            {
+                _currentPlaylistTracks.Add(track);
+            }
+
+            // Update the header and status
+            RaisePropertyChanged(nameof(PlaylistTracksHeader));
+            Status = $"Viewing generated playlist '{playlist.Name}' with {playlist.Tracks.Count} tracks";
+        }
+
+        private void RemoveTrackFromGeneratedPlaylist(TrackDto track)
+        {
+            if (track == null || _selectedGeneratedPlaylist == null) return;
+
+            _selectedGeneratedPlaylist.Tracks.Remove(track);
+            
+            // Update positions after removal
+            for (int i = 0; i < _selectedGeneratedPlaylist.Tracks.Count; i++)
+            {
+                _selectedGeneratedPlaylist.Tracks[i].Position = i + 1;
+            }
+            
+            Status = $"Removed '{track.Name}' from generated playlist";
+        }
+
+        private void DeleteGeneratedPlaylist(GeneratedPlaylistDto playlist)
+        {
+            if (playlist == null) return;
+
+            var result = _confirmationDialogService.ShowConfirmation(
+                "Delete Generated Playlist",
+                $"Are you sure you want to delete the generated playlist '{playlist.Name}'?",
+                "Delete",
+                "Cancel");
+
+            if (result == true)
+            {
+                _generatedPlaylists.Remove(playlist);
+                if (_selectedGeneratedPlaylist == playlist)
+                {
+                    SelectedGeneratedPlaylist = null;
+                }
+                Status = $"Deleted generated playlist '{playlist.Name}'";
             }
         }
     }

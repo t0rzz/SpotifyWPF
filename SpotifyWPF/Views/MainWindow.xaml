@@ -29,6 +29,9 @@
         <DataTemplate DataType="{x:Type vm1:AlbumsPageViewModel}">
             <page:AlbumsPage/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm1:PlaylistManagerPageViewModel}">
+            <page:PlaylistManagerPage/>
+        </DataTemplate>
 
         <!-- Modern Player Styles -->
         <SolidColorBrush x:Key="PlayerBackgroundBrush" Color="#181818"/>

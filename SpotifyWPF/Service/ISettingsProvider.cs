@@ -5,5 +5,11 @@
         string SpotifyClientId { get; }
 
         string SpotifyRedirectPort { get; }
+
+        int MaxThreadsForOperations { get; }
+
+        string DefaultMarket { get; }
+
+        bool MinimizeToTrayOnClose { get; }
     }
 }

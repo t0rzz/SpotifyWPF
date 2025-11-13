@@ -259,6 +259,7 @@ namespace SpotifyWPF.ViewModel.Page
         {
             Playlists.CollectionChanged += (s, e) => ApplyPlaylistsFilter();
             Tracks.CollectionChanged += (s, e) => ApplyTracksFilter();
+            FollowedArtists.CollectionChanged += (s, e) => ApplyArtistsFilter();
         }
 
         private void ApplyPlaylistsFilter()
@@ -290,6 +291,8 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 FilteredPlaylists.Add(item);
             }
+
+            RaisePropertyChanged(nameof(PlaylistsHeader));
         }
 
         private void ApplyTracksFilter()
@@ -308,6 +311,23 @@ namespace SpotifyWPF.ViewModel.Page
             }
         }
 
+        private void ApplyArtistsFilter()
+        {
+            FilteredFollowedArtists.Clear();
+
+            var filteredItems = string.IsNullOrWhiteSpace(_artistsFilterText)
+                ? FollowedArtists
+                : FollowedArtists.Where(item =>
+                    item.Name?.Contains(_artistsFilterText, StringComparison.OrdinalIgnoreCase) ?? false);
+
+            foreach (var item in filteredItems)
+            {
+                FilteredFollowedArtists.Add(item);
+            }
+
+            RaisePropertyChanged(nameof(ArtistsHeader));
+        }
+
         public ObservableCollection<PlaylistDto> Playlists { get; } = new ObservableCollection<PlaylistDto>();
 
         public ObservableCollection<TrackModel> Tracks { get; } = new ObservableCollection<TrackModel>();
@@ -315,6 +335,7 @@ namespace SpotifyWPF.ViewModel.Page
         // Filtered collections for search functionality
         public ObservableCollection<PlaylistDto> FilteredPlaylists { get; } = new ObservableCollection<PlaylistDto>();
         public ObservableCollection<TrackModel> FilteredTracks { get; } = new ObservableCollection<TrackModel>();
+        public ObservableCollection<ArtistDto> FilteredFollowedArtists { get; } = new ObservableCollection<ArtistDto>();
 
         // Current playlist for track operations
         private PlaylistDto? _currentPlaylist;
@@ -337,8 +358,9 @@ namespace SpotifyWPF.ViewModel.Page
                                                    CurrentPlaylist.OwnerId == CurrentUserId;
 
         // Dynamic headers with counts
-        public string PlaylistsHeader => Playlists.Count > 0 ? $"Playlists ({Playlists.Count})" : "Playlists";
+        public string PlaylistsHeader => FilteredPlaylists.Count > 0 ? $"Playlists ({FilteredPlaylists.Count})" : "Playlists";
         public string TracksHeader => Tracks.Count > 0 ? $"Tracks ({Tracks.Count})" : "Tracks";
+        public string ArtistsHeader => FilteredFollowedArtists.Count > 0 ? $"Users/Artists ({FilteredFollowedArtists.Count})" : "Users/Artists";
 
         // Search filter properties
         private string _playlistsFilterText = string.Empty;
@@ -367,6 +389,21 @@ namespace SpotifyWPF.ViewModel.Page
                     _tracksFilterText = value;
                     RaisePropertyChanged();
                     ApplyTracksFilter();
+                }
+            }
+        }
+
+        private string _artistsFilterText = string.Empty;
+        public string ArtistsFilterText
+        {
+            get => _artistsFilterText;
+            set
+            {
+                if (_artistsFilterText != value)
+                {
+                    _artistsFilterText = value;
+                    RaisePropertyChanged();
+                    ApplyArtistsFilter();
                 }
             }
         }
@@ -707,39 +744,82 @@ namespace SpotifyWPF.ViewModel.Page
 
         public async Task DeletePlaylistsAsync(IList items)
         {
-            if (items == null || items.Count == 0) return;
+            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] DeletePlaylistsAsync called with {items?.Count ?? 0} items");
 
-            var playlists = items.Cast<PlaylistDto>().ToList();
-            if (!playlists.Any()) return;
-
-            // Check if user owns all selected playlists
-            var ownedPlaylists = playlists.Where(p => p.OwnerId == _spotify.CurrentUser?.Id).ToList();
-            if (ownedPlaylists.Count != playlists.Count)
+            if (items == null || items.Count == 0) 
             {
-                // Some playlists are not owned by the user
-                var notOwned = playlists.Except(ownedPlaylists).Select(p => p.Name).ToList();
-                var message = $"The following playlists will be unfollowed:\n{string.Join("\n", notOwned)}";
-                var result = _confirmationDialogService.ShowConfirmation(
-                    "Delete/Unfollow Playlists",
-                    message,
-                    "Continue",
-                    "Cancel"
-                );
-                if (result != true) return;
+                System.Diagnostics.Debug.WriteLine("[PlaylistDelete] No items provided, returning");
+                return;
             }
 
-            var messageText = playlists.Count == 1
-                ? $"Are you sure you want to delete the playlist '{playlists[0].Name}'?"
-                : $"Are you sure you want to delete these {playlists.Count} playlists?";
+            var playlists = items.Cast<PlaylistDto>().ToList();
+            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Cast to {playlists.Count} playlists");
 
-            var confirmResult = _confirmationDialogService.ShowConfirmation(
-                "Confirm Deletion",
-                messageText,
-                "Delete",
+            if (!playlists.Any()) 
+            {
+                System.Diagnostics.Debug.WriteLine("[PlaylistDelete] No valid playlists, returning");
+                return;
+            }
+
+            // Determine operation type and show appropriate confirmation
+            var ownedPlaylists = playlists.Where(p => p.OwnerId == _spotify.CurrentUser?.Id).ToList();
+            var notOwnedPlaylists = playlists.Except(ownedPlaylists).ToList();
+
+            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Current user ID: {_spotify.CurrentUser?.Id}");
+            foreach (var p in playlists)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Playlist '{p.Name}' - OwnerId: {p.OwnerId}, IsOwned: {p.OwnerId == _spotify.CurrentUser?.Id}");
+            }
+
+            string title, message, confirmButtonText;
+
+            if (ownedPlaylists.Count == playlists.Count)
+            {
+                // All playlists are owned - delete operation
+                title = "Confirm Deletion";
+                message = playlists.Count == 1
+                    ? $"Are you sure you want to delete the playlist '{playlists[0].Name}'?"
+                    : $"Are you sure you want to delete these {playlists.Count} playlists?";
+                confirmButtonText = "Delete";
+            }
+            else if (ownedPlaylists.Count == 0)
+            {
+                // No playlists are owned - unfollow operation
+                title = "Confirm Unfollow";
+                message = playlists.Count == 1
+                    ? $"Are you sure you want to unfollow the playlist '{playlists[0].Name}'?"
+                    : $"Are you sure you want to unfollow these {playlists.Count} playlists?";
+                confirmButtonText = "Unfollow";
+            }
+            else
+            {
+                // Mixed ownership - delete and unfollow operation
+                title = "Confirm Delete/Unfollow";
+                var deleteNames = ownedPlaylists.Select(p => p.Name);
+                var unfollowNames = notOwnedPlaylists.Select(p => p.Name);
+                message = $"The following playlists will be deleted:\n{string.Join("\n", deleteNames)}\n\n" +
+                         $"The following playlists will be unfollowed:\n{string.Join("\n", unfollowNames)}";
+                confirmButtonText = "Continue";
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Showing confirmation dialog: {title}");
+
+            var result = _confirmationDialogService.ShowConfirmation(
+                title,
+                message,
+                confirmButtonText,
                 "Cancel"
             );
 
-            if (confirmResult != true) return;
+            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Confirmation result: {result}");
+
+            if (result != true) 
+            {
+                System.Diagnostics.Debug.WriteLine("[PlaylistDelete] User cancelled, returning");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Starting deletion of {playlists.Count} playlists");
 
             StartBusy($"Deleting {playlists.Count} playlist(s)...");
 
@@ -752,6 +832,8 @@ namespace SpotifyWPF.ViewModel.Page
                 var playlistsQueue = new ConcurrentQueue<PlaylistDto>(playlists);
                 var workers = new List<Task>();
 
+                System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Starting {workersCount} workers for {playlists.Count} playlists");
+
                 for (var w = 0; w < workersCount; w++)
                 {
                     var workerId = w; // Capture for logging
@@ -762,6 +844,8 @@ namespace SpotifyWPF.ViewModel.Page
                         
                         while (playlistsQueue.TryDequeue(out var playlist))
                         {
+                            System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} processing playlist '{playlist.Name}' (ID: {playlist.Id})");
+
                             if (_cancelRequested) 
                             {
                                 System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} stopped: cancellation requested (processed {processedCount} playlists)");
@@ -776,33 +860,53 @@ namespace SpotifyWPF.ViewModel.Page
                             {
                                 try
                                 {
+                                    System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} attempt {attempt} for playlist '{playlist.Name}'");
+
                                     if (ownedPlaylists.Contains(playlist))
                                     {
                                         // Delete owned playlist
+                                        System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} deleting owned playlist '{playlist.Name}'");
                                         await _spotify.DeletePlaylistAsync(playlist.Id!);
+                                        System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} successfully deleted playlist '{playlist.Name}'");
                                     }
                                     else
                                     {
                                         // Unfollow not owned playlist
+                                        System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} unfollowing playlist '{playlist.Name}'");
                                         await _spotify.UnfollowPlaylistAsync(playlist.Id!);
+                                        System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} successfully unfollowed playlist '{playlist.Name}'");
                                     }
 
                                     processedCount++;
                                     System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} successfully processed playlist '{playlist.Name}' ({processedCount} total)");
 
                                     // Remove from UI
+                                    System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} removing playlist '{playlist.Name}' from UI");
                                     await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
                                     {
-                                        Playlists.Remove(playlist);
-                                        _playlistIds.Remove(playlist.Id!);
+                                        var wasRemoved = Playlists.Remove(playlist);
+                                        var idRemoved = _playlistIds.Remove(playlist.Id!);
                                         RaisePropertyChanged(nameof(PlaylistsHeader));
+                                        System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] UI removal: playlist removed={wasRemoved}, id removed={idRemoved}, remaining playlists={Playlists.Count}");
                                     }));
 
                                     playlistSuccess = true;
 
                                     // Slow down subsequent calls to respect rate limits
                                     var delay = delayBetweenRequestsMs + Random.Shared.Next(0, 250);
+                                    System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} delaying for {delay}ms");
                                     await Task.Delay(delay);
+                                }
+                                catch (InvalidOperationException ex) when (ex.Message.Contains("Not authenticated"))
+                                {
+                                    // Authentication required - navigate to login page
+                                    System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Authentication required for playlist '{playlist.Name}': {ex.Message}");
+                                    await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                                    {
+                                        MessengerInstance.Send(new object(), MessageType.AuthenticationRequired);
+                                        System.Diagnostics.Debug.WriteLine("[PlaylistDelete] Sent AuthenticationRequired message");
+                                    }));
+                                    break; // Stop processing this playlist
                                 }
                                 catch (Exception ex)
                                 {
@@ -815,6 +919,8 @@ namespace SpotifyWPF.ViewModel.Page
                                                           ex.Message.Contains("Service Unavailable") ||
                                                           ex.Message.Contains("Gateway Timeout");
                                     
+                                    System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Worker {workerId} exception on playlist '{playlist.Name}' attempt {attempt}: {ex.Message} (retryable: {isRetryableError})");
+
                                     if (isRetryableError && attempt < maxPlaylistAttempts)
                                     {
                                         var backoffDelay = (int)(Math.Pow(2, attempt - 1) * 1000); // 1s, 2s, 4s
@@ -844,15 +950,17 @@ namespace SpotifyWPF.ViewModel.Page
                     }));
                 }
 
+                System.Diagnostics.Debug.WriteLine("[PlaylistDelete] Waiting for all workers to complete");
+
                 // Wait for all workers to complete
                 await Task.WhenAll(workers);
 
-                System.Diagnostics.Debug.WriteLine($"Successfully deleted/unfollowed {playlists.Count} playlist(s)");
+                System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] All workers completed. Successfully deleted/unfollowed {playlists.Count} playlist(s)");
             }
             catch (Exception ex)
             {
                 var errorMessage = $"Failed to delete playlists. Error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine(errorMessage);
+                System.Diagnostics.Debug.WriteLine($"[PlaylistDelete] Outer exception: {errorMessage}");
 
                 // Show error dialog
                 _confirmationDialogService.ShowConfirmation(
@@ -865,6 +973,7 @@ namespace SpotifyWPF.ViewModel.Page
             }
             finally
             {
+                System.Diagnostics.Debug.WriteLine("[PlaylistDelete] Ending busy state");
                 EndBusy();
             }
         }

@@ -25,10 +25,9 @@
         // Initialize with access token from C#
         initialize: function(token) {
             accessToken = token;
-            console.log('PlayerBridge initialized with token');
-            updateStatus('Token received, checking SDK...');
-            
+            console.log('PlayerBridge initialized with token:', accessToken.substring(0, 20) + '...');
             console.log('isSDKReady:', isSDKReady); // Debug log
+            updateStatus('Token received, checking SDK...');
             
             // If SDK is already ready, create the player now
             if (isSDKReady) {
@@ -44,6 +43,8 @@
         onSDKReady: function() {
             isSDKReady = true;
             console.log('Spotify SDK is ready, isSDKReady set to true');
+            console.log('window.Spotify:', typeof window.Spotify);
+            console.log('window.Spotify.Player:', typeof window.Spotify?.Player);
             
             // If we already have the token, create the player now
             if (accessToken) {

@@ -8,7 +8,7 @@
       xmlns:conv="clr-namespace:SpotifyWPF.View.Converters"
       mc:Ignorable="d"
       d:DesignHeight="600" d:DesignWidth="800"
-      DataContext="{Binding PlaylistManagerPageViewModel, Source={StaticResource Locator}}">
+      DataContext="{Binding PlaylistManagerPage, Source={StaticResource Locator}}">
 
     <UserControl.Resources>
         <Style x:Key="CardStyle" TargetType="Border">
@@ -174,6 +174,7 @@
 
         <conv:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
         <conv:BooleanToVisibilityConverterShow x:Key="BooleanToVisibilityConverterShow"/>
+        <conv:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
     </UserControl.Resources>
 
     <Grid Background="#FF121212">
@@ -183,7 +184,7 @@
         </Grid.RowDefinitions>
 
         <!-- Status Bar -->
-        <Border Grid.Row="0" Background="#FF1DB954" Padding="10">
+        <Border Grid.Row="0" Background="#FF2A2A2A" Padding="10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -199,9 +200,14 @@
         <TabControl Grid.Row="1" Background="Transparent" BorderThickness="0">
             <TabItem Header="Create Playlist" Background="Transparent" Foreground="White">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="10">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
                         <!-- Create Playlist Section -->
-                        <Border Style="{StaticResource CardStyle}">
+                        <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="5">
                             <StackPanel>
                                 <TextBlock Text="Create New Playlist" FontSize="18" FontWeight="Bold" Foreground="White" Margin="0,0,0,15"/>
 
@@ -225,7 +231,123 @@
                                 <Button Content="Create Playlist" Command="{Binding CreatePlaylistCommand}" HorizontalAlignment="Left" Margin="5,15,0,0" MaxWidth="150"/>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+
+                        <!-- Playlist Generator Section -->
+                        <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="5">
+                            <StackPanel>
+                                <TextBlock Text="New Releases Generator" FontSize="18" FontWeight="Bold" Foreground="White" Margin="0,0,0,15"/>
+
+                                <Label Content="Number of Songs:" Style="{StaticResource LabelStyle}"/>
+                                <ComboBox ItemsSource="{Binding SongCountOptions}" SelectedItem="{Binding SelectedSongCount}"
+                                         Style="{StaticResource ComboBoxStyle}"
+                                         ItemContainerStyle="{StaticResource ComboBoxItemStyle}"/>
+
+                                <StackPanel Orientation="Horizontal" Margin="5,15,5,5">
+                                    <Button Content="Generate New Releases Playlist" Command="{Binding GenerateRandomPlaylistCommand}"
+                                           HorizontalAlignment="Left" MaxWidth="200"
+                                           IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBooleanConverter}}"/>
+                                    <TextBlock Text="⏳" 
+                                              FontSize="14" 
+                                              VerticalAlignment="Center" 
+                                              Margin="8,0,0,0"
+                                              Visibility="{Binding IsGenerating, Converter={StaticResource BooleanToVisibilityConverterShow}}"/>
+                                </StackPanel>
+
+                                <!-- Generated Playlist Preview -->
+                                <Expander Header="Generated Playlist Preview" 
+                                         IsExpanded="{Binding IsGeneratedPlaylistPreviewVisible, Mode=OneWay}"
+                                         Margin="0,15,0,0"
+                                         Foreground="White"
+                                         Background="Transparent">
+                                    <StackPanel>
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding SelectedGeneratedPlaylist.Name, FallbackValue='No playlist selected'}" 
+                                                          FontSize="16" FontWeight="Bold" Foreground="White"/>
+                                                <TextBlock Text="{Binding SelectedGeneratedPlaylist.Genre, StringFormat='Genre: {0}', FallbackValue='Genre: New Releases'}" 
+                                                          FontSize="12" Foreground="#FFAAAAAA"/>
+                                                <TextBlock Text="{Binding SelectedGeneratedPlaylist.Tracks.Count, StringFormat='Tracks: {0}', FallbackValue='Tracks: 0'}" 
+                                                          FontSize="12" Foreground="#FFAAAAAA"/>
+                                            </StackPanel>
+
+                                            <Button Grid.Column="1" Content="Save to Spotify" 
+                                                   Command="{Binding SaveGeneratedPlaylistCommand}"
+                                                   CommandParameter="{Binding SelectedGeneratedPlaylist}"
+                                                   Background="#FF1DB954" Foreground="White"
+                                                   Width="120" Height="35"
+                                                   Margin="10,0,0,0"/>
+                                        </Grid>
+
+                                        <!-- Generated Playlist Tracks -->
+                                        <DataGrid ItemsSource="{Binding SelectedGeneratedPlaylist.Tracks}"
+                                                 Height="300"
+                                                 Margin="0,15,0,0"
+                                                 Style="{StaticResource DataGridStyle}"
+                                                 ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
+                                                 RowStyle="{StaticResource DataGridRowStyle}">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="#" Binding="{Binding Position}" Width="40"/>
+                                                <DataGridTextColumn Header="Title" Binding="{Binding Name}" Width="180"/>
+                                                <DataGridTextColumn Header="Artist" Binding="{Binding Artists}" Width="130"/>
+                                                <DataGridTextColumn Header="Album" Binding="{Binding Album}" Width="130"/>
+                                                <DataGridTextColumn Header="Duration" Binding="{Binding DurationFormatted}" Width="80"/>
+                                                <DataGridTemplateColumn Header="Actions" Width="80">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <Button Content="Remove" 
+                                                                   Command="{Binding DataContext.RemoveTrackFromGeneratedPlaylistCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                                   CommandParameter="{Binding}" 
+                                                                   Width="60" Margin="2" 
+                                                                   Background="Red" Foreground="White"/>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </StackPanel>
+                                </Expander>
+
+                                <!-- Generated Playlists Grid (Compact View) -->
+                                <TextBlock Text="Generated Playlists" FontSize="14" FontWeight="SemiBold" Foreground="White" Margin="0,15,0,10"/>
+                                <TextBlock Text="{Binding GeneratedPlaylistsCount, StringFormat='{}{0} playlists generated'}"
+                                          FontSize="12"
+                                          Foreground="#FFAAAAAA"
+                                          Margin="0,0,0,10"/>
+
+                                <DataGrid ItemsSource="{Binding GeneratedPlaylists}"
+                                         SelectedItem="{Binding SelectedGeneratedPlaylist}"
+                                         Height="200"
+                                         Style="{StaticResource DataGridStyle}"
+                                         ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
+                                         RowStyle="{StaticResource DataGridRowStyle}"
+                                         PreviewMouseLeftButtonDown="GeneratedPlaylistsGrid_PreviewMouseLeftButtonDown"
+                                         SelectionChanged="GeneratedPlaylistsGrid_SelectionChanged">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="140"/>
+                                        <DataGridTextColumn Header="Songs" Binding="{Binding TrackCount}" Width="60"/>
+                                        <DataGridTextColumn Header="Genre" Binding="{Binding Genre}" Width="100"/>
+                                        <DataGridTemplateColumn Header="Actions" Width="120">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Button Content="Save" Command="{Binding DataContext.SaveGeneratedPlaylistCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                               CommandParameter="{Binding}" Width="45" Height="25" Margin="2"/>
+                                                        <Button Content="Delete" Command="{Binding DataContext.DeleteGeneratedPlaylistCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                               CommandParameter="{Binding}" Width="50" Height="25" Margin="2" Background="Red" Foreground="White"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </ScrollViewer>
             </TabItem>
 
@@ -240,6 +362,10 @@
                     <Border Grid.Column="0" Style="{StaticResource CardStyle}" Margin="5">
                         <StackPanel>
                             <TextBlock Text="Available Tracks" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
+                            <TextBlock Text="{Binding AvailableTracksCount, StringFormat='{}{0} items found'}" 
+                                      FontSize="12" 
+                                      Foreground="#FFAAAAAA" 
+                                      Margin="0,0,0,10"/>
 
                             <!-- Search Box -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -248,7 +374,7 @@
                                           VerticalAlignment="Center" 
                                           Margin="0,0,8,0" 
                                           Foreground="White"/>
-                                <TextBox Text="{Binding SearchQuery}" 
+                                <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}" 
                                         Width="400" 
                                         HorizontalAlignment="Left"
                                         Style="{StaticResource TextBoxStyle}" 
@@ -293,11 +419,22 @@
                             </StackPanel>
 
                             <Grid>
-                                <DataGrid ItemsSource="{Binding AvailableTracks}" Height="350" 
-                                          Style="{StaticResource DataGridStyle}"
-                                          ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
-                                          RowStyle="{StaticResource DataGridRowStyle}">
-                                    <DataGrid.Columns>
+                            <DataGrid ItemsSource="{Binding AvailableTracks}" 
+                                      SelectedItem="{Binding SelectedAvailableTrack}"
+                                      Height="350" 
+                                      Style="{StaticResource DataGridStyle}"
+                                      ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
+                                      RowStyle="{StaticResource DataGridRowStyle}"
+                                      SelectionMode="Single"
+                                      SelectionUnit="FullRow">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Load all artist tracks"
+                                                 Command="{Binding DataContext.LoadArtistTracksCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                 CommandParameter="{Binding DataContext.SelectedAvailableTrack, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
+                                <DataGrid.Columns>
                                         <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200"/>
                                         <DataGridTextColumn Header="Details" Binding="{Binding Description}" Width="200"/>
                                         <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
@@ -376,6 +513,10 @@
 
                             <!-- Selected Tracks -->
                             <TextBlock Text="Selected Tracks:" FontSize="14" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,5"/>
+                            <TextBlock Text="{Binding SelectedTracksCount, StringFormat='{}{0} items'}" 
+                                      FontSize="12" 
+                                      Foreground="#FFAAAAAA" 
+                                      Margin="0,0,0,5"/>
                             <DataGrid ItemsSource="{Binding SelectedTracks}" Height="250" 
                                       Style="{StaticResource DataGridStyle}"
                                       ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
@@ -397,6 +538,134 @@
                             </DataGrid>
 
                             <Button Content="Add to Playlist" Command="{Binding AddSelectedTracksToPlaylistCommand}" Margin="5,15,5,0" MaxWidth="150"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="My Playlists" Background="Transparent" Foreground="White">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Playlist Actions -->
+                    <Border Grid.Row="0" Style="{StaticResource CardStyle}" Margin="5">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Load Playlists" Command="{Binding LoadUserPlaylistsCommand}"
+                                   Margin="5" MaxWidth="120"/>
+                            <Button Content="Create New Playlist" Command="{Binding CreatePlaylistCommand}"
+                                   Margin="5" Background="#FF1DB954" Foreground="White"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Playlists Grid -->
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="5">
+                        <StackPanel>
+                            <TextBlock Text="Your Playlists" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
+                            <TextBlock Text="{Binding UserPlaylistsCount, StringFormat='{}{0} playlists'}" 
+                                      FontSize="12" 
+                                      Foreground="#FFAAAAAA" 
+                                      Margin="0,0,0,10"/>
+
+                            <DataGrid ItemsSource="{Binding UserPlaylists}" SelectedItem="{Binding SelectedPlaylist}"
+                                     Style="{StaticResource DataGridStyle}"
+                                     ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
+                                     RowStyle="{StaticResource DataGridRowStyle}"
+                                     Height="400">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="150"/>
+                                    <DataGridTextColumn Header="Owner" Binding="{Binding OwnerDisplayName}" Width="120"/>
+                                    <DataGridTextColumn Header="Tracks" Binding="{Binding TracksTotal}" Width="60"/>
+                                    <DataGridTextColumn Header="Public" Binding="{Binding IsPublic}" Width="60"/>
+                                    <DataGridTemplateColumn Header="Actions" Width="120">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="Edit" Command="{Binding DataContext.EditPlaylistCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                           CommandParameter="{Binding}" Width="40" Margin="2"/>
+                                                    <Button Content="Delete" Command="{Binding DataContext.DeletePlaylistCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                           CommandParameter="{Binding}" Width="50" Margin="2" Background="Red" Foreground="White"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Playlist Tracks" Background="Transparent" Foreground="White">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Selected Playlist Info -->
+                    <Border Grid.Row="0" Style="{StaticResource CardStyle}" Margin="5">
+                        <StackPanel>
+                            <TextBlock Text="Current Playlist" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" Text="Selected:" Foreground="White" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Grid.Column="1" Text="{Binding SelectedPlaylist.Name, FallbackValue='No playlist selected'}"
+                                          Foreground="White" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                    <Button Content="Select Playlist" Command="{Binding SelectPlaylistCommand}"
+                                           CommandParameter="{Binding SelectedPlaylist}" Margin="10,0,0,0"/>
+                                    <Button Content="Edit Details" Command="{Binding EditPlaylistCommand}"
+                                           CommandParameter="{Binding SelectedPlaylist}" Margin="5,0,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Playlist Tracks -->
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="5">
+                        <StackPanel>
+                            <TextBlock Text="{Binding PlaylistTracksHeader}" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
+                            <TextBlock Text="{Binding CurrentPlaylistTracksCount, StringFormat='{}{0} tracks'}" 
+                                      FontSize="12" 
+                                      Foreground="#FFAAAAAA" 
+                                      Margin="0,0,0,10"/>
+
+                            <DataGrid ItemsSource="{Binding CurrentPlaylistTracks}"
+                                     Style="{StaticResource DataGridStyle}"
+                                     ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
+                                     RowStyle="{StaticResource DataGridRowStyle}"
+                                     Height="400">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Position}" Width="40"/>
+                                        <DataGridTextColumn Header="Added" Binding="{Binding AddedAt, StringFormat='{}{0:yyyy-MM-dd}'}" Width="100"/>
+                                    <DataGridTextColumn Header="Title" Binding="{Binding Name}" Width="200"/>
+                                    <DataGridTextColumn Header="Artist" Binding="{Binding Artists}" Width="150"/>
+                                    <DataGridTextColumn Header="Album" Binding="{Binding Album}" Width="150"/>
+                                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationFormatted}" Width="80"/>
+                                    <DataGridTemplateColumn Header="Actions" Width="150">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="↑" Command="{Binding DataContext.MoveTrackUpCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                           CommandParameter="{Binding}" Width="25" Margin="2"/>
+                                                    <Button Content="↓" Command="{Binding DataContext.MoveTrackDownCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                           CommandParameter="{Binding}" Width="25" Margin="2"/>
+                                                    <Button Content="Remove" Command="{Binding DataContext.RemoveTrackFromPlaylistCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                           CommandParameter="{Binding}" Width="60" Margin="2" Background="Red" Foreground="White"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
                         </StackPanel>
                     </Border>
                 </Grid>

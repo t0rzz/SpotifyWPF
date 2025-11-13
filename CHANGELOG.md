@@ -4,6 +4,80 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [4.0.0] - 2025-11-14
+
+### Added
+
+**Major Feature Enhancements**
+- Global media key support for system-wide playback control (play/pause, next, previous, volume)
+- System tray functionality with window state preservation and playback controls
+- User-configurable settings for minimize-to-tray behavior on window close
+- Enhanced albums view greeting to display personalized user name instead of generic text
+
+**Playlist Manager Feature**
+- Complete playlist creation and management system with custom images and descriptions
+- Advanced track search and selection with multi-type filtering (tracks, artists, albums, playlists)
+- Playlist generation based on genres with configurable track counts
+- Track management within playlists with add/remove functionality
+- Generated playlist management with viewing, editing, and deletion capabilities
+- Collaborative and public/private playlist creation options
+
+**Settings & Configuration**
+- Comprehensive settings window with performance and behavior configuration
+- Thread count optimization for bulk operations (1-10 threads)
+- Default market configuration for regional content
+- Minimize-to-tray behavior settings for window management
+
+**Search Functionality**
+- Multi-type search across tracks, artists, albums, and playlists
+- Real-time search results with pagination support
+- Context menu integration for search results
+
+### Enhanced
+
+**System Integration Improvements**
+- Seamless system tray integration with double-click to restore window
+- Global hotkey registration for media keys across all applications
+- Improved window management with state preservation during minimize-to-tray operations
+- Consistent user greeting experience across all views (Playlists and Albums)
+
+## [3.0.8] - 2025-11-14
+
+### Added
+
+**Enhanced Windows User Experience**
+- Global media key support for system-wide playback control (play/pause, next, previous, volume)
+- System tray functionality with window state preservation and playback controls
+- User-configurable settings for minimize-to-tray behavior on window close
+- Enhanced albums view greeting to display personalized user name instead of generic text
+
+**Playlist Manager Feature**
+- Complete playlist creation and management system with custom images and descriptions
+- Advanced track search and selection with multi-type filtering (tracks, artists, albums, playlists)
+- Playlist generation based on genres with configurable track counts
+- Track management within playlists with add/remove functionality
+- Generated playlist management with viewing, editing, and deletion capabilities
+- Collaborative and public/private playlist creation options
+
+**Settings & Configuration**
+- Comprehensive settings window with performance and behavior configuration
+- Thread count optimization for bulk operations (1-10 threads)
+- Default market configuration for regional content
+- Minimize-to-tray behavior settings for window management
+
+**Search Functionality**
+- Multi-type search across tracks, artists, albums, and playlists
+- Real-time search results with pagination support
+- Context menu integration for search results
+
+### Enhanced
+
+**System Integration Improvements**
+- Seamless system tray integration with double-click to restore window
+- Global hotkey registration for media keys across all applications
+- Improved window management with state preservation during minimize-to-tray operations
+- Consistent user greeting experience across all views (Playlists and Albums)
+
 ## [3.0.7] - 2025-10-01
 
 ### Added

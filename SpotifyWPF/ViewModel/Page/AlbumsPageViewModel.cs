@@ -130,7 +130,17 @@ namespace SpotifyWPF.ViewModel.Page
             );
 
             // Load user greeting and profile image
-            _ = LoadGreetingAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await LoadGreetingAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error loading greeting: {ex.Message}");
+                }
+            });
         }
 
         // Set up collection change handlers for filtering

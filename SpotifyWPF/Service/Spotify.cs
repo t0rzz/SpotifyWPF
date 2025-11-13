@@ -1,4 +1,4 @@
-﻿using SpotifyAPI.Web;
+using SpotifyAPI.Web;
 using SpotifyAPI.Web.Auth;
 using System;
 using System.Collections.Generic;
@@ -14,10 +14,11 @@ using System.Linq;
 using System.IO;
 using System.Security.Cryptography;
 using SpotifyWPF.View;
+using System.Text;
 
 namespace SpotifyWPF.Service
 {
-    public class Spotify : ISpotify
+    public class Spotify : ISpotify, IDisposable
     {
         private readonly ISettingsProvider _settingsProvider;
         private readonly ILoggingService _loggingService;
@@ -246,6 +247,8 @@ namespace SpotifyWPF.Service
                     Scopes.PlaylistModifyPublic,
                     Scopes.PlaylistReadCollaborative,
                     Scopes.PlaylistReadPrivate,
+                    // Required for playlist image upload
+                    Scopes.UgcImageUpload,
                     // Required for devices and playback control
                     Scopes.UserReadPlaybackState,
                     Scopes.UserModifyPlaybackState,
@@ -613,106 +616,106 @@ namespace SpotifyWPF.Service
 
         private static readonly HttpClient _http = new HttpClient();
 
-                // Centralized 429 (Rate Limit) handling for Spotify Web API calls using the SpotifyAPI.Web client
-                private static async Task<T> ExecuteApiWith429Async<T>(Func<Task<T>> action, int maxRetries = 2)
+        // Centralized 429 (Rate Limit) handling for Spotify Web API calls using the SpotifyAPI.Web client
+        private static async Task<T> ExecuteApiWith429Async<T>(Func<Task<T>> action, int maxRetries = 2)
+        {
+            int attempt = 0;
+            while (true)
+            {
+                try
                 {
-                    int attempt = 0;
-                    while (true)
+                    return await action().ConfigureAwait(false);
+                }
+                catch (APIException apiEx)
+                {
+                    // 429 handling with Retry-After
+                    if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt < maxRetries)
                     {
-                        try
-                        {
-                            return await action().ConfigureAwait(false);
-                        }
-                        catch (APIException apiEx)
-                        {
-                            // 429 handling with Retry-After
-                            if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt < maxRetries)
-                            {
-                                attempt++;
-                                var retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
-                                var delayMs = (int)(retryAfter * 1000) + Random.Shared.Next(100, 300);
-                                System.Diagnostics.Debug.WriteLine($"⏳ 429 received. Backing off {delayMs} ms (attempt {attempt}/{maxRetries})");
-                                await Task.Delay(delayMs).ConfigureAwait(false);
-                                continue;
-                            }
-                            throw; // rethrow others
-                        }
+                        attempt++;
+                        var retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                        var delayMs = (int)(retryAfter * 1000) + Random.Shared.Next(100, 300);
+                        System.Diagnostics.Debug.WriteLine($"⏳ 429 received. Backing off {delayMs} ms (attempt {attempt}/{maxRetries})");
+                        await Task.Delay(delayMs).ConfigureAwait(false);
+                        continue;
                     }
+                    throw; // rethrow others
+                }
+            }
+        }
+
+        private static async Task ExecuteApiWith429Async(Func<Task> action, int maxRetries = 2)
+        {
+            await ExecuteApiWith429Async<object>(async () => { await action().ConfigureAwait(false); return new object(); }, maxRetries).ConfigureAwait(false);
+        }
+
+        private static double GetRetryAfterSeconds(System.Net.Http.Headers.HttpResponseHeaders? headers)
+        {
+            if (headers == null) return 1.0; // default 1s
+            if (headers.TryGetValues("Retry-After", out var vals))
+            {
+                var v = vals.FirstOrDefault();
+                if (int.TryParse(v, out var secInt)) return Math.Max(0.5, secInt);
+                if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var secD))
+                    return Math.Max(0.5, secD);
+            }
+            return 1.0;
+        }
+
+        private static double GetRetryAfterSeconds(System.Collections.Generic.IReadOnlyDictionary<string, string>? headers)
+        {
+            if (headers == null) return 1.0;
+            foreach (var kv in headers)
+            {
+                if (string.Equals(kv.Key, "Retry-After", StringComparison.OrdinalIgnoreCase))
+                {
+                    var v = kv.Value;
+                    if (int.TryParse(v, out var secInt)) return Math.Max(0.5, secInt);
+                    if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var secD)) return Math.Max(0.5, secD);
+                }
+            }
+            return 1.0;
+        }
+
+        // Centralized sender for raw HTTP calls with 429 backoff and auth header
+        private async Task<HttpResponseMessage> SendAsyncWithRetry(string url, HttpMethod method, string? jsonBody, bool includeAuthBearer, int maxRetries = 2)
+        {
+            int attempt = 0;
+            while (true)
+            {
+                using var req = new HttpRequestMessage(method, url);
+                if (includeAuthBearer && _currentToken?.AccessToken is string accessToken && !string.IsNullOrWhiteSpace(accessToken))
+                {
+                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                }
+                if (jsonBody != null)
+                {
+                    req.Content = new StringContent(jsonBody);
+                    req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
                 }
 
-                private static async Task ExecuteApiWith429Async(Func<Task> action, int maxRetries = 2)
+                var res = await _http.SendAsync(req).ConfigureAwait(false);
+                if ((int)res.StatusCode == 429 && attempt < maxRetries)
                 {
-                    await ExecuteApiWith429Async<object>(async () => { await action().ConfigureAwait(false); return new object(); }, maxRetries).ConfigureAwait(false);
-                }
-
-                private static double GetRetryAfterSeconds(System.Net.Http.Headers.HttpResponseHeaders? headers)
-                {
-                    if (headers == null) return 1.0; // default 1s
-                    if (headers.TryGetValues("Retry-After", out var vals))
+                    // Dispose and retry after backoff
+                    res.Dispose();
+                    attempt++;
+                    // Try to read Retry-After header from response
+                    double retryAfterSec = 1.0;
+                    if (res.Headers.TryGetValues("Retry-After", out var vals))
                     {
                         var v = vals.FirstOrDefault();
-                        if (int.TryParse(v, out var secInt)) return Math.Max(0.5, secInt);
-                        if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var secD))
-                            return Math.Max(0.5, secD);
+                        if (int.TryParse(v, out var s)) retryAfterSec = Math.Max(0.5, s);
+                        else if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) retryAfterSec = Math.Max(0.5, d);
                     }
-                    return 1.0;
+                    var delayMs = (int)(retryAfterSec * 1000) + Random.Shared.Next(100, 300);
+                    System.Diagnostics.Debug.WriteLine($"⏳ 429 (raw). Backing off {delayMs} ms (attempt {attempt}/{maxRetries})");
+                    await Task.Delay(delayMs).ConfigureAwait(false);
+                    continue;
                 }
 
-                private static double GetRetryAfterSeconds(System.Collections.Generic.IReadOnlyDictionary<string, string>? headers)
-                {
-                    if (headers == null) return 1.0;
-                    foreach (var kv in headers)
-                    {
-                        if (string.Equals(kv.Key, "Retry-After", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var v = kv.Value;
-                            if (int.TryParse(v, out var secInt)) return Math.Max(0.5, secInt);
-                            if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var secD)) return Math.Max(0.5, secD);
-                        }
-                    }
-                    return 1.0;
-                }
-
-                // Centralized sender for raw HTTP calls with 429 backoff and auth header
-                private async Task<HttpResponseMessage> SendAsyncWithRetry(string url, HttpMethod method, string? jsonBody, bool includeAuthBearer, int maxRetries = 2)
-                {
-                    int attempt = 0;
-                    while (true)
-                    {
-                        using var req = new HttpRequestMessage(method, url);
-                        if (includeAuthBearer && _currentToken?.AccessToken is string accessToken && !string.IsNullOrWhiteSpace(accessToken))
-                        {
-                            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-                        }
-                        if (jsonBody != null)
-                        {
-                            req.Content = new StringContent(jsonBody);
-                            req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                        }
-
-                        var res = await _http.SendAsync(req).ConfigureAwait(false);
-                        if ((int)res.StatusCode == 429 && attempt < maxRetries)
-                        {
-                            // Dispose and retry after backoff
-                            res.Dispose();
-                            attempt++;
-                            // Try to read Retry-After header from response
-                            double retryAfterSec = 1.0;
-                            if (res.Headers.TryGetValues("Retry-After", out var vals))
-                            {
-                                var v = vals.FirstOrDefault();
-                                if (int.TryParse(v, out var s)) retryAfterSec = Math.Max(0.5, s);
-                                else if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) retryAfterSec = Math.Max(0.5, d);
-                            }
-                            var delayMs = (int)(retryAfterSec * 1000) + Random.Shared.Next(100, 300);
-                            System.Diagnostics.Debug.WriteLine($"⏳ 429 (raw). Backing off {delayMs} ms (attempt {attempt}/{maxRetries})");
-                            await Task.Delay(delayMs).ConfigureAwait(false);
-                            continue;
-                        }
-
-                        return res; // caller will dispose
-                    }
-                }
+                return res; // caller will dispose
+            }
+        }
 
         public async Task<bool?> CheckIfCurrentUserFollowsPlaylistAsync(string playlistId)
         {
@@ -803,6 +806,7 @@ namespace SpotifyWPF.Service
                         OwnerName = p.Owner?.DisplayName ?? p.Owner?.Id,
                         OwnerId = p.Owner?.Id,
                         TracksTotal = p.Tracks?.Total ?? 0,
+                        IsPublic = p.Public,
                         SnapshotId = p.SnapshotId,
                         Href = p.Href
                     });
@@ -1057,6 +1061,21 @@ namespace SpotifyWPF.Service
             return ok;
         }
 
+        public async Task<bool> SkipToPrevAsync(string? deviceId = null)
+        {
+            if (deviceId != null)
+                ValidateDeviceId(deviceId, nameof(deviceId));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false)) return false;
+
+            var url = "https://api.spotify.com/v1/me/player/previous";
+            if (!string.IsNullOrWhiteSpace(deviceId)) url += $"?device_id={Uri.EscapeDataString(deviceId)}";
+            using var res = await SendAsyncWithRetry(url, HttpMethod.Post, jsonBody: null, includeAuthBearer: true).ConfigureAwait(false);
+            var ok = res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.NoContent;
+            res.Dispose();
+            return ok;
+        }
+
         public async Task<PlaylistDto> CreatePlaylistAsync(string name, string description, bool isPublic, bool isCollaborative)
         {
             ValidateCollection(new[] { name }, nameof(name));
@@ -1091,6 +1110,25 @@ namespace SpotifyWPF.Service
                 SnapshotId = playlist.SnapshotId,
                 Href = playlist.Href
             };
+        }
+
+        public async Task UpdatePlaylistAsync(string playlistId, string name, bool isPublic)
+        {
+            ValidateSpotifyId(playlistId, nameof(playlistId));
+            ValidateCollection(new[] { name }, nameof(name));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                throw new InvalidOperationException("Not authenticated");
+            }
+
+            var request = new PlaylistChangeDetailsRequest
+            {
+                Name = name,
+                Public = isPublic
+            };
+
+            await Api.Playlists.ChangeDetails(playlistId, request).ConfigureAwait(false);
         }
 
         public async Task<SpotifyWPF.Model.Dto.FollowedArtistsPage> GetFollowedArtistsPageAsync(string? after, int limit)
@@ -1407,7 +1445,9 @@ namespace SpotifyWPF.Service
                         Artists = artistNames,
                         AlbumName = t.Album?.Name,
                         DurationMs = t.DurationMs,
-                        Href = t.Href
+                        Href = t.Href,
+                        Uri = t.Uri,
+                        AlbumImageUrl = t.Album?.Images?.FirstOrDefault()?.Url
                     });
                 }
             }
@@ -1417,10 +1457,56 @@ namespace SpotifyWPF.Service
 
         public async Task DeletePlaylistAsync(string playlistId)
         {
+            System.Diagnostics.Debug.WriteLine($"[DeletePlaylistAsync] Attempting to delete playlist {playlistId}");
             await EnsureAuthenticatedAsync();
 
-            var url = $"https://api.spotify.com/v1/playlists/{playlistId}";
-            await SendDeleteWithRetryAsync(url, $"delete playlist {playlistId}");
+            // Spotify doesn't support direct playlist deletion via API
+            // Instead, we need to remove all tracks and then unfollow the playlist
+            // This effectively "deletes" the playlist from the user's perspective
+
+            try
+            {
+                // First, get all tracks in the playlist (Spotify API limit is 50 per request)
+                var tracksPage = await GetPlaylistTracksPageAsync(playlistId, 0, 50);
+                if (tracksPage.Items != null && tracksPage.Items.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DeletePlaylistAsync] Removing {tracksPage.Items.Count} tracks from playlist {playlistId}");
+
+                    // Remove all tracks
+                    var trackUris = tracksPage.Items.Select(t => t.Uri).Where(uri => !string.IsNullOrEmpty(uri)).ToList();
+                    if (trackUris.Any())
+                    {
+                        await RemoveTracksFromPlaylistAsync(playlistId, trackUris);
+                        System.Diagnostics.Debug.WriteLine($"[DeletePlaylistAsync] Successfully removed all tracks from playlist {playlistId}");
+                    }
+
+                    // If there are more tracks (pagination), continue removing
+                    var totalTracks = tracksPage.Total;
+                    for (int offset = 50; offset < totalTracks; offset += 50)
+                    {
+                        tracksPage = await GetPlaylistTracksPageAsync(playlistId, offset, 50);
+                        if (tracksPage.Items != null && tracksPage.Items.Any())
+                        {
+                            trackUris = tracksPage.Items.Select(t => t.Uri).Where(uri => !string.IsNullOrEmpty(uri)).ToList();
+                            if (trackUris.Any())
+                            {
+                                await RemoveTracksFromPlaylistAsync(playlistId, trackUris);
+                                System.Diagnostics.Debug.WriteLine($"[DeletePlaylistAsync] Removed additional {tracksPage.Items.Count} tracks from playlist {playlistId}");
+                            }
+                        }
+                    }
+                }
+
+                // Finally, unfollow the playlist (this removes it from the user's library)
+                System.Diagnostics.Debug.WriteLine($"[DeletePlaylistAsync] Unfollowing playlist {playlistId}");
+                await UnfollowPlaylistAsync(playlistId);
+                System.Diagnostics.Debug.WriteLine($"[DeletePlaylistAsync] Successfully unfollowed (deleted) playlist {playlistId}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DeletePlaylistAsync] Error during playlist deletion process: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task UnfollowPlaylistAsync(string playlistId)
@@ -1461,6 +1547,59 @@ namespace SpotifyWPF.Service
             catch (Exception ex)
             {
                 _loggingService.LogError($"Error removing tracks from playlist: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task ReorderPlaylistTracksAsync(string playlistId, int rangeStart, int insertBefore, int rangeLength = 1, string? snapshotId = null)
+        {
+            ValidateSpotifyId(playlistId, nameof(playlistId));
+            if (rangeStart < 0)
+                throw new ArgumentException("Range start must be non-negative.", nameof(rangeStart));
+            if (insertBefore < 0)
+                throw new ArgumentException("Insert before must be non-negative.", nameof(insertBefore));
+            if (rangeLength < 1)
+                throw new ArgumentException("Range length must be at least 1.", nameof(rangeLength));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false))
+                return;
+
+            try
+            {
+                var token = await GetCurrentAccessTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    throw new InvalidOperationException("No access token available");
+
+                var url = $"https://api.spotify.com/v1/playlists/{playlistId}/tracks";
+
+                using var httpClient = new HttpClient();
+                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var requestBody = new
+                {
+                    range_start = rangeStart,
+                    insert_before = insertBefore,
+                    range_length = rangeLength,
+                    snapshot_id = snapshotId
+                };
+
+                var jsonContent = System.Text.Json.JsonSerializer.Serialize(requestBody);
+                var content = new StringContent(jsonContent, Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
+
+                var response = await httpClient.PutAsync(url, content).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+
+                _loggingService.LogInfo($"Successfully reordered tracks in playlist {playlistId}: range_start={rangeStart}, insert_before={insertBefore}, range_length={rangeLength}");
+            }
+            catch (HttpRequestException ex)
+            {
+                _loggingService.LogError($"HTTP error reordering tracks in playlist: {ex.Message}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError($"Error reordering tracks in playlist: {ex.Message}");
                 throw;
             }
         }
@@ -1531,22 +1670,6 @@ namespace SpotifyWPF.Service
             }
         }
 
-        public async Task UploadPlaylistImageAsync(string playlistId, string imagePath)
-        {
-            ValidateSpotifyId(playlistId, nameof(playlistId));
-            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
-                throw new ArgumentException("Image path is invalid or file does not exist.", nameof(imagePath));
-
-            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
-                throw new InvalidOperationException("Not authenticated");
-
-            // Read and encode image
-            var imageBytes = await File.ReadAllBytesAsync(imagePath).ConfigureAwait(false);
-            var base64Image = Convert.ToBase64String(imageBytes);
-
-            await Api.Playlists.UploadCover(playlistId, base64Image).ConfigureAwait(false);
-        }
-
         public async Task<PagingDto<SearchResultDto>> SearchItemsPageAsync(string query, List<string> types, int offset, int limit)
         {
             if (string.IsNullOrWhiteSpace(query))
@@ -1563,6 +1686,119 @@ namespace SpotifyWPF.Service
                 return result;
             }
 
+            // For single type searches, use the specific search API for proper pagination
+            if (types.Count == 1)
+            {
+                var type = types[0];
+                switch (type)
+                {
+                    case "track":
+                        var trackResult = await SearchTracksPageAsync(query, offset, limit);
+                        result.Items = trackResult.Items?.Select(t => new SearchResultDto
+                        {
+                            Id = t.Id,
+                            Name = t.Name,
+                            Artists = t.Artists,
+                            AlbumName = t.AlbumName,
+                            DurationMs = t.DurationMs,
+                            Href = t.Href,
+                            Uri = t.Uri,
+                            AlbumImageUrl = t.AlbumImageUrl,
+                            Type = "track",
+                            Description = $"{t.Artists} - {t.AlbumName}",
+                            ImageUrl = t.AlbumImageUrl,
+                            CanAddToPlaylist = true,
+                            IsInSelectedPlaylist = false,
+                            OriginalDto = t
+                        }).ToList() ?? new List<SearchResultDto>();
+                        result.Total = trackResult.Total;
+                        result.Limit = trackResult.Limit;
+                        result.Offset = trackResult.Offset;
+                        result.Next = trackResult.Next;
+                        result.Previous = trackResult.Previous;
+                        return result;
+
+                    case "artist":
+                        var artistResult = await SearchArtistsPageAsync(query, offset, limit);
+                        result.Items = (artistResult.Items ?? new List<ArtistDto>()).Where(ar => ar != null).Select(ar => new SearchResultDto
+                        {
+                            Id = ar.Id,
+                            Name = ar.Name,
+                            Artists = ar.Name,
+                            AlbumName = null,
+                            DurationMs = 0,
+                            Href = ar.Href,
+                            Uri = $"spotify:artist:{ar.Id}", // Construct URI from ID
+                            AlbumImageUrl = null, // Artists don't have album images
+                            Type = "artist",
+                            Description = $"{ar.FollowersTotal} followers",
+                            ImageUrl = null, // Artists don't have direct images in DTO
+                            CanAddToPlaylist = false,
+                            IsInSelectedPlaylist = false,
+                            OriginalDto = ar
+                        }).ToList();
+                        result.Total = artistResult.Total;
+                        result.Limit = artistResult.Limit;
+                        result.Offset = artistResult.Offset;
+                        result.Next = artistResult.Next;
+                        result.Previous = artistResult.Previous;
+                        return result;
+
+                    case "album":
+                        var albumResult = await SearchAlbumsPageAsync(query, offset, limit);
+                        result.Items = albumResult.Items?.Select(a => new SearchResultDto
+                        {
+                            Id = a.Id,
+                            Name = a.Name,
+                            Artists = a.Artists,
+                            AlbumName = a.Name,
+                            DurationMs = 0,
+                            Href = a.Href,
+                            Uri = $"spotify:album:{a.Id}", // Construct URI from ID
+                            AlbumImageUrl = a.ImageUrl,
+                            Type = "album",
+                            Description = $"{a.Artists}",
+                            ImageUrl = a.ImageUrl,
+                            CanAddToPlaylist = false,
+                            IsInSelectedPlaylist = false,
+                            OriginalDto = a
+                        }).ToList() ?? new List<SearchResultDto>();
+                        result.Total = albumResult.Total;
+                        result.Limit = albumResult.Limit;
+                        result.Offset = albumResult.Offset;
+                        result.Next = albumResult.Next;
+                        result.Previous = albumResult.Previous;
+                        return result;
+
+                    case "playlist":
+                        var playlistResult = await SearchPlaylistsPageAsync(query, offset, limit);
+                        result.Items = playlistResult.Items?.Select(p => new SearchResultDto
+                        {
+                            Id = p.Id,
+                            Name = p.Name,
+                            Artists = p.OwnerName,
+                            AlbumName = null,
+                            DurationMs = 0,
+                            Href = p.Href,
+                            Uri = $"spotify:playlist:{p.Id}", // Construct URI from ID
+                            AlbumImageUrl = null, // Playlists don't have album images
+                            Type = "playlist",
+                            Description = $"{p.TracksTotal} tracks",
+                            ImageUrl = null, // Playlists don't have direct images in DTO
+                            CanAddToPlaylist = false,
+                            IsInSelectedPlaylist = false,
+                            OriginalDto = p
+                        }).ToList() ?? new List<SearchResultDto>();
+                        result.Total = playlistResult.Total;
+                        result.Limit = playlistResult.Limit;
+                        result.Offset = playlistResult.Offset;
+                        result.Next = playlistResult.Next;
+                        result.Previous = playlistResult.Previous;
+                        return result;
+                }
+            }
+
+            // For multi-type searches, use the All search and filter results
             var req = new SearchRequest(SearchRequest.Types.All, query)
             {
                 Offset = offset,
@@ -1570,11 +1806,11 @@ namespace SpotifyWPF.Service
             };
             var search = await Api.Search.Item(req).ConfigureAwait(false);
 
-            // Combine results from different types
+            // Combine results from different types, but only include requested types
             var items = new List<SearchResultDto>();
 
             // Tracks
-            if (search.Tracks?.Items != null)
+            if (types.Contains("track") && search.Tracks?.Items != null)
             {
                 foreach (var t in search.Tracks.Items)
                 {
@@ -1601,7 +1837,7 @@ namespace SpotifyWPF.Service
             }
 
             // Albums
-            if (search.Albums?.Items != null)
+            if (types.Contains("album") && search.Albums?.Items != null)
             {
                 foreach (var a in search.Albums.Items)
                 {
@@ -1628,7 +1864,7 @@ namespace SpotifyWPF.Service
             }
 
             // Artists
-            if (search.Artists?.Items != null)
+            if (types.Contains("artist") && search.Artists?.Items != null)
             {
                 foreach (var ar in search.Artists.Items)
                 {
@@ -1654,7 +1890,7 @@ namespace SpotifyWPF.Service
             }
 
             // Playlists
-            if (search.Playlists?.Items != null)
+            if (types.Contains("playlist") && search.Playlists?.Items != null)
             {
                 foreach (var p in search.Playlists.Items)
                 {
@@ -1680,9 +1916,22 @@ namespace SpotifyWPF.Service
             }
 
             result.Items = items;
-            result.Total = items.Count; // Approximate
+            result.Total = items.Count; // For multi-type searches, we can't get accurate total
             result.Limit = limit;
             result.Offset = offset;
+
+            // For multi-type searches, we need to determine if there are more pages
+            // Check if any of the individual result sets have more pages
+            var hasMorePages = (search.Tracks?.Next != null && types.Contains("track")) ||
+                              (search.Albums?.Next != null && types.Contains("album")) ||
+                              (search.Artists?.Next != null && types.Contains("artist")) ||
+                              (search.Playlists?.Next != null && types.Contains("playlist"));
+
+            if (hasMorePages)
+            {
+                result.Next = $"offset={offset + limit}"; // Simple next URL for pagination
+            }
+
             return result;
         }
 
@@ -1739,6 +1988,21 @@ namespace SpotifyWPF.Service
                     if (item.Track is FullTrack fullTrack)
                     {
                         var artistNames = fullTrack.Artists != null ? string.Join(", ", fullTrack.Artists.Select(ar => ar?.Name).Where(n => !string.IsNullOrWhiteSpace(n))) : null;
+                        // Map added_at from the playlist item (can be null). Spotify's SDK exposes AddedAt as DateTime?
+                        System.DateTimeOffset? addedAt = null;
+                        try
+                        {
+                            if (item.AddedAt.HasValue)
+                            {
+                                addedAt = new DateTimeOffset(item.AddedAt.Value);
+                            }
+                        }
+                        catch
+                        {
+                            // If conversion fails, keep null
+                            addedAt = null;
+                        }
+
                         items.Add(new TrackDto
                         {
                             Id = fullTrack.Id,
@@ -1748,7 +2012,8 @@ namespace SpotifyWPF.Service
                             DurationMs = fullTrack.DurationMs,
                             Href = fullTrack.Href,
                             Uri = fullTrack.Uri,
-                            AlbumImageUrl = fullTrack.Album?.Images?.FirstOrDefault()?.Url
+                            AlbumImageUrl = fullTrack.Album?.Images?.FirstOrDefault()?.Url,
+                            AddedAt = addedAt
                         });
                     }
                 }
@@ -1837,5 +2102,330 @@ namespace SpotifyWPF.Service
 
             return result;
         }
+
+        /// <summary>
+        /// Get artist's top tracks from Spotify API
+        /// </summary>
+        /// <param name="artistId">The Spotify ID of the artist</param>
+        /// <param name="market">The market (country code) for which to retrieve top tracks</param>
+        public async Task<List<TrackDto>> GetArtistTopTracksAsync(string artistId, string market = "US")
+        {
+            if (string.IsNullOrEmpty(artistId))
+                throw new ArgumentNullException(nameof(artistId));
+            if (string.IsNullOrEmpty(market))
+                throw new ArgumentNullException(nameof(market));
+
+            var result = new List<TrackDto>();
+            
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return result;
+            }
+
+            try
+            {
+                var request = new ArtistsTopTracksRequest(market);
+                var response = await Api.Artists.GetTopTracks(artistId, request).ConfigureAwait(false);
+                
+                if (response != null && response.Tracks != null)
+                {
+                    foreach (var track in response.Tracks)
+                    {
+                        if (track == null || string.IsNullOrEmpty(track.Id)) continue;
+                        
+                        var artistNames = track.Artists != null ? 
+                            string.Join(", ", track.Artists.Select(ar => ar?.Name).Where(n => !string.IsNullOrWhiteSpace(n))) : 
+                            null;
+
+                        result.Add(new TrackDto
+                        {
+                            Id = track.Id,
+                            Name = track.Name,
+                            Artists = artistNames,
+                            AlbumName = track.Album?.Name,
+                            DurationMs = track.DurationMs,
+                            Href = track.Href,
+                            Uri = track.Uri,
+                            // Get the largest available image for album art
+                            AlbumImageUrl = track.Album?.Images?.FirstOrDefault()?.Url
+                        });
+                    }
+                }
+                
+            }
+            catch (Exception)
+            {
+                // Re-throw the exception so the caller can handle it properly
+                throw;
+            }
+
+            return result;
+        }
+
+        public async Task<List<TrackDto>> GetAlbumTracksAsync(string albumId)
+        {
+            ValidateSpotifyId(albumId, nameof(albumId));
+
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                return new List<TrackDto>();
+            }
+
+            try
+            {
+                var request = new AlbumTracksRequest();
+                var response = await Api.Albums.GetTracks(albumId, request).ConfigureAwait(false);
+
+                var tracks = new List<TrackDto>();
+                if (response.Items != null)
+                {
+                    foreach (var track in response.Items)
+                    {
+                        if (track == null || string.IsNullOrEmpty(track.Id)) continue;
+
+                        var artistNames = track.Artists != null ? string.Join(", ", track.Artists.Select(ar => ar?.Name).Where(n => !string.IsNullOrWhiteSpace(n))) : null;
+
+                        tracks.Add(new TrackDto
+                        {
+                            Id = track.Id,
+                            Name = track.Name,
+                            Artists = artistNames,
+                            AlbumName = null, // Album name will be set from parent album context
+                            DurationMs = track.DurationMs,
+                            Href = track.Href,
+                            Uri = track.Uri,
+                            AlbumImageUrl = null // Will be set from album if needed
+                        });
+                    }
+                }
+
+                return tracks;
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError($"Error getting album tracks for {albumId}: {ex.Message}");
+                return new List<TrackDto>();
+            }
+        }
+
+        public async Task<PagingDto<AlbumDto>> GetNewReleasesPageAsync(int offset, int limit)
+        {
+            ValidatePaginationParameters(offset, limit, nameof(GetNewReleasesPageAsync));
+
+            var result = new PagingDto<AlbumDto>();
+            if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
+            {
+                result.Items = new List<AlbumDto>();
+                result.Total = 0;
+                result.Limit = limit;
+                result.Offset = offset;
+                return result;
+            }
+
+            try
+            {
+                var request = new NewReleasesRequest
+                {
+                    Limit = limit,
+                    Offset = offset
+                };
+
+                var response = await Api.Browse.GetNewReleases(request).ConfigureAwait(false);
+
+                result.Href = response.Albums?.Href;
+                result.Limit = response.Albums?.Limit ?? limit;
+                result.Offset = response.Albums?.Offset ?? offset;
+                result.Total = response.Albums?.Total ?? 0;
+                result.Next = response.Albums?.Next;
+                result.Previous = response.Albums?.Previous;
+
+                var items = new List<AlbumDto>();
+                if (response.Albums?.Items != null)
+                {
+                    foreach (var album in response.Albums.Items)
+                    {
+                        if (album == null || string.IsNullOrEmpty(album.Id)) continue;
+
+                        var artistNames = album.Artists != null ? string.Join(", ", album.Artists.Select(ar => ar?.Name).Where(n => !string.IsNullOrWhiteSpace(n))) : null;
+
+                        items.Add(new AlbumDto
+                        {
+                            Id = album.Id,
+                            Name = album.Name,
+                            Artists = artistNames,
+                            ReleaseDate = album.ReleaseDate,
+                            TotalTracks = album.TotalTracks,
+                            Href = album.Href,
+                            ImageUrl = album.Images?.FirstOrDefault()?.Url
+                        });
+                    }
+                }
+                result.Items = items;
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError($"Error getting new releases: {ex.Message}");
+                return new PagingDto<AlbumDto> { Items = new List<AlbumDto>() };
+            }
+        }
+
+        public async Task UploadPlaylistImageAsync(string playlistId, string base64Image)
+        {
+            if (string.IsNullOrEmpty(playlistId))
+                throw new ArgumentNullException(nameof(playlistId));
+            if (string.IsNullOrEmpty(base64Image))
+                throw new ArgumentNullException(nameof(base64Image));
+
+            await EnsureAuthenticatedAsync();
+
+            if (Api == null)
+                throw new InvalidOperationException("Spotify API client not initialized");
+
+            try
+            {
+                // Get current access token
+                var token = await GetCurrentAccessTokenAsync();
+                if (string.IsNullOrEmpty(token))
+                    throw new InvalidOperationException("No access token available");
+
+                // Create HTTP client and request
+                using (var httpClient = new HttpClient())
+                {
+                    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                    var url = $"https://api.spotify.com/v1/playlists/{playlistId}/images";
+                    
+                    // Create content with base64 image data
+                    var content = new StringContent(base64Image);
+                    content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+
+                    _loggingService.LogInfo($"Uploading playlist image to {url}, data length: {base64Image.Length} chars");
+
+                    var response = await httpClient.PutAsync(url, content);
+                    
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var errorContent = await response.Content.ReadAsStringAsync();
+                        _loggingService.LogError($"Playlist image upload failed: {response.StatusCode} - {errorContent}");
+                        System.Diagnostics.Debug.WriteLine($"Playlist image upload failed: {response.StatusCode} - {errorContent}");
+                        
+                        // Check for specific error codes
+                        if (response.StatusCode == HttpStatusCode.Unauthorized)
+                            throw new UnauthorizedAccessException("Not authorized to upload playlist images. Check if you have the required scopes (ugc-image-upload, playlist-modify-public, playlist-modify-private).");
+                        else if (response.StatusCode == HttpStatusCode.Forbidden)
+                            throw new UnauthorizedAccessException("Forbidden: You don't have permission to modify this playlist.");
+                        else if (response.StatusCode == HttpStatusCode.BadRequest)
+                            throw new ArgumentException($"Bad request: {errorContent}");
+                        else if (response.StatusCode == HttpStatusCode.UnsupportedMediaType)
+                            throw new ArgumentException($"Unsupported media type. Make sure the image is a valid JPEG.");
+                        else
+                            throw new HttpRequestException($"HTTP {response.StatusCode}: {errorContent}");
+                    }
+
+                    _loggingService.LogInfo("Playlist image uploaded successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogError($"Error uploading playlist image: {ex.Message}");
+                throw;
+            }
+        }
+
+    #region IDisposable Implementation
+
+    private bool _disposed = false;
+
+    /// <summary>
+    /// Dispose resources used by the Spotify service
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Finalizer for safety net
+    /// </summary>
+    ~Spotify()
+    {
+        Dispose(false);
+    }
+
+    /// <summary>
+    /// Dispose implementation with proper resource ordering
+    /// </summary>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            // Dispose managed resources in reverse order of creation/allocation
+
+            // 1. Cancel any pending authentication operations
+            try
+            {
+                if (_reauthTcs != null && !_reauthTcs.Task.IsCompleted)
+                {
+                    _reauthTcs.TrySetCanceled();
+                }
+            }
+            catch (Exception ex)
+            {
+                _loggingService?.LogError($"Error cancelling reauth TCS in Spotify.Dispose: {ex.Message}");
+            }
+
+            // 2. Stop and dispose OAuth server
+            try
+            {
+                _server?.Stop();
+                _server?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _loggingService?.LogError($"Error disposing OAuth server: {ex.Message}", ex);
+            }
+
+            // 3. Dispose semaphores
+            try
+            {
+                _semaphore?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _loggingService?.LogError($"Error disposing semaphore: {ex.Message}", ex);
+            }
+
+            try
+            {
+                _authSemaphore?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _loggingService?.LogError($"Error disposing auth semaphore: {ex.Message}", ex);
+            }
+
+            // Note: _http is static and shared across instances, so we don't dispose it here
+            // In a production app, consider using IHttpClientFactory for proper lifecycle management
+
+            // 4. Clear references to prevent memory leaks
+            _reauthTcs = null;
+            _privateProfile = null;
+            _currentToken = null;
+            Api = null;
+        }
+
+        _disposed = true;
+    }
+
+    #endregion
 }
+}
+
+

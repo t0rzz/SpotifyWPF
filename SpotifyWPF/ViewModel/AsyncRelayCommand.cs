@@ -45,6 +45,11 @@ namespace SpotifyWPF.ViewModel
             {
                 await ExecuteAsync(parameter);
             }
+            catch (Exception ex)
+            {
+                // Log unobserved exceptions to prevent UnobservedTaskException
+                System.Diagnostics.Debug.WriteLine($"AsyncRelayCommand.Execute error: {ex.Message}");
+            }
             finally
             {
                 IsExecuting = false;

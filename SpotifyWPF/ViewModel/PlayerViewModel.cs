@@ -21,13 +21,15 @@ namespace SpotifyWPF.ViewModel
     /// </summary>
     public class PlayerViewModel : ViewModelBase, IDisposable
     {
+        private static int _instanceCount = 0;
         private readonly ISpotify _spotify;
         private readonly IWebPlaybackBridge _webPlaybackBridge;
         private readonly ILoggingService _loggingService;
-    private readonly DispatcherTimer _seekThrottleTimer;
-    private readonly DispatcherTimer _statePollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Constants.StatePollIntervalMs) };
-    private TaskCompletionSource<string>? _webDeviceReadyTcs;
-    private readonly DispatcherTimer _uiProgressTimer;
+        private readonly Component.TimerManager _timerManager;
+        private readonly Component.DeviceManager _deviceManager;
+        private readonly Component.PlaybackManager _playbackManager;
+        private readonly Service.MediaKeyManager _mediaKeyManager;
+        private readonly Service.TrayIconManager _trayIconManager;
     private DateTime _lastUiProgressUpdate = DateTime.UtcNow;
     private DateTimeOffset _resumeRequestedAt = DateTimeOffset.MinValue;
     private DateTimeOffset _pauseRequestedAt = DateTimeOffset.MinValue;
@@ -39,41 +41,50 @@ namespace SpotifyWPF.ViewModel
     private string? _pendingPlayTrackId;
     private DateTimeOffset _pendingPlayUntil = DateTimeOffset.MinValue;
 
-    // Track last known active device to detect activation transitions
-    private string? _lastActiveDeviceId;
-
     // Cancellation for click-to-play orchestration so a new click cancels the previous one
     private CancellationTokenSource? _clickCts;
 
     // Semaphore to prevent concurrent track operations (race condition fix)
     private readonly SemaphoreSlim _trackOperationSemaphore = new SemaphoreSlim(1, 1);
 
+    // TaskCompletionSource for waiting on Web Playback SDK device ready
+    private TaskCompletionSource<string>? _webDeviceReadyTcs;
+
         // Private fields for properties
-        private TrackModel? _currentTrack;
-        private bool _isPlaying;
-        private int _positionMs;
         private double _volume = 1.0; // Start at 100% volume
         private bool _volumeSetByUser = false; // Track if user has manually set volume
         private bool _isUpdatingVolumeFromState = false; // Prevent recursive volume updates
-        private DeviceModel? _selectedDevice;
-        private string _webPlaybackDeviceId = string.Empty;
-        private bool _isDraggingSlider;
-        private DateTimeOffset _lastSeekSent = DateTimeOffset.MinValue;
-        private bool _isShuffled;
-        private int _repeatMode; // 0=off, 1=context, 2=track
-        private DateTimeOffset _lastRepeatUpdate = DateTimeOffset.MinValue; // Track optimistic repeat updates
 
         // Top tracks collection
         private ObservableCollection<TrackModel> _topTracks = new();
 
         public PlayerViewModel(ISpotify spotify, IWebPlaybackBridge webPlaybackBridge, ILoggingService loggingService)
         {
+            _instanceCount++;
+
             _spotify = spotify ?? throw new ArgumentNullException(nameof(spotify));
             _webPlaybackBridge = webPlaybackBridge ?? throw new ArgumentNullException(nameof(webPlaybackBridge));
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
 
+            // Initialize TimerManager
+            _timerManager = new Component.TimerManager(_loggingService);
+            _timerManager.RegisterSeekThrottleHandler(OnSeekThrottleTimerTick);
+            _timerManager.RegisterStatePollHandler(OnStatePollTimerTick);
+            _timerManager.RegisterUiProgressHandler(OnUiProgressTick);
+
+            // Initialize DeviceManager
+            _deviceManager = new Component.DeviceManager(_spotify, _webPlaybackBridge, _loggingService);
+
+            // Initialize PlaybackManager
+            _playbackManager = new Component.PlaybackManager(_spotify, _webPlaybackBridge, _loggingService, _deviceManager, _timerManager);
+
+            // Initialize MediaKeyManager for global hotkey support
+            _mediaKeyManager = new Service.MediaKeyManager(this);
+
+            // Initialize TrayIconManager for system tray support
+            _trayIconManager = Service.TrayIconManager.GetInstance(this);
+
             // Initialize collections
-            Devices = new ObservableCollection<DeviceModel>();
             TopTracks = new ObservableCollection<TrackModel>();
 
             // Initialize commands
@@ -82,57 +93,22 @@ namespace SpotifyWPF.ViewModel
             PrevCommand = new AsyncRelayCommand(ExecutePrevAsync, CanExecutePrev);
             SeekCommand = new AsyncRelayCommand<int>(ExecuteSeekAsync);
             SetVolumeCommand = new AsyncRelayCommand<double>(ExecuteSetVolumeAsync);
-            SelectDeviceCommand = new AsyncRelayCommand<DeviceModel>(ExecuteSelectDeviceAsync);
+            SelectDeviceCommand = new AsyncRelayCommand<DeviceModel>(_deviceManager.SelectDeviceAsync);
             ClickTrackCommand = new AsyncRelayCommand<object>(ExecuteClickTrackAsync);
             ToggleShuffleCommand = new AsyncRelayCommand(ExecuteToggleShuffleAsync);
             CycleRepeatCommand = new AsyncRelayCommand(ExecuteCycleRepeatAsync);
             RefreshCommand = new AsyncRelayCommand(ExecuteRefreshAsync);
 
-            // Initialize seek throttling timer
-            _seekThrottleTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(Constants.SeekThrottleDelayMs)
-            };
-            _seekThrottleTimer.Tick += OnSeekThrottleTimerTick;
-
             // Subscribe to Web Playback events
             _webPlaybackBridge.OnPlayerStateChanged += OnPlayerStateChanged;
-            _webPlaybackBridge.OnReadyDeviceId += OnReadyDeviceId;
+            _webPlaybackBridge.OnReadyDeviceId += _deviceManager.OnReadyDeviceId;
             _webDeviceReadyTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            // Fallback state polling (in case web messages are delayed)
-            _statePollTimer.Tick += async (s, e) =>
-            {
-                try
-                {
-                    // 🛑 SMART POLLING: Skip polling during active playback to avoid disrupting real-time updates
-                    // But resume polling if Web Player is no longer the active device (playback transferred elsewhere)
-                    bool isWebPlayerActive = !string.IsNullOrEmpty(WebPlaybackDeviceId) && 
-                                           SelectedDevice != null && 
-                                           SelectedDevice.Id == WebPlaybackDeviceId;
-                    
-                    if (IsPlaying && CurrentTrack != null && !string.IsNullOrEmpty(CurrentTrack.Id) && isWebPlayerActive)
-                    {
-                        _loggingService.LogDebug($"[SMART_POLL] ⏸️ Skipping API poll during active playback of '{CurrentTrack.Title}' on Web Player");
-                        return;
-                    }
+            // Start state polling timer
+            _timerManager.StartStatePollTimer();
 
-                    // Keep device selection in sync even if the active device changes outside this app
-                    await Application.Current.Dispatcher.InvokeAsync(async () =>
-                    {
-                        await RefreshDevicesAsync();
-                        await RefreshPlayerStateAsync();
-                    });
-                }
-                catch { }
-            };
-            _statePollTimer.Start();
-
-            // UI progress timer to advance slider when playing locally
-            _uiProgressTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-            _lastUiProgressUpdate = DateTime.UtcNow;
-            _uiProgressTimer.Tick += OnUiProgressTick;
-            _uiProgressTimer.Start();
+            // Start UI progress timer
+            _timerManager.StartUiProgressTimer();
 
             // Don't load top tracks in constructor - will be loaded during initialization
         }
@@ -144,6 +120,11 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public IWebPlaybackBridge WebPlaybackBridge => _webPlaybackBridge;
 
+        /// <summary>
+        /// Access to the TrayIconManager for window integration
+        /// </summary>
+        public Service.TrayIconManager TrayIconManager => _trayIconManager;
+
         #endregion
 
         #region Properties
@@ -153,10 +134,10 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public TrackModel? CurrentTrack
         {
-            get => _currentTrack;
+            get => _playbackManager.CurrentTrack;
             set
             {
-                _currentTrack = value;
+                _playbackManager.CurrentTrack = value;
                 RaisePropertyChanged();
                 RaiseCommandsCanExecuteChanged();
             }
@@ -167,10 +148,10 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public bool IsPlaying
         {
-            get => _isPlaying;
+            get => _playbackManager.IsPlaying;
             set
             {
-                _isPlaying = value;
+                _playbackManager.IsPlaying = value;
                 RaisePropertyChanged();
                 RaiseCommandsCanExecuteChanged();
             }
@@ -181,10 +162,10 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public int PositionMs
         {
-            get => _positionMs;
+            get => _playbackManager.PositionMs;
             set
             {
-                _positionMs = value;
+                _playbackManager.PositionMs = value;
                 RaisePropertyChanged();
             }
         }
@@ -194,18 +175,27 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public double Volume
         {
-            get => _volume;
+            get => _playbackManager.Volume;
             set
             {
                 if (_isUpdatingVolumeFromState) return; // Prevent recursive updates
                 
-                _volume = Math.Max(0.0, Math.Min(1.0, value));
-                _volumeSetByUser = true; // Mark that user has manually set volume
+                _playbackManager.Volume = Math.Max(0.0, Math.Min(1.0, value));
                 RaisePropertyChanged();
 
                 // Apply volume immediately when bound value changes
                 // Fire-and-forget with internal throttling to avoid flooding
-                _ = ExecuteSetVolumeAsync(_volume);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _playbackManager.ExecuteSetVolumeAsync(_playbackManager.Volume, _deviceManager.Devices, _deviceManager.WebPlaybackDeviceId);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error setting volume: {ex.Message}");
+                    }
+                });
             }
         }
 
@@ -217,12 +207,8 @@ namespace SpotifyWPF.ViewModel
             _isUpdatingVolumeFromState = true;
             try
             {
-                var clamped = Math.Max(0.0, Math.Min(1.0, newVolume));
-                if (Math.Abs(_volume - clamped) > 0.001)
-                {
-                    _volume = clamped;
-                    RaisePropertyChanged(nameof(Volume));
-                }
+                _playbackManager.UpdateVolumeFromState(newVolume);
+                RaisePropertyChanged(nameof(Volume));
             }
             finally
             {
@@ -233,47 +219,29 @@ namespace SpotifyWPF.ViewModel
         /// <summary>
         /// Available playback devices
         /// </summary>
-        public ObservableCollection<DeviceModel> Devices { get; }
+        public ObservableCollection<DeviceModel> Devices => _deviceManager.Devices;
 
         /// <summary>
         /// Currently selected device
         /// </summary>
         public DeviceModel? SelectedDevice
         {
-            get => _selectedDevice;
-            set
-            {
-                _selectedDevice = value;
-                RaisePropertyChanged();
-            }
+            get => _deviceManager.SelectedDevice;
+            set => _deviceManager.SelectedDevice = value;
         }
 
         /// <summary>
         /// Web Playback SDK device ID
         /// </summary>
-        public string WebPlaybackDeviceId
-        {
-            get => _webPlaybackDeviceId;
-            private set
-            {
-                var oldValue = _webPlaybackDeviceId;
-                _webPlaybackDeviceId = value;
-                _loggingService.LogDebug($"[WEB_DEVICE] Property setter: WebPlaybackDeviceId changed from '{oldValue}' to '{value}'");
-                RaisePropertyChanged();
-            }
-        }
+        public string WebPlaybackDeviceId => _deviceManager.WebPlaybackDeviceId;
 
         /// <summary>
         /// Whether the user is currently dragging the position slider
         /// </summary>
         public bool IsDraggingSlider
         {
-            get => _isDraggingSlider;
-            set
-            {
-                _isDraggingSlider = value;
-                RaisePropertyChanged();
-            }
+            get => _playbackManager.IsDraggingSlider;
+            set => _playbackManager.IsDraggingSlider = value;
         }
 
         /// <summary>
@@ -294,10 +262,10 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public bool IsShuffled
         {
-            get => _isShuffled;
+            get => _playbackManager.IsShuffled;
             set
             {
-                _isShuffled = value;
+                _playbackManager.IsShuffled = value;
                 RaisePropertyChanged();
             }
         }
@@ -307,10 +275,10 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public int RepeatMode
         {
-            get => _repeatMode;
+            get => _playbackManager.RepeatMode;
             set
             {
-                _repeatMode = value;
+                _playbackManager.RepeatMode = value;
                 RaisePropertyChanged();
             }
         }
@@ -339,122 +307,9 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         private async Task ExecutePlayPauseAsync()
         {
-            try
-            {
-                // Always start with a fresh devices snapshot
-                await RefreshDevicesAsync();
-
-                if (IsPlaying)
-                {
-                    // If no active device, avoid calling Pause on API/bridge; just update UI and exit quickly
-                    var hasActiveDevice = Devices.Any(d => d.IsActive);
-                    if (!hasActiveDevice)
-                    {
-                        System.Diagnostics.Debug.WriteLine("⏸ PlayPause: No active device detected; skipping Pause call.");
-                        IsPlaying = false;
-                        _pauseRequestedAt = DateTimeOffset.UtcNow;
-                        return;
-                    }
-
-                    // Decide control path based on current selection after refresh
-                    var useWebBridgeQuick = SelectedDevice != null && !string.IsNullOrEmpty(WebPlaybackDeviceId) && SelectedDevice.Id == WebPlaybackDeviceId;
-
-                    // Optimistic UI update first for snappy feel
-                    IsPlaying = false;
-                    _pauseRequestedAt = DateTimeOffset.UtcNow;
-
-                    System.Diagnostics.Debug.WriteLine($"⏸ PlayPause: Pausing via {(useWebBridgeQuick ? "WebPlaybackBridge" : "Spotify API")} (selected={SelectedDevice?.Id}, webId={WebPlaybackDeviceId})");
-                    try
-                    {
-                        if (useWebBridgeQuick)
-                        {
-                            await _webPlaybackBridge.PauseAsync();
-                        }
-                        else
-                        {
-                            var active = Devices.FirstOrDefault(d => d.IsActive);
-                            var targetDeviceId = active?.Id ?? SelectedDevice?.Id ?? WebPlaybackDeviceId;
-                            await _spotify.PauseCurrentPlaybackAsync(targetDeviceId);
-                        }
-                    }
-                    catch (Exception pauseEx)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"⚠️ Pause via primary path failed: {pauseEx.Message}. Falling back to Spotify API.");
-                        try 
-                        { 
-                            var active = Devices.FirstOrDefault(d => d.IsActive);
-                            var targetDeviceId = active?.Id ?? SelectedDevice?.Id ?? WebPlaybackDeviceId;
-                            await _spotify.PauseCurrentPlaybackAsync(targetDeviceId); 
-                        } 
-                        catch { }
-                    }
-                }
-                else
-                {
-                    // If there is no active device, promote the in-app Web Playback device as active first
-                    var hasActive = Devices.Any(d => d.IsActive);
-                    if (!hasActive)
-                    {
-                        // Wait briefly for the Web Playback device id if not yet known
-                        if (string.IsNullOrEmpty(WebPlaybackDeviceId))
-                        {
-                            var waitedId = await WaitForWebDeviceIdAsync(TimeSpan.FromSeconds(4));
-                            if (!string.IsNullOrEmpty(waitedId))
-                            {
-                                WebPlaybackDeviceId = waitedId;
-                            }
-                        }
-
-                        var ensured = await EnsureAppDeviceActiveAsync();
-                        System.Diagnostics.Debug.WriteLine($"🎯 EnsureAppDeviceActive before Resume result: {ensured}");
-                        // Refresh snapshot after potential transfer
-                        await RefreshDevicesAsync();
-                    }
-
-                    // Decide control path based on updated selection
-                    var useWebBridgeQuick = SelectedDevice != null && !string.IsNullOrEmpty(WebPlaybackDeviceId) && SelectedDevice.Id == WebPlaybackDeviceId;
-
-                    // Optimistic UI update first for snappy feel
-                    IsPlaying = true;
-                    _resumeRequestedAt = DateTimeOffset.UtcNow;
-
-                    System.Diagnostics.Debug.WriteLine($"▶️ PlayPause: Resuming via {(useWebBridgeQuick ? "WebPlaybackBridge" : "Spotify API")} (selected={SelectedDevice?.Id}, webId={WebPlaybackDeviceId})");
-                    try
-                    {
-                        if (useWebBridgeQuick)
-                        {
-                            // Proactively enable audio context on the web player
-                            await _webPlaybackBridge.ResumeAsync();
-                        }
-                        else
-                        {
-                            var active = Devices.FirstOrDefault(d => d.IsActive);
-                            var targetDeviceId = active?.Id ?? SelectedDevice?.Id ?? WebPlaybackDeviceId;
-                            await _spotify.ResumeCurrentPlaybackAsync(targetDeviceId);
-                        }
-                    }
-                    catch (Exception resumeEx)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"⚠️ Resume via primary path failed: {resumeEx.Message}. Falling back to Spotify API or web bridge.");
-                        try 
-                        { 
-                            var active = Devices.FirstOrDefault(d => d.IsActive);
-                            var targetDeviceId = active?.Id ?? SelectedDevice?.Id ?? WebPlaybackDeviceId;
-                            await _spotify.ResumeCurrentPlaybackAsync(targetDeviceId); 
-                        }
-                        catch { try { await _webPlaybackBridge.ResumeAsync(); } catch { } }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"PlayPause error: {ex.Message}");
-            }
-            finally
-            {
-                // Burst refresh to quickly populate UI after user action
-                SchedulePostActionStateRefresh();
-            }
+            await _playbackManager.ExecutePlayPauseAsync(_deviceManager.Devices, _deviceManager.WebPlaybackDeviceId);
+            // Burst refresh to quickly populate UI after user action
+            SchedulePostActionStateRefresh();
         }
 
         /// <summary>
@@ -462,32 +317,7 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         private async Task ExecuteNextAsync()
         {
-            try
-            {
-                _loggingService.LogDebug($"[NEXT] ⏭️ ExecuteNextAsync called");
-                await RefreshDevicesAsync();
-                var active = Devices.FirstOrDefault(d => d.IsActive);
-                var targetDeviceId = active?.Id;
-
-                System.Diagnostics.Debug.WriteLine($"⏭️ SkipToNext: skipping to next track on device {targetDeviceId ?? "(current)"}");
-                _loggingService.LogDebug($"[NEXT] ⏭️ Calling SkipToNextAsync for device {targetDeviceId ?? "(current)"}");
-                var ok = await _spotify.SkipToNextAsync(targetDeviceId);
-                if (ok)
-                {
-                    _loggingService.LogDebug($"[NEXT] ✅ SkipToNextAsync succeeded, scheduling refresh");
-                    // Refresh state shortly after to sync UI
-                    _ = Task.Delay(300).ContinueWith(async _ => await RefreshPlayerStateAsync());
-                }
-                else
-                {
-                    _loggingService.LogDebug($"[NEXT] ❌ SkipToNextAsync failed");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"SkipToNext error: {ex.Message}");
-                _loggingService.LogError($"[NEXT] ❌ SkipToNext error: {ex.Message}", ex);
-            }
+            await _playbackManager.ExecuteNextAsync(_deviceManager.Devices);
         }
 
         /// <summary>
@@ -495,17 +325,7 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         private async Task ExecutePrevAsync()
         {
-            try
-            {
-                // In a real implementation, this would call Spotify API to skip to previous track
-                // For now, we'll use a placeholder
-                await Task.Delay(100);
-                System.Diagnostics.Debug.WriteLine("Previous track requested");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Previous error: {ex.Message}");
-            }
+            await _playbackManager.ExecutePrevAsync(_deviceManager.Devices);
         }
 
         /// <summary>
@@ -513,107 +333,17 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         private async Task ExecuteSeekAsync(int positionMs)
         {
-            try
-            {
-                var now = DateTimeOffset.UtcNow;
-                
-                // Throttle seeks to avoid overwhelming the API
-                if (now - _lastSeekSent < TimeSpan.FromMilliseconds(120))
-                {
-                    // Start/restart the throttle timer
-                    _seekThrottleTimer.Stop();
-                    _seekThrottleTimer.Start();
-                    return;
-                }
-
-                _lastSeekSent = now;
-
-                // Decide control path based on active device
-                await RefreshDevicesAsync();
-                var active = Devices.FirstOrDefault(d => d.IsActive);
-                var useWebBridge = active != null && !string.IsNullOrEmpty(WebPlaybackDeviceId) && active.Id == WebPlaybackDeviceId;
-
-                if (useWebBridge)
-                {
-                    await _webPlaybackBridge.SeekAsync(positionMs);
-                }
-                else
-                {
-                    await _spotify.SeekCurrentPlaybackAsync(positionMs, active?.Id);
-                }
-                
-                // Update UI immediately for responsiveness
-                PositionMs = positionMs;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Seek error: {ex.Message}");
-                try 
-                { 
-                    await RefreshDevicesAsync();
-                    var active = Devices.FirstOrDefault(d => d.IsActive);
-                    await _spotify.SeekCurrentPlaybackAsync(positionMs, active?.Id); 
-                } 
-                catch { }
-            }
+            await _playbackManager.ExecuteSeekAsync(positionMs, _deviceManager.Devices, _deviceManager.WebPlaybackDeviceId);
+            // Update UI immediately for responsiveness
+            PositionMs = positionMs;
         }
 
         /// <summary>
         /// Execute set volume command
         /// </summary>
-    private DateTime _lastVolumeSent = DateTime.MinValue;
-
         private async Task ExecuteSetVolumeAsync(double volume)
         {
-            try
-            {
-                // Clamp and snap tiny values to 0 to avoid near-silent confusion
-                var clamped = Math.Max(0.0, Math.Min(1.0, volume));
-                if (clamped > 0 && clamped < 0.005) clamped = 0.0;
-
-                // Throttle to prevent flooding the bridge and API while dragging
-                var now = DateTime.UtcNow;
-                if ((now - _lastVolumeSent) < TimeSpan.FromMilliseconds(80) && Math.Abs(clamped - _volume) < 0.01)
-                {
-                    return;
-                }
-
-                _lastVolumeSent = now;
-                _volume = clamped;
-                _volumeSetByUser = true; // Mark that volume has been set
-                RaisePropertyChanged(nameof(Volume));
-
-                // Always apply to Web Playback SDK (local bridge) for immediate UX when app is the device
-                try
-                {
-                    await _webPlaybackBridge.SetVolumeAsync(_volume);
-                }
-                catch (Exception bridgeEx)
-                {
-                    System.Diagnostics.Debug.WriteLine($"SetVolume bridge error (non-fatal): {bridgeEx.Message}");
-                }
-
-                // Also apply via Spotify Web API to the currently active device (web or remote)
-                // This ensures the volume changes even if the SDK isn't the active controller yet.
-                await RefreshDevicesAsync();
-                var active = Devices.FirstOrDefault(d => d.IsActive);
-                if (active != null && !string.IsNullOrEmpty(active.Id))
-                {
-                    var percent = (int)Math.Round(_volume * 100);
-                    try
-                    {
-                        await _spotify.SetVolumePercentOnDeviceAsync(active.Id, percent);
-                    }
-                    catch (Exception apiEx)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"SetVolume API error (non-fatal): {apiEx.Message}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"SetVolume error: {ex.Message}");
-            }
+            await _playbackManager.ExecuteSetVolumeAsync(volume, _deviceManager.Devices, _deviceManager.WebPlaybackDeviceId);
         }
 
         /// <summary>
@@ -621,129 +351,22 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         private async Task ExecuteToggleShuffleAsync()
         {
-            try
-            {
-                await RefreshDevicesAsync();
-                var active = Devices.FirstOrDefault(d => d.IsActive);
-                var targetDeviceId = active?.Id;
-
-                var newState = !IsShuffled;
-                System.Diagnostics.Debug.WriteLine($"🔀 ToggleShuffle: setting shuffle={(newState ? "on" : "off")} for device {targetDeviceId ?? "(current)"}");
-                var ok = await _spotify.SetShuffleAsync(newState, targetDeviceId);
-                if (ok)
-                {
-                    IsShuffled = newState; // Optimistic update
-                }
-
-                // Refresh state shortly after to sync UI from authoritative source
-                _ = Task.Delay(300).ContinueWith(async _ => await RefreshPlayerStateAsync());
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"ToggleShuffle error: {ex.Message}");
-            }
+            await _playbackManager.ExecuteToggleShuffleAsync(_deviceManager.Devices);
         }
 
         private async Task ExecuteCycleRepeatAsync()
         {
-            try
-            {
-                await RefreshDevicesAsync();
-                var active = Devices.FirstOrDefault(d => d.IsActive);
-                var targetDeviceId = active?.Id;
-
-                // Cycle: off(0) -> context(1) -> track(2) -> off(0)
-                var next = RepeatMode switch { 0 => 1, 1 => 2, 2 => 0, _ => 0 };
-                var state = next == 2 ? "track" : next == 1 ? "context" : "off";
-
-                System.Diagnostics.Debug.WriteLine($"🔁 CycleRepeat: setting repeat={state} for device {targetDeviceId ?? "(current)"}");
-                var ok = await _spotify.SetRepeatAsync(state, targetDeviceId);
-                if (ok)
-                {
-                    RepeatMode = next; // Optimistic update
-                    _lastRepeatUpdate = DateTimeOffset.UtcNow; // Track the optimistic update time
-                }
-
-                // Refresh state shortly after to sync UI
-                _ = Task.Delay(300).ContinueWith(async _ => await RefreshPlayerStateAsync());
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"CycleRepeat error: {ex.Message}");
-            }
+            await _playbackManager.ExecuteCycleRepeatAsync(_deviceManager.Devices);
         }
 
         private async Task ExecuteRefreshAsync()
         {
-            try
-            {
-                _loggingService.LogDebug($"[MANUAL_REFRESH] 🔄 Manual refresh requested by user");
-                await RefreshDevicesAsync();
-                await RefreshPlayerStateAsync();
-                _loggingService.LogDebug($"[MANUAL_REFRESH] ✅ Manual refresh completed");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Manual refresh error: {ex.Message}");
-            }
+            await _playbackManager.ExecuteRefreshAsync();
         }
 
         private async Task ExecuteSelectDeviceAsync(DeviceModel device)
         {
-            try
-            {
-                if (device == null) return;
-
-                SelectedDevice = device;
-                
-                // Transfer playback to selected device (false = keep current playback state)
-                await _spotify.TransferPlaybackAsync(new[] { device.Id }, false);
-
-                // Give Spotify a brief moment to apply the transfer, then resync devices and state
-                await Task.Delay(300);
-                await RefreshDevicesAsync();
-
-                // If the selected device became active, keep it selected; otherwise, switch to whatever is active
-                var active = Devices.FirstOrDefault(d => d.IsActive);
-                if (active != null)
-                {
-                    SelectedDevice = active;
-                }
-
-                // Force a fresh player state read so PositionMs/IsPlaying reflect the transferred playback
-                _lastUiProgressUpdate = DateTime.UtcNow; // reset UI progress clock base
-                await RefreshPlayerStateAsync();
-                
-                // Update WebPlaybackDeviceId if this is the web player device
-                if (device.Id == WebPlaybackDeviceId)
-                {
-                    // Already using web player
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"SelectDevice error: {ex.Message}");
-                
-                // Retry once after 250ms for 404 errors, then resync state
-                if (ex.Message.Contains("404"))
-                {
-                    await Task.Delay(250);
-                    try
-                    {
-                        await _spotify.TransferPlaybackAsync(new[] { device.Id }, false);
-                        await Task.Delay(300);
-                        await RefreshDevicesAsync();
-                        var active = Devices.FirstOrDefault(d => d.IsActive);
-                        if (active != null) SelectedDevice = active;
-                        _lastUiProgressUpdate = DateTime.UtcNow;
-                        await RefreshPlayerStateAsync();
-                    }
-                    catch (Exception retryEx)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"SelectDevice retry error: {retryEx.Message}");
-                    }
-                }
-            }
+            await _playbackManager.ExecuteSelectDeviceAsync(device, _deviceManager.Devices, _deviceManager.WebPlaybackDeviceId);
         }
 
         /// <summary>
@@ -751,112 +374,7 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
     private async Task ExecuteClickTrackAsync(object trackObj)
         {
-            var operationId = Guid.NewGuid().ToString().Substring(0, 8);
-            _loggingService.LogDebug("TRACK_CLICK", $"=== TRACK CLICK STARTED [OP:{operationId}] ===");
-
-            try
-            {
-                if (trackObj == null)
-                {
-                    _loggingService.LogDebug("TRACK_CLICK", $"❌ NULL TRACK OBJECT RECEIVED [OP:{operationId}]");
-                    System.Diagnostics.Debug.WriteLine($"❌ CLICK TRACK: NULL TRACK [OP:{operationId}]");
-                    return;
-                }
-
-                _loggingService.LogDebug("TRACK_CLICK", $"📦 Received track object of type: {trackObj.GetType().Name} [OP:{operationId}]");
-
-                // Convert to TrackModel if needed
-                TrackModel track;
-                if (trackObj is TrackModel trackModel)
-                {
-                    track = trackModel;
-                    _loggingService.LogDebug("TRACK_CLICK", $"✅ Using existing TrackModel: {track.Title}");
-                }
-                else if (trackObj is FullTrack apiTrack)
-                {
-                    _loggingService.LogDebug("TRACK_CLICK", $"🔄 Converting SpotifyAPI.Web.FullTrack to TrackModel");
-                    // Convert from SpotifyAPI.Web.FullTrack to TrackModel
-                    track = new TrackModel
-                    {
-                        Id = apiTrack.Id ?? string.Empty,
-                        Title = apiTrack.Name ?? string.Empty,
-                        Artist = string.Join(", ", apiTrack.Artists?.Select(a => a.Name) ?? new List<string>()),
-                        Uri = apiTrack.Uri ?? string.Empty,
-                        DurationMs = apiTrack.DurationMs,
-                        AlbumArtUri = null // Will be set later if available
-                    };
-                    _loggingService.LogDebug("TRACK_CLICK", $"✅ Converted to TrackModel: {track.Title} by {track.Artist}");
-                }
-                else
-                {
-                    _loggingService.LogDebug("TRACK_CLICK", $"❌ UNSUPPORTED TRACK TYPE: {trackObj.GetType().FullName}");
-                    System.Diagnostics.Debug.WriteLine($"❌ CLICK TRACK: Unsupported track type: {trackObj.GetType()}");
-                    return;
-                }
-
-                _loggingService.LogDebug("TRACK_CLICK", $"🎵 Processing track: '{track.Title}' by '{track.Artist}' (ID: {track.Id})");
-
-                System.Diagnostics.Debug.WriteLine($"🎵 ClickTrack: {track.Title} by {track.Artist}");
-
-                // Optimistic UI updates (instant feedback)
-                _loggingService.LogDebug("TRACK_CLICK", "🎨 Updating UI with optimistic changes");
-                CurrentTrack = track;
-                PositionMs = 0;
-                // Do not optimistically flip to playing; wait for confirmation to avoid Pause-on-nothing scenarios
-                IsPlaying = false;
-                _resumeRequestedAt = DateTimeOffset.UtcNow; // Suppress stale paused states from API shortly after click-to-play
-
-                _loggingService.LogDebug("TRACK_CLICK", $"⏰ Set resume suppression until: {_resumeRequestedAt.AddSeconds(2):HH:mm:ss}");
-
-                // Suppress transient reversion and remember to auto-start this track on web activation
-                _pendingTrackId = track.Id;
-                _pendingTrackUntil = DateTimeOffset.UtcNow.AddSeconds(4);
-                _pendingPlayTrackId = track.Id;
-                _pendingPlayUntil = DateTimeOffset.UtcNow.AddSeconds(8);
-
-                _loggingService.LogDebug("TRACK_CLICK", $"🎯 Set pending track ID: {track.Id}");
-                _loggingService.LogDebug("TRACK_CLICK", $"⏳ Pending track valid until: {_pendingTrackUntil:HH:mm:ss}");
-                _loggingService.LogDebug("TRACK_CLICK", $"▶️ Pending play valid until: {_pendingPlayUntil:HH:mm:ss}");
-
-                // Nudge the web player's audio context immediately under the user click gesture
-                _loggingService.LogDebug("TRACK_CLICK", "🔊 Nudging web player audio context");
-                try { await _webPlaybackBridge.ResumeAsync(); } catch { }
-
-                // Cancel any previous click-to-play orchestration
-                _loggingService.LogDebug("TRACK_CLICK", "🛑 Cancelling previous click-to-play orchestration");
-                _clickCts?.Cancel();
-                _clickCts = new CancellationTokenSource();
-                var token = _clickCts.Token;
-
-                // Fire-and-forget the heavy orchestration so clicks remain responsive
-                // Use semaphore to prevent concurrent track operations
-                _loggingService.LogDebug("TRACK_CLICK", $"🚀 Starting OrchestrateClickPlayAsync (fire-and-forget with semaphore) [OP:{operationId}]");
-                _ = Task.Run(async () =>
-                {
-                    await _trackOperationSemaphore.WaitAsync(token);
-                    try
-                    {
-                        await OrchestrateClickPlayAsync(track, token, operationId);
-                    }
-                    finally
-                    {
-                        _trackOperationSemaphore.Release();
-                    }
-                }, token);
-            }
-            catch (Exception ex)
-            {
-                _loggingService.LogError($"💥 ERROR in ExecuteClickTrackAsync: {ex.Message}", ex);
-                System.Diagnostics.Debug.WriteLine($"ClickTrack error (fast path): {ex.Message}");
-                IsPlaying = false;
-            }
-            finally
-            {
-                // Reset UI progress baseline and burst refresh to quickly sync UI after starting playback
-                _lastUiProgressUpdate = DateTime.UtcNow;
-                SchedulePostActionStateRefresh();
-                _loggingService.LogDebug("TRACK_CLICK", "=== TRACK CLICK COMPLETED ===");
-            }
+            await _playbackManager.ExecuteClickTrackAsync(trackObj, _deviceManager.Devices, _deviceManager.WebPlaybackDeviceId);
         }
 
         // Small helper: poll API until the expected device becomes active
@@ -879,116 +397,6 @@ namespace SpotifyWPF.ViewModel
             return false;
         }
 
-        /// <summary>
-        /// Ensure there is an active device; if none, transfer playback to the Web Playback SDK device (this app)
-        /// </summary>
-    private async Task<bool> EnsureAppDeviceActiveAsync()
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("🎵 EnsureAppDeviceActiveAsync: Starting device check");
-                
-                // Refresh devices to get current active status
-                await RefreshDevicesAsync();
-
-                // Fast-path: if there is already an active device, honor it
-                var activeDevice = Devices.FirstOrDefault(d => d.IsActive);
-                if (activeDevice != null)
-                {
-                    System.Diagnostics.Debug.WriteLine($"🎵 Active device found: {activeDevice.Name} ({activeDevice.Id})");
-                    SelectedDevice = activeDevice;
-                    return true;
-                }
-
-                // If WebPlaybackDeviceId not yet known, wait briefly for the Web Playback SDK to report it
-                if (string.IsNullOrEmpty(WebPlaybackDeviceId))
-                {
-                    var waitedId = await WaitForWebDeviceIdAsync(TimeSpan.FromSeconds(4));
-                    if (!string.IsNullOrEmpty(waitedId))
-                    {
-                        WebPlaybackDeviceId = waitedId;
-                        System.Diagnostics.Debug.WriteLine($"🎵 Web device became ready: {WebPlaybackDeviceId}");
-                    }
-                }
-
-                System.Diagnostics.Debug.WriteLine($"🎵 No active device found. WebPlaybackDeviceId: {WebPlaybackDeviceId}");
-                System.Diagnostics.Debug.WriteLine($"🎵 Available devices: {string.Join(", ", Devices.Select(d => $"{d.Name}({d.Id}, Active:{d.IsActive})"))}");
-
-                // If WebPlaybackDeviceId is empty, try to find our web player device in the devices list
-                if (string.IsNullOrEmpty(WebPlaybackDeviceId))
-                {
-                    var webDevice = Devices.FirstOrDefault(d => d.Name == "Web Player" || d.Name.Contains("SpotifyWPF"));
-                    if (webDevice != null)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"🎵 Found Web Player device in list: {webDevice.Id}");
-                        WebPlaybackDeviceId = webDevice.Id;
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine("⚠️ WebPlaybackDeviceId is empty and no Web Player found in devices list");
-                        System.Diagnostics.Debug.WriteLine("⚠️ Web Playback SDK may not be ready yet. Trying to reconnect...");
-                        
-                        // Try to reconnect the Web Playback bridge
-                        try
-                        {
-                            await _webPlaybackBridge.ConnectAsync();
-                            await Task.Delay(1000); // Wait for connection and ready event
-                            await RefreshDevicesAsync();
-                            
-                            // Try to find the device again
-                            var webDeviceRetry = Devices.FirstOrDefault(d => d.Name == "Web Player" || d.Name.Contains("SpotifyWPF"));
-                            if (webDeviceRetry != null)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"🎵 Found Web Player device after reconnect: {webDeviceRetry.Id}");
-                                WebPlaybackDeviceId = webDeviceRetry.Id;
-                            }
-                        }
-                        catch (Exception reconnectEx)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"❌ Error reconnecting Web Playback: {reconnectEx.Message}");
-                        }
-                    }
-                }
-
-                // No active device – try to promote our Web Playback device
-                if (!string.IsNullOrEmpty(WebPlaybackDeviceId))
-                {
-                    System.Diagnostics.Debug.WriteLine($"🎵 Transferring playback to Web Playback device: {WebPlaybackDeviceId} (with play=true to activate) ");
-                    await _spotify.TransferPlaybackAsync(new[] { WebPlaybackDeviceId }, true);
-                    System.Diagnostics.Debug.WriteLine("🎵 TransferPlayback call completed (play=true), waiting for device switch...");
-                    
-                    // Poll until device becomes active (up to ~4.5s)
-                    var attempts = 0;
-                    while (attempts++ < 15)
-                    {
-                        await Task.Delay(300);
-                        await RefreshDevicesAsync();
-                        var webDevice = Devices.FirstOrDefault(d => d.Id == WebPlaybackDeviceId);
-                        if (webDevice != null)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"🎵 Web device polled: {webDevice.Name}, IsActive: {webDevice.IsActive}");
-                            if (webDevice.IsActive)
-                            {
-                                SelectedDevice = webDevice;
-                                return true;
-                            }
-                        }
-                    }
-                    System.Diagnostics.Debug.WriteLine("⚠️ Web device did not become active within timeout");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("⚠️ WebPlaybackDeviceId is still empty after all attempts, cannot transfer playback");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"❌ EnsureAppDeviceActiveAsync error: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"❌ Stack trace: {ex.StackTrace}");
-            }
-            return false;
-        }
-
         #endregion
 
         #region Command CanExecute
@@ -1004,14 +412,19 @@ namespace SpotifyWPF.ViewModel
             var delays = new int[] { 0, 250, 750, 1500 };
             foreach (var d in delays)
             {
-                _ = Task.Delay(d).ContinueWith(async _ =>
+                // Schedule a delayed refresh and ensure any exceptions are observed
+                _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await RefreshDevicesAsync();
+                        await Task.Delay(d);
+                        await _deviceManager.RefreshDevicesAsync();
                         await RefreshPlayerStateAsync();
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error in scheduled post-action refresh: {ex.Message}");
+                    }
                 });
             }
         }
@@ -1058,10 +471,6 @@ namespace SpotifyWPF.ViewModel
                 _lastStateUpdate = now;
                 _lastStateKey = stateKey;
 
-                _loggingService.LogDebug($"[STATE_UPDATE] === RECEIVED STATE UPDATE ===");
-                _loggingService.LogDebug($"[STATE_UPDATE] Track: {state.TrackName ?? "null"}, Playing: {state.IsPlaying}, Position: {state.PositionMs}ms");
-                _loggingService.LogDebug($"[STATE_UPDATE] TrackId: {state.TrackId ?? "null"}, Duration: {state.DurationMs}ms");
-
                 // 🔥 CRITICAL: Ensure UI updates happen on UI thread
                 Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -1076,16 +485,23 @@ namespace SpotifyWPF.ViewModel
                 
                 int pauseDurationMs = isWebPlayerActive ? 10000 : 2000; // 10s for Web Player, 2s for remote
                 
-                _statePollTimer.Stop();
-                Task.Delay(pauseDurationMs).ContinueWith(_ =>
+                _timerManager.StopStatePollTimer();
+                _ = Task.Run(async () =>
                 {
-                    Application.Current.Dispatcher.Invoke(() => _statePollTimer.Start());
+                    try
+                    {
+                        await Task.Delay(pauseDurationMs);
+                        _timerManager.StartStatePollTimer();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error restarting state poll timer: {ex.Message}");
+                    }
                 });
             }
             catch (Exception ex)
             {
                 _loggingService.LogError($"[STATE_UPDATE] ❌ OnPlayerStateChanged error: {ex.Message}", ex);
-                System.Diagnostics.Debug.WriteLine($"❌ OnPlayerStateChanged error: {ex.Message}");
             }
         }
 
@@ -1303,10 +719,10 @@ namespace SpotifyWPF.ViewModel
                 }
                 
                 // 🟢 SMART POLLING: Resume API polling when playback stops
-                if (wasPlaying && !IsPlaying && !_statePollTimer.IsEnabled)
+                if (wasPlaying && !IsPlaying)
                 {
                     _loggingService.LogDebug($"[SMART_POLL] ▶️ Resuming API polling after playback stopped");
-                    _statePollTimer.Start();
+                    _timerManager.StartStatePollTimer();
                 }
                 
                 // Update volume from state - always sync with Web SDK when it's the active device
@@ -1358,7 +774,6 @@ namespace SpotifyWPF.ViewModel
                                    isApiDefaultVolume ? "API default volume when no track" : 
                                    isWebSdkZeroVolume ? "Web SDK zero volume when no track" :
                                    state.Volume < 0.0 ? "invalid volume" : "unknown";
-                    System.Diagnostics.Debug.WriteLine($"🔊 Volume NOT updated during {reason} - preserving user setting (state vol: {state.Volume:F2})");
                 }
 
                 // Update shuffle/repeat from state
@@ -1372,7 +787,7 @@ namespace SpotifyWPF.ViewModel
                 
                 // 🛑 PREVENT OVERWRITING RECENT OPTIMISTIC REPEAT UPDATES
                 // Don't update repeat mode if we recently did an optimistic update (within 2 seconds)
-                var timeSinceRepeatUpdate = DateTimeOffset.UtcNow - _lastRepeatUpdate;
+                var timeSinceRepeatUpdate = DateTimeOffset.UtcNow - _playbackManager.LastRepeatUpdate;
                 if (timeSinceRepeatUpdate > TimeSpan.FromSeconds(2))
                 {
                     RepeatMode = state.RepeatMode;
@@ -1406,10 +821,10 @@ namespace SpotifyWPF.ViewModel
                         System.Diagnostics.Debug.WriteLine($"🎵 Updating track info - Old: {CurrentTrack?.Title ?? "NULL"}, New: {state.TrackName ?? "(pending)"}");
 
                         var trackChanged = CurrentTrack == null || CurrentTrack.Id != incomingId;
-                        if (trackChanged && CurrentTrack != null && !_statePollTimer.IsEnabled)
+                        if (trackChanged && CurrentTrack != null)
                         {
                             _loggingService.LogDebug($"[SMART_POLL] 🔄 Resuming API polling after track changed from '{CurrentTrack.Title}'");
-                            _statePollTimer.Start();
+                            _timerManager.StartStatePollTimer();
                         }
 
                         if (CurrentTrack == null || CurrentTrack.Id != incomingId)
@@ -1491,10 +906,10 @@ namespace SpotifyWPF.ViewModel
                     IsPlaying = false;
                     
                     // Resume API polling when disconnected
-                    if (!_statePollTimer.IsEnabled)
+                    if (true)
                     {
                         _loggingService.LogDebug($"[SMART_POLL] ▶️ Resuming API polling after disconnection");
-                        _statePollTimer.Start();
+                        _timerManager.StartStatePollTimer();
                     }
                     
                     // Now handle auto-advance logic (after track is cleared)
@@ -1538,7 +953,6 @@ namespace SpotifyWPF.ViewModel
                 }
 
                 // Debug summary of current UI state (avoid redundant PropertyChanged to prevent flicker)
-                System.Diagnostics.Debug.WriteLine($"✅ UI updated - Playing: {IsPlaying}, Position: {PositionMs}ms, Volume: {Volume:F2}");
             }
             catch (Exception ex)
             {
@@ -1555,7 +969,7 @@ namespace SpotifyWPF.ViewModel
             {
                 _loggingService.LogDebug($"[WEB_DEVICE] OnReadyDeviceId called with: {deviceId}");
                 System.Diagnostics.Debug.WriteLine($"PlayerViewModel.OnReadyDeviceId called with: {deviceId}");
-                WebPlaybackDeviceId = deviceId;
+                _deviceManager.WebPlaybackDeviceId = deviceId;
                 _loggingService.LogDebug($"[WEB_DEVICE] Set WebPlaybackDeviceId to: {WebPlaybackDeviceId}");
                 _webDeviceReadyTcs?.TrySetResult(deviceId);
                 _loggingService.LogDebug($"[WEB_DEVICE] Completed TaskCompletionSource with: {deviceId}");
@@ -1581,122 +995,28 @@ namespace SpotifyWPF.ViewModel
             }
         }
 
-        private async Task<string?> WaitForWebDeviceIdAsync(TimeSpan timeout)
-        {
-            if (!string.IsNullOrEmpty(WebPlaybackDeviceId)) 
-            {
-                _loggingService.LogDebug($"[WEB_DEVICE] WaitForWebDeviceIdAsync: Already have device ID: {WebPlaybackDeviceId}");
-                return WebPlaybackDeviceId;
-            }
-            try
-            {
-                _loggingService.LogDebug($"[WEB_DEVICE] WaitForWebDeviceIdAsync: Waiting for device ID with timeout {timeout.TotalSeconds}s");
-                var tcs = _webDeviceReadyTcs;
-                if (tcs == null)
-                {
-                    _loggingService.LogDebug($"[WEB_DEVICE] WaitForWebDeviceIdAsync: Creating new TaskCompletionSource");
-                    _webDeviceReadyTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    tcs = _webDeviceReadyTcs;
-                }
-                else
-                {
-                    _loggingService.LogDebug($"[WEB_DEVICE] WaitForWebDeviceIdAsync: Using existing TaskCompletionSource");
-                }
-                var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeout));
-                if (completed == tcs.Task)
-                {
-                    var result = tcs.Task.Result;
-                    _loggingService.LogDebug($"[WEB_DEVICE] WaitForWebDeviceIdAsync: Got device ID: {result}");
-                    return result;
-                }
-                else
-                {
-                    _loggingService.LogDebug($"[WEB_DEVICE] WaitForWebDeviceIdAsync: Timeout waiting for device ID");
-                }
-            }
-            catch (Exception ex)
-            {
-                _loggingService.LogError($"[WEB_DEVICE] WaitForWebDeviceIdAsync: Error: {ex.Message}", ex);
-            }
-            return null;
-        }
-
         /// <summary>
         /// Handle seek throttle timer tick
         /// </summary>
         private async void OnSeekThrottleTimerTick(object? sender, EventArgs e)
         {
-            _seekThrottleTimer.Stop();
-            
-            try
-            {
-                _lastSeekSent = DateTimeOffset.UtcNow;
-
-                // Route seek based on active device at the moment of tick
-                await RefreshDevicesAsync();
-                var active = Devices.FirstOrDefault(d => d.IsActive);
-                var useWebBridge = active != null && !string.IsNullOrEmpty(WebPlaybackDeviceId) && active.Id == WebPlaybackDeviceId;
-
-                if (useWebBridge)
-                {
-                    await _webPlaybackBridge.SeekAsync(PositionMs);
-                }
-                else
-                {
-                    await _spotify.SeekCurrentPlaybackAsync(PositionMs, active?.Id);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Throttled seek error: {ex.Message}");
-                try 
-                { 
-                    await RefreshDevicesAsync();
-                    var active = Devices.FirstOrDefault(d => d.IsActive);
-                    await _spotify.SeekCurrentPlaybackAsync(PositionMs, active?.Id); 
-                } 
-                catch { }
-            }
+            await Task.Run(() => _playbackManager.OnSeekThrottleTimerTick(sender, e, _deviceManager.Devices, _deviceManager.WebPlaybackDeviceId));
         }
 
         /// <summary>
-        /// UI progress timer tick: advance slider locally when web player is active
+        /// UI progress timer tick: advance slider locally when playing on any device
         /// </summary>
         private void OnUiProgressTick(object? sender, EventArgs e)
         {
-            try
-            {
-                var now = DateTime.UtcNow;
-                var delta = now - _lastUiProgressUpdate;
-                _lastUiProgressUpdate = now;
+            _playbackManager.OnUiProgressTick(sender, e);
+        }
 
-                if (!IsPlaying) return;
-                if (IsDraggingSlider) return;
-                if (string.IsNullOrEmpty(WebPlaybackDeviceId)) return;
-                if (CurrentTrack == null || CurrentTrack.DurationMs <= 0) return;
-
-                // Consider web player likely active immediately after a recent resume/click-to-play
-                var recentlyResumed = (DateTimeOffset.UtcNow - _resumeRequestedAt) < TimeSpan.FromSeconds(4);
-                var webIsSelected = SelectedDevice != null && SelectedDevice.Id == WebPlaybackDeviceId;
-                if (!webIsSelected && !recentlyResumed) return;
-
-                var inc = (int)Math.Max(0, Math.Min(2000, delta.TotalMilliseconds));
-                var newPos = PositionMs + inc;
-
-                // If we hit or passed the end while still playing (auto-advance/repeat), wrap to 0
-                if (newPos >= (CurrentTrack.DurationMs - 20))
-                {
-                    // Reset to start and fetch fresh state to get the next track/position
-                    PositionMs = 0;
-                    _lastUiProgressUpdate = now;
-                    // Fire-and-forget a quick state refresh so artwork/title/progress update promptly
-                    _ = RefreshPlayerStateAsync();
-                    return;
-                }
-
-                PositionMs = newPos;
-            }
-            catch { }
+        /// <summary>
+        /// Handle state poll timer tick
+        /// </summary>
+        private async void OnStatePollTimerTick(object? sender, EventArgs e)
+        {
+            await _playbackManager.OnStatePollTimerTickAsync(sender, e);
         }
 
         #endregion
@@ -1706,256 +1026,208 @@ namespace SpotifyWPF.ViewModel
         // Fire-and-forget background orchestration for click-to-play to avoid blocking UI
         private async Task OrchestrateClickPlayAsync(TrackModel track, CancellationToken ct, string operationId = "")
         {
-            _loggingService.LogDebug("ORCHESTRATE", $"=== STARTING ORCHESTRATION for track: {track.Title} [OP:{operationId}] ===");
+            LoggingService.LogToFile($"ORCHESTRATE === STARTING ORCHESTRATION for track: {track.Title} ===\n");
 
             try
             {
                 if (ct.IsCancellationRequested)
                 {
-                    _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled before start");
+                    LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled before start\n");
                     return;
                 }
-
-                _loggingService.LogDebug("ORCHESTRATE", $"🔍 Checking WebPlaybackDeviceId: '{WebPlaybackDeviceId}'");
-                _loggingService.LogDebug("ORCHESTRATE", $"🔍 Current _webPlaybackDeviceId field: '{_webPlaybackDeviceId}'");
 
                 // Try to get web device id quickly if missing
                 if (string.IsNullOrEmpty(WebPlaybackDeviceId))
                 {
-                    _loggingService.LogDebug("ORCHESTRATE", "⏳ WebPlaybackDeviceId is empty, waiting for it...");
-                    var waitedId = await WaitForWebDeviceIdAsync(TimeSpan.FromSeconds(3));
+                    var waitedId = await _deviceManager.WaitForWebDeviceIdAsync(TimeSpan.FromSeconds(3));
                     if (!string.IsNullOrEmpty(waitedId))
                     {
-                        WebPlaybackDeviceId = waitedId;
-                        _loggingService.LogDebug("ORCHESTRATE", $"✅ WebPlayback device ready: {WebPlaybackDeviceId}");
-                        System.Diagnostics.Debug.WriteLine($"✅ WebPlayback device ready for orchestration: {WebPlaybackDeviceId}");
+                        _deviceManager.WebPlaybackDeviceId = waitedId;
                     }
                     else
                     {
                         // Fallback: try to get device ID directly from WebPlaybackBridge
-                        _loggingService.LogDebug("ORCHESTRATE", "⏳ Wait failed, trying direct WebPlaybackBridge query...");
                         try
                         {
                             var bridgeDeviceId = await _webPlaybackBridge.GetWebPlaybackDeviceIdAsync();
                             if (!string.IsNullOrEmpty(bridgeDeviceId))
                             {
-                                WebPlaybackDeviceId = bridgeDeviceId;
-                                _loggingService.LogDebug("ORCHESTRATE", $"✅ Got WebPlaybackDeviceId from bridge: {WebPlaybackDeviceId}");
-                            }
-                            else
-                            {
-                                _loggingService.LogDebug("ORCHESTRATE", "❌ WebPlaybackBridge also has empty device ID");
+                                _deviceManager.WebPlaybackDeviceId = bridgeDeviceId;
                             }
                         }
                         catch (Exception ex)
                         {
-                            _loggingService.LogError($"❌ Error getting device ID from bridge: {ex.Message}", ex);
+                            LoggingService.LogToFile($"ORCHESTRATE ❌ Error getting device ID from bridge: {ex.Message}\n");
                         }
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ Failed to get WebPlayback device ID");
                     }
                 }
 
                 if (ct.IsCancellationRequested)
                 {
-                    _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled after device check");
+                    LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled after device check\n");
                     return;
                 }
 
                 // Proactively enable audio context on the web player (best-effort)
-                _loggingService.LogDebug("ORCHESTRATE", "🔊 Enabling web player audio context");
                 try { await _webPlaybackBridge.ResumeAsync(); } catch { }
 
                 if (ct.IsCancellationRequested)
                 {
-                    _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled after audio context");
+                    LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled\n");
                     return;
                 }
 
-                // Prefer transfer-first to make the Web Playback device active, then start the selected track.
+                // 🎯 PRIORITY 1: Try to play on the currently active device first
+                var activeDevice = Devices.FirstOrDefault(d => d.IsActive);
+                if (activeDevice != null && !string.IsNullOrEmpty(activeDevice.Id) && !string.IsNullOrEmpty(track.Id))
+                {
+                    var ok = await _spotify.PlayTrackOnDeviceAsync(activeDevice.Id, track.Id);
+                    if (ok)
+                    {
+                        IsPlaying = true;
+                        LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully on active device\n");
+                        return;
+                    }
+                }
+
+                if (ct.IsCancellationRequested)
+                {
+                    LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled after active device check\n");
+                    return;
+                }
+
+                // 🎯 PRIORITY 2: Try to get current playback device from API
+                try
+                {
+                    var playback = await _spotify.GetCurrentPlaybackAsync();
+                    if (playback?.Device != null && !string.IsNullOrEmpty(playback.Device.Id) && !string.IsNullOrEmpty(track.Id))
+                    {
+                        var ok = await _spotify.PlayTrackOnDeviceAsync(playback.Device.Id, track.Id);
+                        if (ok)
+                        {
+                            IsPlaying = true;
+                            LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully on API playback device\n");
+                            return;
+                        }
+                    }
+                }
+                catch (Exception apiEx)
+                {
+                    LoggingService.LogToFile($"ORCHESTRATE ❌ Error getting playback from API: {apiEx.Message}\n");
+                }
+
+                if (ct.IsCancellationRequested)
+                {
+                    LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled after API device check\n");
+                    return;
+                }
+
+                // 🎯 PRIORITY 3: Try Web Playback device transfer (original logic, but as fallback)
                 if (!string.IsNullOrEmpty(WebPlaybackDeviceId) && !string.IsNullOrEmpty(track.Id))
                 {
-                    _loggingService.LogDebug("ORCHESTRATE", $"🎯 Attempting transfer-first flow with device: {WebPlaybackDeviceId}");
 
                     try
                     {
-                        _loggingService.LogDebug("ORCHESTRATE", "📡 Transferring to web device (play=false)");
-                        System.Diagnostics.Debug.WriteLine("🔁 Transferring to web device with play=false before play (activate without auto-playing last track)...");
                         await _spotify.TransferPlaybackAsync(new[] { WebPlaybackDeviceId }, false);
-                        _loggingService.LogDebug("ORCHESTRATE", "✅ Transfer (play=false) successful");
                     }
                     catch (Exception txEx)
                     {
-                        _loggingService.LogError($"⚠️ Transfer (play=false) failed: {txEx.Message}", txEx);
-                        System.Diagnostics.Debug.WriteLine($"⚠️ Transfer (play=false) threw: {txEx.Message}");
+                        LoggingService.LogToFile($"ORCHESTRATE ⚠️ Transfer (play=false) failed: {txEx.Message}\n");
                     }
 
-                    _loggingService.LogDebug("ORCHESTRATE", "⏳ Waiting 350ms for transfer to complete");
                     try { await Task.Delay(350, ct); } catch { }
                     
                     if (ct.IsCancellationRequested)
                     {
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled after transfer delay");
+                        LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled\n");
                         return;
                     }
                     
-                    // Poll quickly to confirm activation
-                    try
-                    {
-                        var activated = await WaitForActiveDeviceAsync(WebPlaybackDeviceId, attempts: 12, delayMs: 250);
-                        _loggingService.LogDebug("ORCHESTRATE", $"🟢 Web device active after transfer? {activated}");
-                        System.Diagnostics.Debug.WriteLine($"🟢 Web device active after transfer? {activated}");
-                    }
-                    catch (Exception ex)
-                    {
-                        _loggingService.LogError($"❌ Error checking device activation: {ex.Message}", ex);
-                    }
-
-                    if (ct.IsCancellationRequested)
-                    {
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled after device activation check");
-                        return;
-                    }
-
-                    _loggingService.LogDebug($"🎵 Playing track {track.Id} on device {WebPlaybackDeviceId}");
                     var ok = await _spotify.PlayTrackOnDeviceAsync(WebPlaybackDeviceId, track.Id);
                     if (ok)
                     {
                         IsPlaying = true;
-                        _loggingService.LogDebug("ORCHESTRATE", "✅ Click-to-play started successfully after transfer-first flow");
-                        System.Diagnostics.Debug.WriteLine("▶️ Click-to-play started after transfer-first flow");
+                        LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully after Web device transfer\n");
                         return;
                     }
                     else
                     {
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ PlayTrackOnDeviceAsync returned false");
+                        LoggingService.LogToFile("ORCHESTRATE ❌ PlayTrackOnDeviceAsync returned false on Web device\n");
                     }
 
                     // Retry once with transfer(play=true) to force activation if needed, then play again
-                    _loggingService.LogDebug("ORCHESTRATE", "🔄 Retrying with transfer(play=true)");
                     try
                     {
-                        System.Diagnostics.Debug.WriteLine("🔁 Retry: transferring with play=true to force activation...");
+                        System.Diagnostics.Debug.WriteLine("� Retry: transferring with play=true to force activation...");
                         await _spotify.TransferPlaybackAsync(new[] { WebPlaybackDeviceId }, true);
-                        _loggingService.LogDebug("ORCHESTRATE", "⏳ Waiting 400ms after retry transfer");
+                        LoggingService.LogToFile("ORCHESTRATE ⏳ Waiting 400ms after retry transfer\n");
                         try { await Task.Delay(400, ct); } catch { }
                     }
                     catch (Exception txEx2)
                     {
-                        _loggingService.LogError($"⚠️ Transfer retry (play=true) failed: {txEx2.Message}", txEx2);
-                        System.Diagnostics.Debug.WriteLine($"⚠️ Transfer retry (play=true) threw: {txEx2.Message}");
+                        LoggingService.LogToFile($"ORCHESTRATE ⚠️ Transfer retry (play=true) failed: {txEx2.Message}\n");
                     }
 
                     if (ct.IsCancellationRequested)
                     {
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled after retry transfer delay");
+                        LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled after retry transfer delay\n");
                         return;
                     }
 
-                    _loggingService.LogDebug($"🎵 Retrying play on device {WebPlaybackDeviceId}");
+                    LoggingService.LogToFile($"ORCHESTRATE � Retrying play on device {WebPlaybackDeviceId}\n");
                     ok = await _spotify.PlayTrackOnDeviceAsync(WebPlaybackDeviceId, track.Id);
                     if (ok)
                     {
                         IsPlaying = true;
-                        _loggingService.LogDebug("ORCHESTRATE", "✅ Click-to-play started successfully after retry");
-                        System.Diagnostics.Debug.WriteLine("▶️ Click-to-play started after retry transfer");
+                        LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully after retry transfer\n");
                         return;
                     }
                     else
                     {
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ Retry PlayTrackOnDeviceAsync also returned false");
+                        LoggingService.LogToFile("ORCHESTRATE ❌ Retry PlayTrackOnDeviceAsync also returned false on Web device\n");
                     }
                 }
                 else
                 {
-                    _loggingService.LogDebug("ORCHESTRATE", $"❌ Cannot use transfer-first flow: WebPlaybackDeviceId='{WebPlaybackDeviceId}', TrackId='{track.Id}'");
+                    LoggingService.LogToFile($"ORCHESTRATE ❌ Cannot use Web device transfer: WebPlaybackDeviceId='{WebPlaybackDeviceId}', TrackId='{track.Id}'\n");
                 }
 
                 if (ct.IsCancellationRequested)
                 {
-                    _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled before fallback");
+                    LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled before fallback\n");
                     return;
                 }
 
-                // Fallback: try the currently active device if any
-                _loggingService.LogDebug("ORCHESTRATE", "🔄 Starting fallback to active device");
-                for (int i = 0; i < 3 && !ct.IsCancellationRequested; i++)
-                {
-                    _loggingService.LogDebug("ORCHESTRATE", $"🔄 Fallback attempt {i + 1}/3");
-                    try { await Task.Delay(200, ct); } catch { break; }
-                    try { await RefreshDevicesAsync(); } catch { }
-
-                    var active = Devices.FirstOrDefault(d => d.IsActive);
-                    if (active != null && !string.IsNullOrEmpty(active.Id) && !string.IsNullOrEmpty(track.Id))
-                    {
-                        if (ct.IsCancellationRequested)
-                        {
-                            _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled before fallback play");
-                            return;
-                        }
-                        
-                        _loggingService.LogDebug("ORCHESTRATE", $"🎯 Found active device: {active.Name} ({active.Id})");
-                        var ok = await _spotify.PlayTrackOnDeviceAsync(active.Id, track.Id);
-                        if (ok)
-                        {
-                            IsPlaying = true;
-                            _loggingService.LogDebug("ORCHESTRATE", "✅ Click-to-play started on active device (fallback)");
-                            System.Diagnostics.Debug.WriteLine("▶️ Click-to-play started on active device (fallback)");
-                            return;
-                        }
-                        else
-                        {
-                            _loggingService.LogDebug("ORCHESTRATE", "❌ PlayTrackOnDeviceAsync failed on active device");
-                        }
-                    }
-                    else
-                    {
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ No active device found for fallback");
-                    }
-                }
-
-                if (ct.IsCancellationRequested)
-                {
-                    _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled during fallback");
-                    return;
-                }
-
-                // Last resort: use JS bridge to start playback locally by URI
+                // 🎯 PRIORITY 4: Last resort - use JS bridge to start playback locally by URI
                 if (!string.IsNullOrEmpty(track.Uri))
                 {
                     if (ct.IsCancellationRequested)
                     {
-                        _loggingService.LogDebug("ORCHESTRATE", "❌ Orchestration cancelled before JS bridge fallback");
+                        LoggingService.LogToFile("ORCHESTRATE ❌ Orchestration cancelled before JS bridge fallback\n");
                         return;
                     }
                     
-                    _loggingService.LogDebug("ORCHESTRATE", $"🎯 Last resort: using JS bridge with URI: {track.Uri}");
                     try
                     {
-                        await _webPlaybackBridge.PlayAsync(new[] { track.Uri });
+                        // Fix threading issue: dispatch to UI thread
+                        await App.Current.Dispatcher.InvokeAsync(async () =>
+                        {
+                            await _webPlaybackBridge.PlayAsync(new[] { track.Uri });
+                        });
                         IsPlaying = true;
-                        _loggingService.LogDebug("ORCHESTRATE", "✅ Click-to-play started via JS bridge");
-                        System.Diagnostics.Debug.WriteLine("▶️ Click-to-play started via JS bridge");
+                        LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started via JS bridge\n");
                     }
                     catch (Exception jsEx)
                     {
-                        _loggingService.LogError($"❌ JS bridge play failed: {jsEx.Message}", jsEx);
-                        System.Diagnostics.Debug.WriteLine($"JS bridge play() error: {jsEx.Message}");
+                        LoggingService.LogToFile($"ORCHESTRATE ❌ JS bridge play failed: {jsEx.Message}\n");
                     }
-                }
-                else
-                {
-                    _loggingService.LogDebug("ORCHESTRATE", "❌ No track URI available for JS bridge fallback");
-                }
-
-                _loggingService.LogDebug("ORCHESTRATE", "=== ORCHESTRATION COMPLETED ===");
+                }                LoggingService.LogToFile("ORCHESTRATE === ORCHESTRATION COMPLETED ===\n");
             }
             catch (Exception ex)
             {
-                _loggingService.LogError($"💥 ERROR in OrchestrateClickPlayAsync: {ex.Message}", ex);
-                System.Diagnostics.Debug.WriteLine($"OrchestrateClickPlayAsync error: {ex.Message}");
+                LoggingService.LogToFile($"ORCHESTRATE 💥 ERROR in OrchestrateClickPlayAsync: {ex.Message}\n");
             }
         }
-
         #endregion
 
         #region Public Methods
@@ -1967,16 +1239,31 @@ namespace SpotifyWPF.ViewModel
         {
             try
             {
+                LoggingService.LogToFile("PlayerViewModel: InitializeAsync called\n");
+                
+                LoggingService.LogToFile($"PlayerViewModel: About to call WebPlaybackBridge.InitializeAsync, bridge is null: {_webPlaybackBridge == null}\n");
+                if (_webPlaybackBridge == null)
+                {
+                    throw new InvalidOperationException("WebPlaybackBridge is null");
+                }
                 await _webPlaybackBridge.InitializeAsync(accessToken, playerHtmlPath);
+                LoggingService.LogToFile("PlayerViewModel: WebPlaybackBridge initialized\n");
+                
                 await _webPlaybackBridge.ConnectAsync();
-                await RefreshDevicesAsync();
+                LoggingService.LogToFile("PlayerViewModel: WebPlaybackBridge connected\n");
+                
+                await _deviceManager.RefreshDevicesAsync();
+                LoggingService.LogToFile("PlayerViewModel: Devices refreshed\n");
                 
                 // Load user's top tracks after successful initialization
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] INIT: Starting top tracks loading in InitializeAsync\n");
                 await LoadUserTopTracksAsync();
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] INIT: LoadUserTopTracksAsync completed in InitializeAsync\n");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"PlayerViewModel.InitializeAsync error: {ex.Message}");
+                LoggingService.LogToFile($"PlayerViewModel.InitializeAsync error: {ex.Message}\n");
+                LoggingService.LogToFile($"Stack trace: {ex.StackTrace}\n");
             }
         }
 
@@ -1985,7 +1272,9 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public async Task LoadTopTracksAsync()
         {
+            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: LoadTopTracksAsync called (manual reload)\n");
             await LoadUserTopTracksAsync();
+            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: LoadTopTracksAsync completed (manual reload)\n");
         }
         
         /// <summary>
@@ -1993,6 +1282,7 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
     public void LoadTestTracks()
         {
+            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: LoadTestTracks called - loading test tracks for debugging\n");
             
             TopTracks.Clear();
             
@@ -2023,6 +1313,7 @@ namespace SpotifyWPF.ViewModel
                 Uri = "spotify:track:test3"
             });
             
+            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Added {TopTracks.Count} test tracks to collection\n");
             System.Diagnostics.Debug.WriteLine($"✅ Added {TopTracks.Count} test tracks to collection");
         }
 
@@ -2066,9 +1357,6 @@ namespace SpotifyWPF.ViewModel
                 SelectedDevice = Devices.FirstOrDefault(d => d.IsActive);
                 var newActiveId = SelectedDevice?.Id;
 
-                // Update last-known active id
-                _lastActiveDeviceId = newActiveId;
-
                 // If the Web Playback device just became active, ensure playback starts
                 if (!string.IsNullOrEmpty(WebPlaybackDeviceId)
                     && string.Equals(newActiveId, WebPlaybackDeviceId, StringComparison.Ordinal)
@@ -2110,10 +1398,18 @@ namespace SpotifyWPF.ViewModel
                         _pendingPlayUntil = DateTimeOffset.MinValue;
                     }
 
-                    // Quick follow-up refresh to sync UI
-                    _ = Task.Delay(250).ContinueWith(async _ =>
+                    // Quick follow-up refresh to sync UI (observe exceptions)
+                    _ = Task.Run(async () =>
                     {
-                        try { await RefreshPlayerStateAsync(); } catch { }
+                        try
+                        {
+                            await Task.Delay(250);
+                            await RefreshPlayerStateAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error in quick follow-up refresh after web activation: {ex.Message}");
+                        }
                     });
                 }
             }
@@ -2137,7 +1433,7 @@ namespace SpotifyWPF.ViewModel
                 string? activeDeviceId = SelectedDevice?.Id;
                 if (string.IsNullOrEmpty(activeDeviceId))
                 {
-                    try { await RefreshDevicesAsync(); activeDeviceId = SelectedDevice?.Id; } catch { }
+                    try { await _deviceManager.RefreshDevicesAsync(); activeDeviceId = SelectedDevice?.Id; } catch { }
                 }
 
                 bool isWebActive = !string.IsNullOrEmpty(WebPlaybackDeviceId) && WebPlaybackDeviceId == activeDeviceId;
@@ -2306,12 +1602,12 @@ namespace SpotifyWPF.ViewModel
                         };
 
                         // 🛑 PREVENT OVERWRITING RECENT OPTIMISTIC REPEAT UPDATES in API polling
-                        var timeSinceRepeatUpdate = DateTimeOffset.UtcNow - _lastRepeatUpdate;
+                        var timeSinceRepeatUpdate = DateTimeOffset.UtcNow - _playbackManager.LastRepeatUpdate;
                         if (timeSinceRepeatUpdate <= TimeSpan.FromSeconds(2))
                         {
                             // Override the API's repeat mode with our optimistic value
-                            ps.RepeatMode = _repeatMode;
-                            System.Diagnostics.Debug.WriteLine($"🔁 API polling: preserving optimistic repeat mode {_repeatMode} ({timeSinceRepeatUpdate.TotalSeconds:F1}s ago)");
+                            ps.RepeatMode = _playbackManager.RepeatMode;
+                            System.Diagnostics.Debug.WriteLine($"🔁 API polling: preserving optimistic repeat mode {_playbackManager.RepeatMode} ({timeSinceRepeatUpdate.TotalSeconds:F1}s ago)");
                         }
 
                         _loggingService.LogDebug($"[INIT] 📊 Initial state loaded - Shuffle: {ps.Shuffled}, Playing: {ps.IsPlaying}, Track: {ps.TrackName ?? "none"}");
@@ -2371,82 +1667,136 @@ namespace SpotifyWPF.ViewModel
         {
             try
             {
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: LoadUserTopTracksAsync STARTED\n");
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Preparing to call Spotify API for top tracks (limit=20, offset=0, time_range=medium_term)\n");
+
                 var topTracksDto = await _spotify.GetUserTopTracksAsync(20, 0, "medium_term");
-                
+
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Spotify API call completed\n");
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: API returned {topTracksDto?.Items?.Count ?? 0} tracks\n");
+
                 // Clear existing tracks and add the real user data
                 await App.Current.Dispatcher.InvokeAsync(() =>
                 {
+                    LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Clearing existing tracks collection\n");
                     TopTracks.Clear();
-                    
-                    if (topTracksDto.Items != null)
+
+                    if (topTracksDto != null && topTracksDto.Items != null && topTracksDto.Items.Count > 0)
                     {
+                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Processing {topTracksDto.Items.Count} tracks from API response\n");
+
+                        int processedCount = 0;
                         foreach (var dto in topTracksDto.Items)
                         {
-                            var track = new TrackModel
+                            try
                             {
-                                Id = dto.Id,
-                                Title = dto.Name ?? "Unknown Track",
-                                Artist = dto.Artists ?? "Unknown Artist",
-                                DurationMs = dto.DurationMs,
-                                Uri = dto.Uri
-                            };
-                            
-                            // Set album artwork if available
-                            if (!string.IsNullOrEmpty(dto.AlbumImageUrl))
-                            {
-                                try
+                                var track = new TrackModel
                                 {
-                                    track.AlbumArtUri = new Uri(dto.AlbumImageUrl);
-                                }
-                                catch (UriFormatException)
+                                    Id = dto.Id,
+                                    Title = dto.Name ?? "Unknown Track",
+                                    Artist = dto.Artists ?? "Unknown Artist",
+                                    DurationMs = dto.DurationMs,
+                                    Uri = dto.Uri
+                                };
+
+                                // Set album artwork if available
+                                if (!string.IsNullOrEmpty(dto.AlbumImageUrl))
                                 {
-                                    // Invalid URI, leave as null
-                                    track.AlbumArtUri = null;
+                                    try
+                                    {
+                                        track.AlbumArtUri = new Uri(dto.AlbumImageUrl);
+                                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Track '{track.Title}' has album art: {dto.AlbumImageUrl}\n");
+                                    }
+                                    catch (UriFormatException uriEx)
+                                    {
+                                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Invalid album art URI for track '{track.Title}': {dto.AlbumImageUrl} - {uriEx.Message}\n");
+                                        track.AlbumArtUri = null;
+                                    }
                                 }
+                                else
+                                {
+                                    LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Track '{track.Title}' has no album art\n");
+                                }
+
+                                TopTracks.Add(track);
+                                processedCount++;
+
+                                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Added track {processedCount}/{topTracksDto.Items.Count}: '{track.Title}' by '{track.Artist}' (ID: {track.Id})\n");
                             }
-                            
-                            TopTracks.Add(track);
+                            catch (Exception trackEx)
+                            {
+                                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: ERROR processing track {processedCount + 1}: {trackEx.Message}\n");
+                                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Track data - ID: {dto.Id}, Name: {dto.Name}, Artists: {dto.Artists}\n");
+                            }
                         }
+
+                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Successfully added {TopTracks.Count} tracks to TopTracks collection\n");
+                    }
+                    else
+                    {
+                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: No tracks returned from API or Items is null\n");
                     }
                 });
+
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: LoadUserTopTracksAsync COMPLETED SUCCESSFULLY\n");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: ERROR in LoadUserTopTracksAsync: {ex.Message}\n");
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Exception type: {ex.GetType().FullName}\n");
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Stack trace: {ex.StackTrace}\n");
+
                 // Don't clear tracks on error - instead load some fallback tracks so UI isn't empty
                 await App.Current.Dispatcher.InvokeAsync(() =>
                 {
                     if (TopTracks.Count == 0)
                     {
-                        // Add a few fallback tracks so the UI shows something
-                        TopTracks.Add(new TrackModel
+                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Loading fallback tracks due to API error\n");
+
+                        try
                         {
-                            Id = "fallback-1",
-                            Title = "API Error - Fallback Track 1",
-                            Artist = "Test Artist",
-                            DurationMs = 180000,
-                            Uri = "spotify:track:fallback1"
-                        });
-                        
-                        TopTracks.Add(new TrackModel
+                            // Add a few fallback tracks so the UI shows something
+                            TopTracks.Add(new TrackModel
+                            {
+                                Id = "fallback-1",
+                                Title = "API Error - Fallback Track 1",
+                                Artist = "Test Artist",
+                                DurationMs = 180000,
+                                Uri = "spotify:track:fallback1"
+                            });
+
+                            TopTracks.Add(new TrackModel
+                            {
+                                Id = "fallback-2",
+                                Title = "API Error - Fallback Track 2",
+                                Artist = "Test Artist",
+                                DurationMs = 200000,
+                                Uri = "spotify:track:fallback2"
+                            });
+
+                            TopTracks.Add(new TrackModel
+                            {
+                                Id = "fallback-3",
+                                Title = "API Error - Fallback Track 3",
+                                Artist = "Test Artist",
+                                DurationMs = 220000,
+                                Uri = "spotify:track:fallback3"
+                            });
+
+                            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Added {TopTracks.Count} fallback tracks to collection\n");
+                        }
+                        catch (Exception fallbackEx)
                         {
-                            Id = "fallback-2", 
-                            Title = "API Error - Fallback Track 2",
-                            Artist = "Test Artist",
-                            DurationMs = 200000,
-                            Uri = "spotify:track:fallback2"
-                        });
-                        
-                        TopTracks.Add(new TrackModel
-                        {
-                            Id = "fallback-3", 
-                            Title = "API Error - Fallback Track 3",
-                            Artist = "Test Artist",
-                            DurationMs = 220000,
-                            Uri = "spotify:track:fallback3"
-                        });
+                            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: ERROR loading fallback tracks: {fallbackEx.Message}\n");
+                        }
+                    }
+                    else
+                    {
+                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Keeping existing {TopTracks.Count} tracks in collection (not loading fallbacks)\n");
                     }
                 });
+
+                LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: LoadUserTopTracksAsync COMPLETED WITH ERROR\n");
             }
         }
 
@@ -2466,7 +1816,15 @@ namespace SpotifyWPF.ViewModel
         }
 
         /// <summary>
-        /// Dispose implementation
+        /// Finalizer for safety net
+        /// </summary>
+        ~PlayerViewModel()
+        {
+            Dispose(false);
+        }
+
+        /// <summary>
+        /// Dispose implementation with proper resource ordering
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {
@@ -2475,22 +1833,84 @@ namespace SpotifyWPF.ViewModel
 
             if (disposing)
             {
-                // Dispose managed resources
-                _seekThrottleTimer?.Stop();
-                _statePollTimer?.Stop();
-                _uiProgressTimer?.Stop();
+                // Dispose managed resources in reverse order of typical usage/allocation
 
-                _clickCts?.Cancel();
-                _clickCts?.Dispose();
-
-                _trackOperationSemaphore?.Dispose();
-
-                // Unsubscribe from events
-                if (_webPlaybackBridge != null)
+                try
                 {
-                    _webPlaybackBridge.OnPlayerStateChanged -= OnPlayerStateChanged;
-                    _webPlaybackBridge.OnReadyDeviceId -= OnReadyDeviceId;
+                    // 1. Cancel and dispose any pending operations first
+                    _clickCts?.Cancel();
+                    _clickCts?.Dispose();
+
+                    // 2. Cancel any pending TaskCompletionSource
+                    if (_webDeviceReadyTcs != null && !_webDeviceReadyTcs.Task.IsCompleted)
+                    {
+                        _webDeviceReadyTcs.TrySetCanceled();
+                    }
                 }
+                catch (Exception ex)
+                {
+                    _loggingService?.LogError($"Error cancelling operations in PlayerViewModel.Dispose: {ex.Message}", ex);
+                }
+
+                try
+                {
+                    // 3. Dispose TimerManager (which handles all timer disposal)
+                    _timerManager?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _loggingService?.LogError($"Error disposing TimerManager in PlayerViewModel.Dispose: {ex.Message}", ex);
+                }
+
+                try
+                {
+                    // 4. Dispose semaphore
+                    _trackOperationSemaphore?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _loggingService?.LogError($"Error disposing semaphore in PlayerViewModel.Dispose: {ex.Message}", ex);
+                }
+
+                try
+                {
+                    // 5. Dispose MediaKeyManager
+                    _mediaKeyManager?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _loggingService?.LogError($"Error disposing MediaKeyManager in PlayerViewModel.Dispose: {ex.Message}", ex);
+                }
+
+                try
+                {
+                    // 6. Dispose TrayIconManager
+                    _trayIconManager?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _loggingService?.LogError($"Error disposing TrayIconManager in PlayerViewModel.Dispose: {ex.Message}", ex);
+                }
+
+                try
+                {
+                    // 7. Dispose WebPlaybackBridge last (most complex resource)
+                    if (_webPlaybackBridge != null && _webPlaybackBridge is IDisposable disposableBridge)
+                    {
+                        disposableBridge.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _loggingService?.LogError($"Error disposing WebPlaybackBridge in PlayerViewModel.Dispose: {ex.Message}", ex);
+                }
+
+                // 6. Clear references to prevent memory leaks
+                _webDeviceReadyTcs = null;
+                _clickCts = null;
+                _pendingTrackId = null;
+                _pendingPlayTrackId = null;
+                _playbackManager.CurrentTrack = null;
             }
 
             _disposed = true;

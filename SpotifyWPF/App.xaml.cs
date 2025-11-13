@@ -12,8 +12,22 @@ namespace SpotifyWPF
     /// </summary>
     public partial class App : Application
     {
+        private static System.Threading.Mutex? _mutex;
+
         public App()
         {
+            // Check for single instance
+            string appPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string mutexName = "SpotifyWPF_SingleInstance_" + appPath.GetHashCode().ToString();
+            _mutex = new System.Threading.Mutex(true, mutexName, out bool createdNew);
+            if (!createdNew)
+            {
+                // Another instance is running
+                MessageBox.Show("Spotify WPF Player is already running.", "Already Running", MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+
             // Hook global exception handlers as early as possible (before any XAML parses MainWindow)
             this.DispatcherUnhandledException += App_DispatcherUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
@@ -43,7 +57,17 @@ namespace SpotifyWPF
 
         private void App_Exit(object sender, ExitEventArgs e)
         {
-            try { WriteMarker("App Exit. Code=" + e.ApplicationExitCode); } catch { /* ignore */ }
+            try 
+            { 
+                WriteMarker("App Exit. Code=" + e.ApplicationExitCode);
+                // Release the mutex
+                _mutex?.ReleaseMutex();
+                _mutex?.Dispose();
+                _mutex = null;
+                // Give a small delay to allow cleanup operations to complete
+                System.Threading.Thread.Sleep(200);
+            } 
+            catch { /* ignore */ }
         }
 
         private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
@@ -83,6 +107,20 @@ namespace SpotifyWPF
         {
             try
             {
+                // Filter out benign SocketException 995 that occurs during WebView2 shutdown
+                var ex = e.Exception;
+                if (ex is AggregateException aggEx && aggEx.InnerExceptions.Count == 1)
+                {
+                    var inner = aggEx.InnerExceptions[0];
+                    if (inner is System.Net.Sockets.SocketException sockEx && sockEx.ErrorCode == 995)
+                    {
+                        // This is a benign exception that occurs when WebView2 network operations
+                        // are cancelled during application shutdown. Set as observed and don't log.
+                        e.SetObserved();
+                        return;
+                    }
+                }
+
                 LogException(e.Exception, "TaskScheduler.UnobservedTaskException");
                 // Evita che termini il processo
                 e.SetObserved();

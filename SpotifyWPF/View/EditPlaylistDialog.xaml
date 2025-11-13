@@ -1,11 +1,11 @@
-<UserControl x:Class="SpotifyWPF.View.ConfirmationDialog"
+<UserControl x:Class="SpotifyWPF.View.EditPlaylistDialog"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
-             d:DesignHeight="200" d:DesignWidth="400"
-             MaxWidth="500" MaxHeight="300"
+             d:DesignHeight="300" d:DesignWidth="400"
+             MaxWidth="500" MaxHeight="400"
              Background="{DynamicResource CardBrush}"
              BorderBrush="{DynamicResource ControlBorderBrush}"
              BorderThickness="1">
@@ -51,7 +51,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid FocusManager.FocusedElement="{Binding ElementName=ConfirmButton}">
+    <Grid FocusManager.FocusedElement="{Binding ElementName=NameTextBox}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -59,24 +59,30 @@
         </Grid.RowDefinitions>
 
         <!-- Title -->
-        <TextBlock Grid.Row="0" Text="{Binding Title}" FontSize="16" FontWeight="Bold"
+        <TextBlock Grid.Row="0" Text="Edit Playlist" FontSize="16" FontWeight="Bold"
                    Foreground="{DynamicResource ControlForegroundBrush}" Margin="16,16,16,8"
                    HorizontalAlignment="Center"/>
 
-        <!-- Message -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="16,8">
-            <TextBlock Text="{Binding Message}" FontSize="14"
-                       Foreground="{DynamicResource ControlForegroundBrush}"
-                       TextWrapping="Wrap" HorizontalAlignment="Center"/>
-        </ScrollViewer>
+        <!-- Content -->
+        <StackPanel Grid.Row="1" Margin="16,8">
+            <TextBlock Text="Name:" FontSize="14" FontWeight="SemiBold"
+                       Foreground="{DynamicResource ControlForegroundBrush}" Margin="0,0,0,4"/>
+            <TextBox x:Name="NameTextBox" Text="{Binding PlaylistName, UpdateSourceTrigger=PropertyChanged}"
+                     Style="{DynamicResource TextBoxStyle}" Margin="0,0,0,12"/>
+
+            <CheckBox Content="Public playlist" IsChecked="{Binding IsPublic}"
+                      Foreground="{DynamicResource ControlForegroundBrush}" Margin="0,0,0,8"/>
+            <TextBlock Text="Public playlists are visible to other users and can be followed."
+                       FontSize="12" Foreground="#FFAAAAAA" TextWrapping="Wrap" Margin="0,0,0,8"/>
+        </StackPanel>
 
         <!-- Buttons -->
         <WrapPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" Orientation="Horizontal">
-            <Button x:Name="CancelButton" Content="{Binding CancelButtonText}" Command="{Binding CancelCommand}"
-                    Style="{StaticResource DialogButtonStyle}" Visibility="{Binding CancelButtonVisibility}"
-                    IsCancel="True" AutomationProperties.Name="Cancel"/>
-            <Button x:Name="ConfirmButton" Content="{Binding ConfirmButtonText}" Command="{Binding ConfirmCommand}"
-                    Style="{StaticResource DialogButtonStyle}" IsDefault="True" AutomationProperties.Name="Confirm"/>
+            <Button x:Name="CancelButton" Content="Cancel" Command="{Binding CancelCommand}"
+                    Style="{StaticResource DialogButtonStyle}" IsCancel="True"/>
+            <Button x:Name="SaveButton" Content="Save Changes" Command="{Binding SaveCommand}"
+                    Style="{StaticResource DialogButtonStyle}" IsDefault="True"
+                    IsEnabled="{Binding CanSave}"/>
         </WrapPanel>
     </Grid>
 </UserControl>

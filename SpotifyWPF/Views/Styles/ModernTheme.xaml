@@ -43,6 +43,7 @@
 
   <SolidColorBrush x:Key="ControlHighlightBrush" Color="{StaticResource Color.Primary}"/>
   <SolidColorBrush x:Key="ControlHighlightForegroundBrush" Color="White"/>
+  <SolidColorBrush x:Key="ControlPressedBrush" Color="{StaticResource Color.PrimaryPressed}"/>
 
   <!-- Tipografia default -->
   <Style TargetType="Window">

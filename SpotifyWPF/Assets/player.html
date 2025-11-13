@@ -54,24 +54,26 @@
     <script src="https://sdk.scdn.co/spotify-player.js"></script>
     <!-- Dynamically inject bridge with cache-busting to avoid stale scripts -->
     <script>
+        console.log('HTML: Starting to load player-bridge.js');
         (function() {
             var cacheBust = Date.now().toString();
             var s = document.createElement('script');
             s.src = 'player-bridge.js?v=' + cacheBust;
             s.async = true;
             s.onload = function() {
-                console.log('player-bridge.js loaded (v=' + cacheBust + ')');
+                console.log('HTML: player-bridge.js loaded successfully (v=' + cacheBust + ')');
                 // If SDK became ready before bridge, notify now
                 if (window._sdkReadyFlag && window.playerBridge && typeof window.playerBridge.onSDKReady === 'function') {
-                    try { window.playerBridge.onSDKReady(); } catch(e) { console.error(e); }
+                    try { window.playerBridge.onSDKReady(); } catch(e) { console.error('HTML: Error calling onSDKReady:', e); }
                 }
                 // If C# already called initializePlayer, pass the token now
                 if (window._pendingAccessToken && window.playerBridge && typeof window.playerBridge.initialize === 'function') {
-                    try { window.playerBridge.initialize(window._pendingAccessToken); window._pendingAccessToken = null; } catch(e) { console.error(e); }
+                    try { window.playerBridge.initialize(window._pendingAccessToken); window._pendingAccessToken = null; } catch(e) { console.error('HTML: Error calling initialize:', e); }
                 }
             };
-            s.onerror = function(e) { console.error('Failed to load player-bridge.js', e); };
+            s.onerror = function(e) { console.error('HTML: Failed to load player-bridge.js', e); };
             document.head.appendChild(s);
+            console.log('HTML: player-bridge.js script element added to head');
         })();
     </script>
     <script>
@@ -109,15 +111,15 @@
 
         // Wait for Spotify SDK to load
         window.onSpotifyWebPlaybackSDKReady = () => {
-            console.log('Spotify SDK Ready callback fired');
+            console.log('HTML: Spotify SDK Ready callback fired');
             document.getElementById('status').textContent = 'Spotify SDK Ready';
             window._sdkReadyFlag = true;
             
             if (window.playerBridge && typeof window.playerBridge.onSDKReady === 'function') {
-                console.log('Calling playerBridge.onSDKReady');
+                console.log('HTML: Calling playerBridge.onSDKReady');
                 window.playerBridge.onSDKReady();
             } else {
-                console.warn('Bridge not yet loaded; will call on load');
+                console.warn('HTML: Bridge not yet loaded; will call on load');
             }
         };
     </script>

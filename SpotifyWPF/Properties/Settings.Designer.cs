@@ -40,5 +40,41 @@ namespace SpotifyWPF.Properties {
                 return ((string)(this["SpotifyRedirectPort"]));
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("3")]
+        public int MaxThreadsForOperations {
+            get {
+                return ((int)(this["MaxThreadsForOperations"]));
+            }
+            set {
+                this["MaxThreadsForOperations"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string DefaultMarket {
+            get {
+                return ((string)(this["DefaultMarket"]));
+            }
+            set {
+                this["DefaultMarket"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("false")]
+        public bool MinimizeToTrayOnClose {
+            get {
+                return ((bool)(this["MinimizeToTrayOnClose"]));
+            }
+            set {
+                this["MinimizeToTrayOnClose"] = value;
+            }
+        }
     }
 }

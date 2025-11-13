@@ -8,5 +8,14 @@
     <Setting Name="SpotifyRedirectPort" Type="System.String" Scope="Application">
       <Value Profile="(Default)">4002</Value>
     </Setting>
+    <Setting Name="MaxThreadsForOperations" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">3</Value>
+    </Setting>
+    <Setting Name="DefaultMarket" Type="System.String" Scope="User">
+      <Value Profile="(Default)"></Value>
+    </Setting>
+    <Setting Name="MinimizeToTrayOnClose" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">false</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
