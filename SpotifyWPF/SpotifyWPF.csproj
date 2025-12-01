@@ -16,9 +16,9 @@
     <!-- Metadati assembly centralizzati -->
     <Company>SpotifyWPF</Company>
     <Product>SpotifyWPF</Product>
-  <AssemblyVersion>4.0.4.0</AssemblyVersion>
-  <FileVersion>4.0.4.0</FileVersion>
-  <Version>4.0.4</Version>
+  <AssemblyVersion>4.1.0.0</AssemblyVersion>
+  <FileVersion>4.1.0.0</FileVersion>
+  <Version>4.1.0</Version>
     <Authors>SpotifyWPF</Authors>
     <!-- Riattiva generazione attributi per evitare assembly info duplicati manuali -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
@@ -34,7 +34,9 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="SpotifyAPI.Web" Version="7.2.1" />
     <PackageReference Include="SpotifyAPI.Web.Auth" Version="7.2.1" />
-    <PackageReference Include="AutoMapper" Version="13.0.0" />
+    <PackageReference Include="AutoMapper" Version="15.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
     <PackageReference Include="Nito.AsyncEx" Version="5.1.2" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3595.46" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />

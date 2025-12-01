@@ -2,6 +2,7 @@
 using System.Linq;
 using AutoMapper;
 using AutoMapper.Configuration;
+using Microsoft.Extensions.Logging;
 using SpotifyAPI.Web;
 using SpotifyWPF.Model.Dto;
 
@@ -12,8 +13,15 @@ namespace SpotifyWPF.Model
     {
         public static MapperConfiguration Configure()
         {
+            var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+            });
+
             var config = new MapperConfiguration(cfg =>
             {
+                cfg.LicenseKey = "YourLicenseKeyHere";
+
                 cfg.CreateMap<PlaylistTrack<IPlayableItem>, TrackModel>()
                     .ForMember(dest => dest.Id,
                         act => act.MapFrom((src, dest) => (src.Track as FullTrack)?.Id ?? string.Empty))
@@ -49,7 +57,7 @@ namespace SpotifyWPF.Model
                     .ForMember(dest => dest.ImageUrl, act => act.MapFrom(src => src.ImageUrl ?? string.Empty))
                     .ForMember(dest => dest.TotalTracks, act => act.MapFrom(src => src.TotalTracks))
                     .ForMember(dest => dest.AddedAt, act => act.MapFrom(src => src.AddedAt ?? DateTime.Now));
-            });
+            }, loggerFactory);
 
             config.AssertConfigurationIsValid();
 
