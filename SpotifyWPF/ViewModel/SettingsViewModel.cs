@@ -10,6 +10,8 @@ namespace SpotifyWPF.ViewModel
         private int _maxThreadsForOperations;
         private string _defaultMarket = string.Empty;
         private bool _minimizeToTrayOnClose;
+        private string _userSpotifyClientId = string.Empty;
+        private string _userSpotifyRedirectPort = string.Empty;
         private readonly ISettingsProvider _settingsProvider;
 
         public SettingsViewModel(ISettingsProvider? settingsProvider = null)
@@ -49,6 +51,30 @@ namespace SpotifyWPF.ViewModel
             }
         }
 
+        public string UserSpotifyClientId
+        {
+            get => _userSpotifyClientId;
+            set
+            {
+                _userSpotifyClientId = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public string UserSpotifyRedirectPort
+        {
+            get => _userSpotifyRedirectPort;
+            set
+            {
+                _userSpotifyRedirectPort = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public string DefaultSpotifyClientId => Properties.Settings.Default.SpotifyClientId;
+
+        public string DefaultSpotifyRedirectPort => Properties.Settings.Default.SpotifyRedirectPort;
+
         public bool IsMaxThreadsValid => _maxThreadsForOperations >= 1 && _maxThreadsForOperations <= 10;
 
         public void LoadSettings()
@@ -68,6 +94,13 @@ namespace SpotifyWPF.ViewModel
             // Load MinimizeToTrayOnClose setting
             _minimizeToTrayOnClose = Properties.Settings.Default.MinimizeToTrayOnClose;
             RaisePropertyChanged(nameof(MinimizeToTrayOnClose));
+
+            // Load user Spotify settings
+            _userSpotifyClientId = Properties.Settings.Default.UserSpotifyClientId ?? string.Empty;
+            RaisePropertyChanged(nameof(UserSpotifyClientId));
+
+            _userSpotifyRedirectPort = Properties.Settings.Default.UserSpotifyRedirectPort ?? string.Empty;
+            RaisePropertyChanged(nameof(UserSpotifyRedirectPort));
         }
 
         public bool SaveSettings()
@@ -85,6 +118,8 @@ namespace SpotifyWPF.ViewModel
                 Properties.Settings.Default["MaxThreadsForOperations"] = _maxThreadsForOperations;
                 Properties.Settings.Default["DefaultMarket"] = _defaultMarket ?? string.Empty;
                 Properties.Settings.Default["MinimizeToTrayOnClose"] = _minimizeToTrayOnClose;
+                Properties.Settings.Default["UserSpotifyClientId"] = _userSpotifyClientId ?? string.Empty;
+                Properties.Settings.Default["UserSpotifyRedirectPort"] = _userSpotifyRedirectPort ?? string.Empty;
                 Properties.Settings.Default.Save();
 
                 return true;

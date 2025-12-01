@@ -14,6 +14,8 @@
     <UserControl.Resources>
         <!-- Device Type to Icon Converter -->
         <conv:DeviceTypeToIconConverter x:Key="DeviceTypeToIconConverter"/>
+        <!-- String to Visibility Converter -->
+        <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
         <!-- Enhanced Status Bar Text Style -->
         <Style x:Key="StatusBarTextStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="16"/>
@@ -99,6 +101,24 @@
             <!-- Device Name Text -->
             <TextBlock Text="{Binding CurrentDeviceText}"
                        Style="{StaticResource StatusBarTextStyle}"/>
+
+            <!-- Separator -->
+            <TextBlock Text="|"
+                       FontSize="16"
+                       FontWeight="SemiBold"
+                       Foreground="#666666"
+                       VerticalAlignment="Center"
+                       Margin="12,0"
+                       Visibility="{Binding CurrentClientIdText, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+            <!-- Client ID Text -->
+            <TextBlock Text="{Binding CurrentClientIdText}"
+                       FontSize="14"
+                       FontWeight="Normal"
+                       Foreground="#CCCCCC"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0"
+                       Visibility="{Binding CurrentClientIdText, Converter={StaticResource StringToVisibilityConverter}}"/>
         </StackPanel>
     </Grid>
 </UserControl>

@@ -3,9 +3,11 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SpotifyWPF.Model;
 using SpotifyWPF.Service;
+using SpotifyWPF.Service.MessageBoxes;
 
 namespace SpotifyWPF.ViewModel.Component
 {
@@ -18,11 +20,13 @@ namespace SpotifyWPF.ViewModel.Component
         private readonly ISpotify _spotify;
         private readonly IWebPlaybackBridge _webPlaybackBridge;
         private readonly ILoggingService _loggingService;
+        private readonly ISubscriptionDialogService _subscriptionDialogService;
 
         // Device state
         private DeviceModel? _selectedDevice;
         private string _webPlaybackDeviceId = string.Empty;
         private TaskCompletionSource<string>? _webDeviceReadyTcs;
+        private bool _isRefreshingDevices = false;
 
         // Device collection
         public ObservableCollection<DeviceModel> Devices { get; } = new ObservableCollection<DeviceModel>();
@@ -38,7 +42,24 @@ namespace SpotifyWPF.ViewModel.Component
                 if (_selectedDevice != value)
                 {
                     _selectedDevice = value;
-                    OnPropertyChanged();
+                    _loggingService.LogDebug($"[DEVICE_MANAGER] SelectedDevice changed to: {_selectedDevice?.Name ?? "<null>"} ({_selectedDevice?.Id ?? "<null>"})");
+                    // Ensure property change is raised on UI thread for view-binding consumers
+                    try
+                    {
+                        if (System.Windows.Application.Current != null && !System.Windows.Application.Current.Dispatcher.CheckAccess())
+                        {
+                            System.Windows.Application.Current.Dispatcher.Invoke(() => OnPropertyChanged());
+                        }
+                        else
+                        {
+                            OnPropertyChanged();
+                        }
+                    }
+                    catch
+                    {
+                        // If dispatch fails, still raise change on current thread
+                        OnPropertyChanged();
+                    }
                 }
             }
         }
@@ -64,11 +85,12 @@ namespace SpotifyWPF.ViewModel.Component
         /// <summary>
         /// Constructor
         /// </summary>
-        public DeviceManager(ISpotify spotify, IWebPlaybackBridge webPlaybackBridge, ILoggingService loggingService)
+        public DeviceManager(ISpotify spotify, IWebPlaybackBridge webPlaybackBridge, ILoggingService loggingService, ISubscriptionDialogService subscriptionDialogService)
         {
             _spotify = spotify ?? throw new ArgumentNullException(nameof(spotify));
             _webPlaybackBridge = webPlaybackBridge ?? throw new ArgumentNullException(nameof(webPlaybackBridge));
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
+            _subscriptionDialogService = subscriptionDialogService ?? throw new ArgumentNullException(nameof(subscriptionDialogService));
 
             // Subscribe to Web Playback SDK events
             _webPlaybackBridge.OnReadyDeviceId += OnReadyDeviceId;
@@ -79,40 +101,147 @@ namespace SpotifyWPF.ViewModel.Component
         /// </summary>
         public async Task RefreshDevicesAsync()
         {
+            if (_isRefreshingDevices) return;
+            _isRefreshingDevices = true;
+
             try
             {
                 var devices = await _spotify.GetDevicesAsync();
                 
-                Devices.Clear();
-                foreach (var device in devices)
+                // Update the Devices collection on the UI thread to avoid cross-thread collection changes
+                if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
                 {
-                    Devices.Add(new DeviceModel
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        Id = device.Id,
-                        Name = device.Name,
-                        Type = device.Type ?? string.Empty,
-                        IsActive = device.IsActive
+                        Devices.Clear();
+                        foreach (var device in devices)
+                        {
+                            Devices.Add(new DeviceModel
+                            {
+                                Id = device.Id,
+                                Name = device.Name,
+                                Type = device.Type ?? string.Empty,
+                                IsActive = device.IsActive
+                            });
+                        }
                     });
+                }
+                else
+                {
+                    Devices.Clear();
+                    foreach (var device in devices)
+                    {
+                        Devices.Add(new DeviceModel
+                        {
+                            Id = device.Id,
+                            Name = device.Name,
+                            Type = device.Type ?? string.Empty,
+                            IsActive = device.IsActive
+                        });
+                    }
                 }
 
                 // Ensure Web Playback device appears in the list for bindings, even if API doesn't report it yet
                 if (!string.IsNullOrEmpty(WebPlaybackDeviceId) && !Devices.Any(d => d.Id == WebPlaybackDeviceId))
                 {
-                    Devices.Add(new DeviceModel
+                    if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(() => Devices.Add(new DeviceModel
+                        {
+                            Id = WebPlaybackDeviceId,
+                            Name = "Web Player",
+                            Type = "computer", // Web Player is a computer-type device
+                            IsActive = false
+                        }));
+                    }
+                    else
+                    {
+                        Devices.Add(new DeviceModel
                     {
                         Id = WebPlaybackDeviceId,
                         Name = "Web Player",
                         Type = "computer", // Web Player is a computer-type device
                         IsActive = false
                     });
+                    }
+                }
+
+                // Canonicalize duplicate devices by ID (remove extras) — prefer the first occurrence reported by the API,
+                // then fall back to the placeholder we may have injected earlier. This prevents multiple items in the device
+                // menu for the same logical device.
+                try
+                {
+                    var dupGroups = Devices.GroupBy(d => d.Id).Where(g => g.Count() > 1).ToList();
+                    foreach (var g in dupGroups)
+                    {
+                        // Keep the first item (API-provided) and remove the rest
+                        var keep = g.First();
+                        var remove = g.Skip(1).ToList();
+                        foreach (var r in remove)
+                        {
+                            if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                            {
+                                await Application.Current.Dispatcher.InvokeAsync(() => Devices.Remove(r));
+                            }
+                            else
+                            {
+                                Devices.Remove(r);
+                            }
+                            _loggingService.LogDebug($"[DEVICE_MANAGER] Removed duplicate device entry: {r.Name} ({r.Id})");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _loggingService.LogDebug($"[DEVICE_MANAGER] Error canonicalizing duplicate devices: {ex.Message}");
                 }
 
                 // Set selected device to active one
-                SelectedDevice = Devices.FirstOrDefault(d => d.IsActive);
+                // Ensure SelectedDevice is set on UI thread since it raises PropertyChanged
+                var active = Devices.FirstOrDefault(d => d.IsActive);
+                if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() => SelectedDevice = active);
+                }
+                else
+                {
+                    SelectedDevice = active;
+                }
+
+                // Notify interested parties (UI/menu) that devices changed
+                // Let MainViewModel know the device menu should be refreshed (also used for diagnostics)
+                try
+                {
+                    // Use VM shim to send a global message for device list changes
+                    GalaSoft.MvvmLight.Messenger.Default.Send<object>(new object(), SpotifyWPF.ViewModel.MessageType.DevicesUpdated);
+                }
+                catch { }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"RefreshDevices error: {ex.Message}");
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                System.Diagnostics.Debug.WriteLine($"[{timestamp}] RefreshDevices error: {ex.Message}");
+                
+                // Log full response headers for rate limit errors
+                if (ex is SpotifyAPI.Web.APIException apiEx && 
+                    (apiEx.Message?.IndexOf("rate limit", StringComparison.OrdinalIgnoreCase) >= 0 || 
+                     apiEx.Message?.Contains("429") == true))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[{timestamp}] Rate limit response details:");
+                    System.Diagnostics.Debug.WriteLine($"[{timestamp}]   Status Code: {(int?)apiEx.Response?.StatusCode ?? 0}");
+                    System.Diagnostics.Debug.WriteLine($"[{timestamp}]   Response Body: {apiEx.Response?.Body ?? "null"}");
+                    if (apiEx.Response?.Headers != null)
+                    {
+                        foreach (var header in apiEx.Response.Headers)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[{timestamp}]   Header: {header.Key} = {string.Join(", ", header.Value)}");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                _isRefreshingDevices = false;
             }
         }
 
@@ -125,9 +254,27 @@ namespace SpotifyWPF.ViewModel.Component
             {
                 if (device == null) return;
 
+                // Check if user has free subscription - device transfer is premium only
+                var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync();
+                if (!string.IsNullOrWhiteSpace(subscriptionType) && subscriptionType.ToLower() != "premium")
+                {
+                    // Show modal dialog explaining the restriction
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        _subscriptionDialogService.ShowSubscriptionDialog(
+                            "Premium Feature",
+                            "This feature requires Spotify Premium",
+                            "Device Transfer",
+                            "Transfer playback between different devices seamlessly. Control your music from anywhere in your home or on the go."
+                        );
+                    });
+                    return;
+                }
+
                 SelectedDevice = device;
                 
                 // Transfer playback to selected device (false = keep current playback state)
+                _loggingService.LogDebug($"[DEVICE_MANAGER] TransferPlaybackAsync called for device {device.Name} ({device.Id}), webPlaybackDeviceId={WebPlaybackDeviceId}");
                 await _spotify.TransferPlaybackAsync(new[] { device.Id }, false);
 
                 // Give Spotify a brief moment to apply the transfer, then resync devices and state
@@ -238,6 +385,7 @@ namespace SpotifyWPF.ViewModel.Component
                 if (!string.IsNullOrEmpty(WebPlaybackDeviceId))
                 {
                     System.Diagnostics.Debug.WriteLine($"🎵 Transferring playback to Web Playback device: {WebPlaybackDeviceId} (with play=true to activate) ");
+                    _loggingService.LogDebug($"[DEVICE_MANAGER] Attempting to transfer playback to WebPlaybackDeviceId {WebPlaybackDeviceId}");
                     await _spotify.TransferPlaybackAsync(new[] { WebPlaybackDeviceId }, true);
                     System.Diagnostics.Debug.WriteLine("🎵 TransferPlayback call completed (play=true), waiting for device switch...");
 
@@ -319,7 +467,7 @@ namespace SpotifyWPF.ViewModel.Component
         /// <summary>
         /// Handle Web Playback SDK ready event
         /// </summary>
-        public void OnReadyDeviceId(string deviceId)
+        public async void OnReadyDeviceId(string deviceId)
         {
             try
             {
@@ -339,9 +487,30 @@ namespace SpotifyWPF.ViewModel.Component
                         Name = "Web Player",
                         IsActive = false
                     };
-                    Devices.Add(webDevice);
+                    if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                    {
+                        await Application.Current.Dispatcher.InvokeAsync(() => Devices.Add(webDevice));
+                    }
+                    else
+                    {
+                        Devices.Add(webDevice);
+                    }
                     _loggingService.LogDebug($"[WEB_DEVICE] Added Web Player device with ID: {deviceId}");
                     System.Diagnostics.Debug.WriteLine($"Added Web Player device with ID: {deviceId}");
+                    // Fire-and-forget: refresh API devices so that Spotify's server reports our player faster
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _spotify.GetDevicesAsync();
+                            await RefreshDevicesAsync();
+                        }
+                        catch
+                        {
+                            // ignore
+                        }
+                    });
+                    // no-op - PlayerViewModel listens to DeviceManager.PropertyChanged and broadcasts messages
                 }
             }
             catch (Exception ex)
@@ -364,6 +533,12 @@ namespace SpotifyWPF.ViewModel.Component
             {
                 _webDeviceReadyTcs.TrySetCanceled();
             }
+
+            try
+            {
+                _loggingService.LogDebug("[DEVICE_MANAGER] Dispose called");
+            }
+            catch { }
         }
     }
 }

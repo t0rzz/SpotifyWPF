@@ -650,11 +650,13 @@ namespace SpotifyWPF.ViewModel.Page
                         {
                             Id = track.Id,
                             Name = track.Name,
+                            Artists = track.Artists,
                             Type = "track",
                             Description = $"{track.Artists} - {track.AlbumName}",
                             ImageUrl = track.AlbumImageUrl,
                             Href = track.Href,
                             Uri = track.Uri,
+                            DurationMs = track.DurationMs,
                             CanAddToPlaylist = true,
                             IsInSelectedPlaylist = false, // Will be updated later
                             OriginalDto = track
@@ -674,11 +676,13 @@ namespace SpotifyWPF.ViewModel.Page
                             {
                                 Id = track.Id,
                                 Name = track.Name,
+                                Artists = track.Artists,
                                 Type = "track",
                                 Description = $"{track.Artists} - {track.AlbumName}",
                                 ImageUrl = track.AlbumImageUrl,
                                 Href = track.Href,
                                 Uri = track.Uri,
+                                DurationMs = track.DurationMs,
                                 CanAddToPlaylist = true,
                                 IsInSelectedPlaylist = false, // Will be updated later
                                 OriginalDto = track
@@ -1570,11 +1574,13 @@ namespace SpotifyWPF.ViewModel.Page
                     {
                         Id = track.Id,
                         Name = track.Name,
+                        Artists = track.Artists,
                         Type = "track",
                         Description = $"{track.Artists} - {track.AlbumName}",
                         ImageUrl = track.AlbumImageUrl,
                         Href = track.Href,
                         Uri = track.Uri,
+                        DurationMs = track.DurationMs,
                         CanAddToPlaylist = true,
                         IsInSelectedPlaylist = false,
                         OriginalDto = track

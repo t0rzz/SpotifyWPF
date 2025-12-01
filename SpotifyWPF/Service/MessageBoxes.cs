@@ -98,14 +98,64 @@
         }
     }
 
+    public interface ISubscriptionDialogService
+    {
+        void ShowSubscriptionDialog(string title, string message, string featureName, string featureDescription);
+    }
+
+    public class SubscriptionDialogService : ISubscriptionDialogService
+    {
+        public void ShowSubscriptionDialog(string title, string message, string featureName, string featureDescription)
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var dialog = new System.Windows.Window
+                {
+                    Title = title,
+                    Content = new SubscriptionDialog(),
+                    SizeToContent = SizeToContent.WidthAndHeight,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                    WindowStyle = WindowStyle.SingleBorderWindow,
+                    ResizeMode = ResizeMode.NoResize,
+                    ShowInTaskbar = false,
+                    Topmost = true
+                };
+
+                // Set owner to main window for proper centering
+                var mainWindow = System.Windows.Application.Current.MainWindow;
+                if (mainWindow != null)
+                {
+                    dialog.Owner = mainWindow;
+                    dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                }
+
+                var viewModel = new SubscriptionDialogViewModel
+                {
+                    Title = title,
+                    Message = message,
+                    FeatureName = featureName,
+                    FeatureDescription = featureDescription
+                };
+
+                var dialogControl = (SubscriptionDialog)dialog.Content;
+                dialogControl.DataContext = viewModel;
+
+                // Set close action
+                viewModel.CloseAction = () => dialog.Close();
+
+                dialog.ShowDialog();
+            });
+        }
+    }
+
     public interface IEditPlaylistDialogService
     {
-        (bool? result, string name, bool isPublic) ShowEditPlaylistDialog(string currentName, bool currentIsPublic);
+        (bool? result, string newName, bool newIsPublic) ShowEditPlaylistDialog(string currentName, bool currentIsPublic);
     }
 
     public class EditPlaylistDialogService : IEditPlaylistDialogService
     {
-        public (bool? result, string name, bool isPublic) ShowEditPlaylistDialog(string currentName, bool currentIsPublic)
+        public (bool? result, string newName, bool newIsPublic) ShowEditPlaylistDialog(string currentName, bool currentIsPublic)
         {
             var dialog = new System.Windows.Window
             {

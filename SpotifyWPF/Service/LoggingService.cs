@@ -32,6 +32,13 @@ namespace SpotifyWPF.Service
 #if DEBUG
             AddLogEntry(LogLevel.Debug, message, caller);
             System.Diagnostics.Debug.WriteLine($"[{caller}] {message}");
+            try
+            {
+                // Persist debug logs to file as well for troubleshooting — keep same filepath used by LogToFile
+                var logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] DEBUG [{caller}] {message}\n";
+                LogToFile(logLine);
+            }
+            catch { }
 #endif
         }
 
@@ -57,8 +64,9 @@ namespace SpotifyWPF.Service
         /// <summary>
         /// Thread-safe file logging to prevent concurrent access issues
         /// </summary>
-        public static void LogToFile(string message, string filePath = @"d:\spotifywpf\debug.log")
+        public static void LogToFile(string? message, string filePath = @"d:\spotifywpf\debug.log")
         {
+            if (message == null) return;
             try
             {
                 System.Diagnostics.Debug.WriteLine($"LogToFile called with: {message.Trim()}");

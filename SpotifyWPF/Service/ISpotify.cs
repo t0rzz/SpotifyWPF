@@ -14,6 +14,7 @@ namespace SpotifyWPF.Service
 
         Task<PrivateUser?> GetPrivateProfileAsync();
     Task<string?> GetUserDisplayNameAsync();
+    Task<string?> GetUserSubscriptionTypeAsync();
     Task<string?> GetProfileImageCachedPathAsync();
 
         // Ritorna true se l'utente segue la playlist, false se non la segue, null in caso di errore/transiente
@@ -66,6 +67,7 @@ namespace SpotifyWPF.Service
 
     // Get current access token for Web Playback SDK
     Task<string?> GetCurrentAccessTokenAsync();
+        // Token refresh events are delivered via the separate ITokenProvider service.
 
         // Get user's top tracks from Spotify API
     Task<PagingDto<TrackDto>> GetUserTopTracksAsync(int limit = 20, int offset = 0, string timeRange = "medium_term");

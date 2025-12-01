@@ -1,6 +1,8 @@
-<Application x:Class="SpotifyWPF.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:SpotifyWPF" StartupUri="Views/MainWindow.xaml" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" d1p1:Ignorable="d" xmlns:d1p1="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:vm="clr-namespace:SpotifyWPF.ViewModel">
+<Application x:Class="SpotifyWPF.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:SpotifyWPF" StartupUri="Views/MainWindow.xaml" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" d1p1:Ignorable="d" xmlns:d1p1="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:vm="clr-namespace:SpotifyWPF.ViewModel" xmlns:converters="clr-namespace:SpotifyWPF.View.Converters">
   <Application.Resources>
     <ResourceDictionary>
+      <!-- Image converters -->
+      <converters:AlbumArtConverter x:Key="AlbumArtImageConverter" />
       <!-- Assicura che 'Locator' sia disponibile prima del caricamento delle finestre -->
       <vm:ViewModelLocator x:Key="Locator" d:IsDataSource="True" />
       <ResourceDictionary.MergedDictionaries>

@@ -1,3 +1,5 @@
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+
 using System;
 using System.Collections;
 using System.Collections.ObjectModel;
@@ -21,7 +23,6 @@ using SpotifyWPF.Service.MessageBoxes;
 using Newtonsoft.Json.Linq;
 using MessageBoxButton = SpotifyWPF.Service.MessageBoxes.MessageBoxButton;
 using MessageBoxResult = SpotifyWPF.Service.MessageBoxes.MessageBoxResult;
-// ReSharper disable AsyncVoidLambda
 
 namespace SpotifyWPF.ViewModel.Page
 {
@@ -31,6 +32,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         private readonly IMessageBoxService _messageBoxService;
         private readonly IConfirmationDialogService _confirmationDialogService;
+        private readonly ISubscriptionDialogService _subscriptionDialogService;
         private readonly ISpotify _spotify;
 
         private Visibility _progressVisibility = Visibility.Hidden;
@@ -45,12 +47,13 @@ namespace SpotifyWPF.ViewModel.Page
 
         public RelayCommand<IList> RemoveTracksFromPlaylistCommand { get; private set; }
 
-        public PlaylistsPageViewModel(ISpotify spotify, IMapper mapper, IMessageBoxService messageBoxService, IConfirmationDialogService confirmationDialogService)
+        public PlaylistsPageViewModel(ISpotify spotify, IMapper mapper, IMessageBoxService messageBoxService, IConfirmationDialogService confirmationDialogService, ISubscriptionDialogService subscriptionDialogService)
         {
             _spotify = spotify;
             _mapper = mapper;
             _messageBoxService = messageBoxService;
             _confirmationDialogService = confirmationDialogService;
+            _subscriptionDialogService = subscriptionDialogService;
 
             LoadPlaylistsCommand = new RelayCommand(
                 async () => await LoadPlaylistsAsync(),
@@ -309,6 +312,8 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 FilteredTracks.Add(item);
             }
+
+            RaisePropertyChanged(nameof(TracksHeader));
         }
 
         private void ApplyArtistsFilter()
@@ -359,7 +364,7 @@ namespace SpotifyWPF.ViewModel.Page
 
         // Dynamic headers with counts
         public string PlaylistsHeader => FilteredPlaylists.Count > 0 ? $"Playlists ({FilteredPlaylists.Count})" : "Playlists";
-        public string TracksHeader => Tracks.Count > 0 ? $"Tracks ({Tracks.Count})" : "Tracks";
+        public string TracksHeader => FilteredTracks.Count > 0 ? $"Tracks ({FilteredTracks.Count})" : "Tracks";
         public string ArtistsHeader => FilteredFollowedArtists.Count > 0 ? $"Users/Artists ({FilteredFollowedArtists.Count})" : "Users/Artists";
 
         // Search filter properties
@@ -504,6 +509,13 @@ namespace SpotifyWPF.ViewModel.Page
             set { _greetingText = value; RaisePropertyChanged(); }
         }
 
+        private bool _isFreeUser;
+        public bool IsFreeUser
+        {
+            get => _isFreeUser;
+            set { _isFreeUser = value; RaisePropertyChanged(); }
+        }
+
         private string? _profileImagePath;
         public string? ProfileImagePath
         {
@@ -518,12 +530,15 @@ namespace SpotifyWPF.ViewModel.Page
                 var name = await _spotify.GetUserDisplayNameAsync().ConfigureAwait(false);
                 var imgPath = await _spotify.GetProfileImageCachedPathAsync().ConfigureAwait(false);
                 var profile = await _spotify.GetPrivateProfileAsync().ConfigureAwait(false);
+                var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
                 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    GreetingText = string.IsNullOrWhiteSpace(name) ? "Hey there" : $"Hey {name}";
+                    var greeting = string.IsNullOrWhiteSpace(name) ? "Hey there" : $"Hey {name}";
+                    GreetingText = greeting;
                     ProfileImagePath = imgPath;
                     CurrentUserId = profile?.Id;
+                    IsFreeUser = subscriptionType?.ToLower() != "premium";
                 });
             }
             catch { }
@@ -556,7 +571,16 @@ namespace SpotifyWPF.ViewModel.Page
 
         // Devices for "Play to" context menus
         public ObservableCollection<SpotifyAPI.Web.Device> Devices { get; } = new ObservableCollection<SpotifyAPI.Web.Device>();
-        public RelayCommand<string> PlayToDeviceCommand => new RelayCommand<string>(async param => await PlayToDeviceAsync(param));
+        public RelayCommand<string> PlayToDeviceCommand => new RelayCommand<string>(async param => 
+        {
+            if (IsFreeUser)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] PlayToDeviceCommand: User does not have premium subscription (IsFreeUser={IsFreeUser}), showing modal and blocking access");
+                _subscriptionDialogService.ShowSubscriptionDialog("Premium Feature Required", "Playing music on specific devices requires a Spotify Premium subscription. Upgrade to access this feature.", "Play to Device", "Transfer playback to any of your connected devices");
+                return;
+            }
+            await PlayToDeviceAsync(param);
+        });
 
     // Removed obsolete Submenu track-id plumbing (now done via BindingProxy+MultiBinding in XAML)
 
@@ -670,20 +694,33 @@ namespace SpotifyWPF.ViewModel.Page
         {
             try
             {
-                var list = await _spotify.GetDevicesAsync().ConfigureAwait(false);
-                await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
+                if (subscriptionType?.ToLower() == "premium")
                 {
-                    Devices.Clear();
-                    foreach (var d in list)
+                    var list = await _spotify.GetDevicesAsync().ConfigureAwait(false);
+                    await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
                     {
-                        if (d != null && !string.IsNullOrWhiteSpace(d.Id)) 
+                        Devices.Clear();
+                        foreach (var d in list)
                         {
-                            Devices.Add(d);
-                            System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] Device: {d.Name} (ID: {d.Id}) - Active: {d.IsActive}");
+                            if (d != null && !string.IsNullOrWhiteSpace(d.Id)) 
+                            {
+                                Devices.Add(d);
+                                System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] Device: {d.Name} (ID: {d.Id}) - Active: {d.IsActive}");
+                            }
                         }
-                    }
-                    System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] Refreshed {Devices.Count} devices in Play To submenu");
-                }));
+                        System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] Refreshed {Devices.Count} devices in Play To submenu");
+                    }));
+                }
+                else
+                {
+                    // Clear devices for free users
+                    await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                    {
+                        Devices.Clear();
+                        System.Diagnostics.Debug.WriteLine("[PlaylistsPage] Cleared devices for free user");
+                    }));
+                }
             }
             catch (Exception ex)
             {
@@ -697,7 +734,7 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] PlayToDeviceAsync called with param: {param ?? "NULL"}");
                 
-                // Add debug output to check what's in the MultiBinding
+                // Parse the parameter: deviceId|trackId
                 System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] DEBUG: MultiBinding expects deviceId|trackId format");
                 
                 if (string.IsNullOrWhiteSpace(param)) 
@@ -723,6 +760,13 @@ namespace SpotifyWPF.ViewModel.Page
                 }
                 
                 System.Diagnostics.Debug.WriteLine($"[PlaylistsPage] Playing track {trackId} on device {deviceId}");
+                // Ensure the device is active by transferring playback there first (play=true), then try playing
+                try
+                {
+                    await _spotify.TransferPlaybackAsync(new[] { deviceId }, true);
+                    await Task.Delay(400);
+                }
+                catch { }
                 var ok = await _spotify.PlayTrackOnDeviceAsync(deviceId, trackId);
                 System.Diagnostics.Debug.WriteLine(ok
                     ? $"Playing track {trackId} on device {deviceId}."
@@ -997,6 +1041,8 @@ namespace SpotifyWPF.ViewModel.Page
 
             if (result != true) return;
 
+            LoggingService.LogToFile($"[{DateTime.Now:o}] User requested to remove {tracks.Count} tracks from playlist '{CurrentPlaylist.Name}'");
+
             if (_spotify.Api == null)
             {
                 System.Diagnostics.Debug.WriteLine("You must be logged in to remove tracks from playlists.");
@@ -1010,6 +1056,7 @@ namespace SpotifyWPF.ViewModel.Page
                 var trackUris = tracks.Select(t => t.Uri).Where(uri => !string.IsNullOrEmpty(uri)).ToList();
                 if (trackUris.Any())
                 {
+                    LoggingService.LogToFile($"[{DateTime.Now:o}] Starting API calls to remove tracks from playlist");
                     // Process tracks in batches of 100 (Spotify API limit)
                     const int batchSize = 100;
                     for (int i = 0; i < trackUris.Count; i += batchSize)
@@ -1052,6 +1099,7 @@ namespace SpotifyWPF.ViewModel.Page
             finally
             {
                 EndBusy();
+                LoggingService.LogToFile($"[{DateTime.Now:o}] UI spinner stopped after removing tracks");
             }
         }
 
@@ -1152,6 +1200,27 @@ namespace SpotifyWPF.ViewModel.Page
                         catch (Exception ex)
                         {
                             System.Diagnostics.Debug.WriteLine($"Page fetch attempt {attempt} at offset {offset} failed: {ex.Message}");
+                            if (ex is SpotifyWPF.Service.RateLimitException rateEx)
+                            {
+                                // Show user-friendly message for rate limit
+                                int? retryAfter = null;
+                                if (rateEx.InnerException is APIException apiEx)
+                                {
+                                    retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                                }
+                                var message = retryAfter.HasValue ?
+                                    $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to load playlists again." :
+                                    "Spotify API rate limit exceeded. Please wait a moment before trying to load playlists again.";
+                                await Application.Current.Dispatcher.InvokeAsync(() =>
+                                {
+                                    System.Windows.MessageBox.Show(
+                                        message,
+                                        "Rate Limit Exceeded",
+                                        System.Windows.MessageBoxButton.OK,
+                                        System.Windows.MessageBoxImage.Warning);
+                                });
+                                return;
+                            }
                         }
                     }
 
@@ -1214,16 +1283,23 @@ namespace SpotifyWPF.ViewModel.Page
                                     // Log dell'output (redacted)
                                     try
                                     {
-                                        var json = BuildPlaylistsPageApiOutput(page);
-                                        System.Diagnostics.Debug.WriteLine($"Spotify API response (playlists page offset {off}) [redacted]:");
-                                        foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                                        if (page != null)
                                         {
-                                            System.Diagnostics.Debug.WriteLine("  " + line);
+                                            var p = page;
+                                            var json = BuildPlaylistsPageApiOutput(p);
+                                            System.Diagnostics.Debug.WriteLine($"Spotify API response (playlists page offset {off}) [redacted]:");
+                                            foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                                            {
+                                                System.Diagnostics.Debug.WriteLine("  " + line);
+                                            }
                                         }
                                     }
                                     catch { }
 
-                                    ValidatePlaylistsPageConsistency(page, total, off / limit);
+                                    if (page != null)
+                                    {
+                                        ValidatePlaylistsPageConsistency(page, total, off / limit);
+                                    }
 
                                     var countToAdd = page?.Items?.Count ?? 0;
                                     if (countToAdd > 0)
@@ -1261,6 +1337,27 @@ namespace SpotifyWPF.ViewModel.Page
                                 catch (Exception ex)
                                 {
                                     System.Diagnostics.Debug.WriteLine($"Page fetch attempt {attempt} at offset {off} failed: {ex.Message}");
+                                    if (ex is SpotifyWPF.Service.RateLimitException rateEx)
+                                    {
+                                        // Show user-friendly message for rate limit
+                                        int? retryAfter = null;
+                                        if (rateEx.InnerException is APIException apiEx)
+                                        {
+                                            retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                                        }
+                                        var message = retryAfter.HasValue ?
+                                            $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to load playlists again." :
+                                            "Spotify API rate limit exceeded. Please wait a moment before trying to load playlists again.";
+                                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                                        {
+                                            System.Windows.MessageBox.Show(
+                                                message,
+                                                "Rate Limit Exceeded",
+                                                System.Windows.MessageBoxButton.OK,
+                                                System.Windows.MessageBoxImage.Warning);
+                                        });
+                                        return;
+                                    }
                                 }
                             }
 
@@ -1333,37 +1430,89 @@ namespace SpotifyWPF.ViewModel.Page
             var total = 0;
 
             // Primo fetch (per total e primo blocco)
-            var first = await _spotify.GetFollowedArtistsPageAsync(_artistsCursorAfter, limit);
-            // Log dell'output dell'API (redacted)
             try
             {
-                var json = BuildArtistsPageApiOutput(first?.Page);
-                System.Diagnostics.Debug.WriteLine("Spotify API response (followed artists first page) [redacted]:");
-                foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                var first = await _spotify.GetFollowedArtistsPageAsync(_artistsCursorAfter, limit);
+                // Log dell'output dell'API (redacted)
+                try
                 {
-                    System.Diagnostics.Debug.WriteLine("  " + line);
+                    if (first?.Page != null)
+                    {
+                        var p = first.Page;
+                        var json = BuildArtistsPageApiOutput(p!);
+                        System.Diagnostics.Debug.WriteLine("Spotify API response (followed artists first page) [redacted]:");
+                        foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                        {
+                            System.Diagnostics.Debug.WriteLine("  " + line);
+                        }
+                    }
                 }
+                catch { /* ignore logging issues */ }
+                if (first?.Page?.Items != null)
+                {
+                    foreach (var a in first.Page.Items) FollowedArtists.Add(a);
+                    total = first.Page.Total;
+                }
+                _artistsCursorAfter = first?.NextAfter;
             }
-            catch { /* ignore logging issues */ }
-            if (first?.Page?.Items != null)
+            catch (RateLimitException ex)
             {
-                foreach (var a in first.Page.Items) FollowedArtists.Add(a);
-                total = first.Page.Total;
+                // Show user-friendly message for rate limit
+                int? retryAfter = null;
+                if (ex.InnerException is APIException apiEx)
+                {
+                    retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                }
+                var message = retryAfter.HasValue ?
+                    $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to load artists again." :
+                    "Spotify API rate limit exceeded. Please wait a moment before trying to load artists again.";
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        message,
+                        "Rate Limit Exceeded",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                });
+                return;
             }
-            _artistsCursorAfter = first?.NextAfter;
 
             if (cancellationToken.IsCancellationRequested) return;
             if (total <= 0 || FollowedArtists.Count >= total) return;
 
             // Cache cursori
             var cursors = new System.Collections.Concurrent.ConcurrentQueue<string>();
-            while (!string.IsNullOrWhiteSpace(_artistsCursorAfter))
+            try
             {
-                cursors.Enqueue(_artistsCursorAfter);
-                var next = await _spotify.GetFollowedArtistsPageAsync(_artistsCursorAfter, limit);
-                _artistsCursorAfter = next?.NextAfter;
-                if (cancellationToken.IsCancellationRequested) return;
-                if (string.IsNullOrWhiteSpace(_artistsCursorAfter)) break;
+                while (!string.IsNullOrWhiteSpace(_artistsCursorAfter))
+                {
+                    cursors.Enqueue(_artistsCursorAfter);
+                    var next = await _spotify.GetFollowedArtistsPageAsync(_artistsCursorAfter, limit);
+                    _artistsCursorAfter = next?.NextAfter;
+                    if (cancellationToken.IsCancellationRequested) return;
+                    if (string.IsNullOrWhiteSpace(_artistsCursorAfter)) break;
+                }
+            }
+            catch (RateLimitException ex)
+            {
+                // Show user-friendly message for rate limit
+                int? retryAfter = null;
+                if (ex.InnerException is APIException apiEx)
+                {
+                    retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                }
+                var message = retryAfter.HasValue ?
+                    $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to load artists again." :
+                    "Spotify API rate limit exceeded. Please wait a moment before trying to load artists again.";
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        message,
+                        "Rate Limit Exceeded",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                });
+                return;
             }
 
             var workersCount = ComputeWorkerCount(total, 2000);
@@ -1382,11 +1531,15 @@ namespace SpotifyWPF.ViewModel.Page
                             // Log dell'output (redacted)
                             try
                             {
-                                var json = BuildArtistsPageApiOutput(page?.Page);
-                                System.Diagnostics.Debug.WriteLine($"Spotify API response (followed artists after '{after}') [redacted]:");
-                                foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                                if (page?.Page != null)
                                 {
-                                    System.Diagnostics.Debug.WriteLine("  " + line);
+                                    var p = page.Page;
+                                    var json = BuildArtistsPageApiOutput(p!);
+                                    System.Diagnostics.Debug.WriteLine($"Spotify API response (followed artists after '{after}') [redacted]:");
+                                    foreach (var line in json.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                                    {
+                                        System.Diagnostics.Debug.WriteLine("  " + line);
+                                    }
                                 }
                             }
                             catch { }
@@ -1396,12 +1549,20 @@ namespace SpotifyWPF.ViewModel.Page
                                 {
                                     await dispatcher.BeginInvoke((Action)(() =>
                                     {
-                                        foreach (var a in page.Page.Items) FollowedArtists.Add(a);
+                                        foreach (var a in page.Page.Items)
+                                        {
+                                            if (a == null) continue;
+                                            FollowedArtists.Add(a);
+                                        }
                                     }));
                                 }
                                 else
                                 {
-                                    foreach (var a in page.Page.Items) FollowedArtists.Add(a);
+                                    foreach (var a in page.Page.Items)
+                                    {
+                                        if (a == null) continue;
+                                        FollowedArtists.Add(a);
+                                    }
                                 }
                             }
                         }
@@ -1412,6 +1573,27 @@ namespace SpotifyWPF.ViewModel.Page
                         catch (Exception ex)
                         {
                             System.Diagnostics.Debug.WriteLine($"Followed artists page fetch failed: {ex.Message}");
+                            if (ex is SpotifyWPF.Service.RateLimitException rateEx)
+                            {
+                                // Show user-friendly message for rate limit
+                                int? retryAfter = null;
+                                if (rateEx.InnerException is APIException apiEx)
+                                {
+                                    retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                                }
+                                var message = retryAfter.HasValue ?
+                                    $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to load artists again." :
+                                    "Spotify API rate limit exceeded. Please wait a moment before trying to load artists again.";
+                                await Application.Current.Dispatcher.InvokeAsync(() =>
+                                {
+                                    System.Windows.MessageBox.Show(
+                                        message,
+                                        "Rate Limit Exceeded",
+                                        System.Windows.MessageBoxButton.OK,
+                                        System.Windows.MessageBoxImage.Warning);
+                                });
+                                return;
+                            }
                         }
                     }
                 }));
@@ -1485,37 +1667,53 @@ namespace SpotifyWPF.ViewModel.Page
 
         private string BuildPlaylistsPageApiOutput(PagingDto<PlaylistDto> page)
         {
-            if (page == null) return "{ \"nullPage\": true }";
+            ArgumentNullException.ThrowIfNull(page);
+
+            string? href = page.Href;
+            int limit = page.Limit;
+            int offset = page.Offset;
+            int total = page.Total;
+            string? next = page.Next;
+            string? previous = page.Previous;
+            int itemsCount = page.Items?.Count ?? 0;
 
             var jo = new JObject
             {
-                ["href"] = page.Href,
-                ["limit"] = page.Limit,
-                ["offset"] = page.Offset,
-                ["total"] = page.Total,
-                ["next"] = page.Next,
-                ["previous"] = page.Previous,
+                ["href"] = href,
+                ["limit"] = limit,
+                ["offset"] = offset,
+                ["total"] = total,
+                ["next"] = next,
+                ["previous"] = previous,
                 // Non includiamo l'array items per evitare i nomi delle playlist
-                ["itemsCount"] = page.Items != null ? page.Items.Count : 0
+                ["itemsCount"] = itemsCount
             };
 
             return jo.ToString(Newtonsoft.Json.Formatting.Indented);
         }
 
-        private string BuildArtistsPageApiOutput(PagingDto<ArtistDto>? page)
+        private string BuildArtistsPageApiOutput(PagingDto<ArtistDto> page)
         {
-            if (page == null) return "{ \"nullPage\": true }";
+            ArgumentNullException.ThrowIfNull(page);
+
+            string? href = page.Href;
+            int limit = page.Limit;
+            int offset = page.Offset;
+            int total = page.Total;
+            string? next = page.Next;
+            string? previous = page.Previous;
+            int itemsCount = page.Items?.Count ?? 0;
 
             var jo = new JObject
             {
-                ["href"] = page.Href,
-                ["limit"] = page.Limit,
-                ["offset"] = page.Offset,
-                ["total"] = page.Total,
-                ["next"] = page.Next,
-                ["previous"] = page.Previous,
+                ["href"] = href,
+                ["limit"] = limit,
+                ["offset"] = offset,
+                ["total"] = total,
+                ["next"] = next,
+                ["previous"] = previous,
                 // Non includiamo l'array items per evitare i nomi
-                ["itemsCount"] = page.Items != null ? page.Items.Count : 0
+                ["itemsCount"] = itemsCount
             };
 
             return jo.ToString(Newtonsoft.Json.Formatting.Indented);
@@ -1566,28 +1764,52 @@ namespace SpotifyWPF.ViewModel.Page
             return null;
         }
 
-        // Calcolo dinamico dei worker: 1 worker ogni 'unitSize' elementi (minimo 1)
+        private int? GetRetryAfterSeconds(IReadOnlyDictionary<string, string>? headers)
+        {
+            if (headers == null) return null;
+            if (headers.TryGetValue("Retry-After", out var value))
+            {
+                if (int.TryParse(value, out var seconds))
+                {
+                    return seconds;
+                }
+            }
+            return null;
+        }
+
+        // Calcolo dinamico dei worker: 1 worker ogni 'unitSize' elementi (minimo 1), rispettando il limite massimo dalle impostazioni
         private int ComputeWorkerCount(int totalCount, int unitSize)
         {
             if (totalCount <= 0) return 1;
             if (unitSize <= 0) unitSize = 1;
+            
+            // Get max threads from settings, default to 3 if not available
+            int maxThreads = 3; // Default fallback
+            try
+            {
+                maxThreads = (int)Properties.Settings.Default["MaxThreadsForOperations"];
+                if (maxThreads < 1) maxThreads = 1;
+            }
+            catch
+            {
+                // If settings access fails, use default
+                maxThreads = 3;
+            }
+            
             var workers = (int)Math.Ceiling(totalCount / (double)unitSize);
-            return workers < 1 ? 1 : workers;
+            return Math.Min(workers, maxThreads);
         }
 
         private void ValidatePlaylistsPageConsistency(PagingDto<PlaylistDto> page, int? expectedTotal, int pageIndex)
         {
-            if (page == null)
-            {
-                throw new Exception("Null page received from Spotify API.");
-            }
+            ArgumentNullException.ThrowIfNull(page);
 
-            var items = page.Items != null ? page.Items.Count : 0;
-            // Converti in int in modo sicuro anche se le proprietà sono nullable
-            int limit = Convert.ToInt32(page.Limit);
-            int offset = Convert.ToInt32(page.Offset);
-            int total = Convert.ToInt32(page.Total);
-            var hasNext = !string.IsNullOrWhiteSpace(page.Next);
+            int items = page.Items?.Count ?? 0;
+            int limit = page.Limit;
+            int offset = page.Offset;
+            int total = page.Total;
+            string? next = page.Next;
+            bool hasNext = !string.IsNullOrWhiteSpace(next);
 
             // Regole generali
             if (items < 0 || limit < 0 || offset < 0)
@@ -1662,39 +1884,124 @@ namespace SpotifyWPF.ViewModel.Page
             Tracks.Clear();
             RaisePropertyChanged(nameof(TracksHeader));
 
-            var tracks = await GetPlaylistTracksAsync(playlist.Id!, 0);
-            var received = 0;
-
-            while (true)
+            try
             {
-                var itemsCount = tracks.Items?.Count ?? 0;
-                received += itemsCount;
+                const int limit = 100;
+                int offset = 0;
+                int? expectedTotal = null;
 
-                var tracksToLoad = tracks;
-                var currentOffset = received - itemsCount;
-                var disp = Application.Current?.Dispatcher;
-                if (disp != null)
+                // 1) Get first page to determine total
+                var firstPage = await GetPlaylistTracksAsync(playlist.Id!, offset);
+                if (firstPage != null && firstPage.Total > 0)
                 {
-                    await disp.BeginInvoke((Action)(() => { AddTracks(tracksToLoad, currentOffset); }));
-                }
-                else
-                {
-                    AddTracks(tracksToLoad, currentOffset);
+                    expectedTotal = Convert.ToInt32(firstPage.Total);
+                    System.Diagnostics.Debug.WriteLine($"Detected expected total tracks: {expectedTotal.Value}");
+
+                    // Add first page tracks
+                    await Application.Current.Dispatcher.BeginInvoke((Action)(() => { AddTracks(firstPage, 0); }));
                 }
 
-                var total = Convert.ToInt32(tracks.Total);
-                if (received < total)
+                if (!expectedTotal.HasValue || expectedTotal.Value <= limit)
                 {
-                    tracks = await GetPlaylistTracksAsync(playlist.Id!, received);
+                    // If only one page or no tracks, we're done
+                    return;
                 }
-                else
+
+                // 2) Prepare offsets for remaining pages
+                var nextStart = limit;
+                var offsets = new System.Collections.Concurrent.ConcurrentQueue<int>();
+                for (var off = nextStart; off < expectedTotal.Value; off += limit)
                 {
-                    break;
+                    offsets.Enqueue(off);
                 }
+
+                // Get max threads from settings
+                int maxThreads = 3; // Default fallback
+                try
+                {
+                    maxThreads = (int)Properties.Settings.Default["MaxThreadsForOperations"];
+                    if (maxThreads < 1) maxThreads = 1;
+                }
+                catch
+                {
+                    maxThreads = 3;
+                }
+
+                var pagesRemaining = (int)Math.Ceiling((expectedTotal.Value - nextStart) / (double)limit);
+                var computedWorkers = Math.Min(pagesRemaining, maxThreads);
+                System.Diagnostics.Debug.WriteLine($"Starting concurrent track fetch with {computedWorkers} worker(s). Total expected={expectedTotal.Value}, page size={limit}");
+
+                var workers = new List<Task>();
+                var allLoaded = false;
+
+                for (var w = 0; w < computedWorkers; w++)
+                {
+                    workers.Add(Task.Run(async () =>
+                    {
+                        while (!allLoaded && offsets.TryDequeue(out var off))
+                        {
+                            try
+                            {
+                                var page = await GetPlaylistTracksAsync(playlist.Id!, off);
+                                if (page?.Items != null && page.Items.Count > 0)
+                                {
+                                    var tracksToLoad = page;
+                                    var disp = Application.Current?.Dispatcher;
+                                    if (disp != null)
+                                    {
+                                        await disp.BeginInvoke((Action)(() => { AddTracks(tracksToLoad, off); }));
+                                    }
+                                    else
+                                    {
+                                        AddTracks(tracksToLoad, off);
+                                    }
+                                }
+
+                                var uiCount = Tracks.Count;
+                                if (uiCount >= expectedTotal.Value)
+                                {
+                                    allLoaded = true;
+                                    break;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Error loading tracks page at offset {off}: {ex.Message}");
+                            }
+                        }
+                    }));
+                }
+
+                await Task.WhenAll(workers);
+                System.Diagnostics.Debug.WriteLine($"Track loading completed. Loaded {Tracks.Count} tracks");
             }
-
-            EndBusy();
-            RaisePropertyChanged(nameof(TracksHeader));
+            catch (SpotifyWPF.Service.RateLimitException ex)
+            {
+                // Show user-friendly message for rate limit
+                int? retryAfter = null;
+                if (ex.InnerException is APIException apiEx)
+                {
+                    retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                }
+                var message = retryAfter.HasValue ?
+                    $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to load playlist tracks again." :
+                    "Spotify API rate limit exceeded. Please wait a moment before trying to load playlist tracks again.";
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        message,
+                        "Rate Limit Exceeded",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                });
+                // Clear tracks since loading failed
+                Tracks.Clear();
+                RaisePropertyChanged(nameof(TracksHeader));
+            }
+            finally
+            {
+                EndBusy();
+            }
         }
 
         private async Task<Paging<PlaylistTrack<IPlayableItem>>> GetPlaylistTracksAsync(string playlistId, int offset)
@@ -1705,8 +2012,47 @@ namespace SpotifyWPF.ViewModel.Page
                 Limit = 100
             };
 
-            await _spotify.EnsureAuthenticatedAsync();
-            return await _spotify.Api!.Playlists.GetItems(playlistId, req);
+            var ok = await _spotify.EnsureAuthenticatedAsync();
+            if (!ok || _spotify.Api == null)
+            {
+                System.Diagnostics.Debug.WriteLine("You must be logged in to load playlist tracks.");
+                // Show a user-friendly message on the UI
+                try
+                {
+                    await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
+                    {
+                        _messageBoxService.ShowMessageBox(
+                            "You must be logged in to view playlist tracks.",
+                            "Authentication Required",
+                            MessageBoxButton.OK,
+                            MessageBoxIcon.Warning
+                        );
+                    }));
+                }
+                catch { /* Best-effort message, don't crash the caller */ }
+
+                // Return an empty page to avoid NullReferenceException in the caller
+                var empty = new Paging<PlaylistTrack<IPlayableItem>>
+                {
+                    Items = new System.Collections.Generic.List<PlaylistTrack<IPlayableItem>>(),
+                    Limit = 0,
+                    Offset = offset,
+                    Total = 0
+                };
+                return empty;
+            }
+            try
+            {
+                return await _spotify.Api!.Playlists.GetItems(playlistId, req);
+            }
+            catch (APIException apiEx)
+            {
+                if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    throw new SpotifyWPF.Service.RateLimitException($"Spotify API rate limit exceeded while getting playlist tracks. Please wait before trying again.", apiEx);
+                }
+                throw;
+            }
         }
 
         private void AddTracks(IPaginatable<PlaylistTrack<IPlayableItem>> tracks, int offset)
@@ -1719,6 +2065,7 @@ namespace SpotifyWPF.ViewModel.Page
             for (int i = 0; i < tracks.Items.Count; i++)
             {
                 var track = tracks.Items[i];
+                if (track == null) continue;
                 var trackModel = _mapper.Map<TrackModel>(track);
                 trackModel.Position = offset + i + 1; // 1-based position
                 Tracks.Add(trackModel);
@@ -1775,4 +2122,5 @@ namespace SpotifyWPF.ViewModel.Page
 
         public ObservableCollection<TrackModel> SelectedTracks { get; } = new ObservableCollection<TrackModel>();
     }
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
 }

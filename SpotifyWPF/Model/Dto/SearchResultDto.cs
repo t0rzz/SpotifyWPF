@@ -16,5 +16,17 @@ namespace SpotifyWPF.Model.Dto
         public bool CanAddToPlaylist { get; set; }
         public bool IsInSelectedPlaylist { get; set; }
         public object? OriginalDto { get; set; }
+
+        public string DurationFormatted
+        {
+            get
+            {
+                if (DurationMs <= 0) return string.Empty;
+                var totalSeconds = DurationMs / 1000;
+                var minutes = totalSeconds / 60;
+                var seconds = totalSeconds % 60;
+                return $"{minutes}:{seconds:D2}";
+            }
+        }
     }
 }

@@ -20,10 +20,12 @@ namespace SpotifyWPF.ViewModel
             SimpleIoc.Default.Register<IConfigurationService, ConfigurationService>();
             SimpleIoc.Default.Register(() => AutoMapperConfiguration.Configure().CreateMapper());
             SimpleIoc.Default.Register<ISettingsProvider, SettingsProvider>();
+            SimpleIoc.Default.Register<ITokenProvider>(() => new TokenProvider(SimpleIoc.Default.GetInstance<ILoggingService>()));
             SimpleIoc.Default.Register<ISpotify, Spotify>();
             SimpleIoc.Default.Register<IMessageBoxService, MessageBoxService>();
             SimpleIoc.Default.Register<IConfirmationDialogService, ConfirmationDialogService>();
             SimpleIoc.Default.Register<IEditPlaylistDialogService, EditPlaylistDialogService>();
+            SimpleIoc.Default.Register<ISubscriptionDialogService, SubscriptionDialogService>();
 
             SimpleIoc.Default.Register<MainViewModel>();
             SimpleIoc.Default.Register<LoginPageViewModel>();

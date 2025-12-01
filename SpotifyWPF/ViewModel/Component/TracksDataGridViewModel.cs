@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using SpotifyWPF.Model.Dto;
 using SpotifyWPF.Service;
+using SpotifyWPF.Service.MessageBoxes;
 using SpotifyWPF.ViewModel;
 using GalaSoft.MvvmLight.Command;
 using SpotifyAPI.Web;
@@ -12,28 +13,47 @@ namespace SpotifyWPF.ViewModel.Component
     public class TracksDataGridViewModel : DataGridViewModelBaseDto<TrackDto>
     {
         private readonly ISpotify _spotify;
+        private readonly ISubscriptionDialogService _subscriptionDialogService;
         private Action<string>? _logAction;
         
         public ObservableCollection<Device> Devices { get; } = new ObservableCollection<Device>();
         public RelayCommand<string> PlayToDeviceCommand { get; }
+        public RelayCommand RefreshDevicesCommand { get; }
 
-        public TracksDataGridViewModel(ISpotify spotify, Action<string>? logAction = null)
+        public TracksDataGridViewModel(ISpotify spotify, ISubscriptionDialogService subscriptionDialogService, Action<string>? logAction = null)
         {
             _spotify = spotify;
+            _subscriptionDialogService = subscriptionDialogService;
             _logAction = logAction;
-            PlayToDeviceCommand = new RelayCommand<string>(async param => await PlayToAsync(param));
-            // Preload devices (non-blocking)
-            _ = Task.Run(async () =>
+            PlayToDeviceCommand = new RelayCommand<string>(async param => 
             {
-                try
+                var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
+                if (subscriptionType?.ToLower() != "premium")
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TracksDataGrid] PlayToDeviceCommand: User does not have premium subscription (subscriptionType={subscriptionType}), showing modal and blocking access");
+                    _subscriptionDialogService.ShowSubscriptionDialog("Premium Feature Required", "Playing music on specific devices requires a Spotify Premium subscription. Upgrade to access this feature.", "Play to Device", "Transfer playback to any of your connected devices");
+                    return;
+                }
+                await PlayToAsync(param);
+            });
+            RefreshDevicesCommand = new RelayCommand(async () =>
+            {
+                var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
+                if (subscriptionType?.ToLower() == "premium")
                 {
                     await RefreshDevicesAsync();
                 }
-                catch (Exception ex)
+                else
                 {
-                    System.Diagnostics.Debug.WriteLine($"Error refreshing devices: {ex.Message}");
+                    // For free users, clear devices or show message
+                    await App.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        Devices.Clear();
+                        LogMessage($"[TracksDataGrid] Not refreshing devices - user does not have premium subscription");
+                    });
                 }
             });
+            // Removed preload - devices will be loaded on submenu open only for premium users
         }
 
         public void SetLogAction(Action<string>? logAction)
@@ -102,6 +122,13 @@ namespace SpotifyWPF.ViewModel.Component
             }
             
             LogMessage($"[TracksDataGrid] Playing track {trackId} on device {deviceId}");
+            // Ensure the device is active: transfer then attempt to play (helps devices that require transfer)
+            try
+            {
+                await _spotify.TransferPlaybackAsync(new[] { deviceId }, true);
+                await Task.Delay(400);
+            }
+            catch { }
             await _spotify.PlayTrackOnDeviceAsync(deviceId, trackId);
             
             // Wait a moment for Spotify to update the active device state

@@ -155,14 +155,87 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Future Settings Sections -->
-                    <TextBlock Text="General Settings"
+                    <!-- Spotify Settings Section -->
+                    <TextBlock Text="Spotify Settings"
                                FontSize="16"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource PrimaryBrush}"
                                Margin="0,15,0,10"
                                FontFamily="Segoe UI"
                                TextWrapping="Wrap"/>
+
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            CornerRadius="8"
+                            Padding="15"
+                            Margin="0,0,0,15">
+                        <StackPanel>
+                            <!-- Spotify Client ID -->
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,0,0,15">
+                                <TextBlock Text="Client ID:"
+                                           Width="120"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"
+                                           Foreground="{DynamicResource ControlForegroundBrush}"
+                                           FontFamily="Segoe UI"
+                                           TextWrapping="Wrap"/>
+                                <TextBox Text="{Binding UserSpotifyClientId}"
+                                         Width="300"
+                                         Height="30"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"
+                                         VerticalContentAlignment="Center"
+                                         HorizontalContentAlignment="Left"
+                                         FontSize="14"
+                                         Padding="8,0"
+                                         Margin="0"/>
+                            </StackPanel>
+
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,15"
+                                       Text="{Binding DefaultSpotifyClientId, StringFormat='Default: {0}'}"/>
+
+                            <!-- Spotify Redirect Port -->
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,0,0,15">
+                                <TextBlock Text="Redirect Port:"
+                                           Width="120"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"
+                                           Foreground="{DynamicResource ControlForegroundBrush}"
+                                           FontFamily="Segoe UI"
+                                           TextWrapping="Wrap"/>
+                                <TextBox Text="{Binding UserSpotifyRedirectPort}"
+                                         Width="100"
+                                         Height="30"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"
+                                         VerticalContentAlignment="Center"
+                                         HorizontalContentAlignment="Left"
+                                         FontSize="14"
+                                         Padding="8,0"
+                                         Margin="0"/>
+                            </StackPanel>
+
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,15"
+                                       Text="{Binding DefaultSpotifyRedirectPort, StringFormat='Default: {0} (callback: http://localhost:{0}/callback)'}"/>
+
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Text="Override the default Spotify Client ID and redirect port. Leave empty to use app defaults. Changes require app restart to take effect."/>
+                        </StackPanel>
+                    </Border>
 
                     <Border Background="{DynamicResource SurfaceBrush}"
                             CornerRadius="8"

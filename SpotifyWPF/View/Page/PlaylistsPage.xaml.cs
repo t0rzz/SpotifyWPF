@@ -23,11 +23,7 @@ namespace SpotifyWPF.View.Page
             if (_loadedOnce) return;
             _loadedOnce = true;
 
-            var vm = DataContext as PlaylistsPageViewModel;
-            if (vm != null && vm.LoadPlaylistsCommand != null && vm.Playlists.Count == 0 && vm.LoadPlaylistsCommand.CanExecute(null))
-            {
-                vm.LoadPlaylistsCommand.Execute(null);
-            }
+            // Removed auto-load playlists on app start
 
             // Wire up submenu event for tracks context menu
             WireUpPlayToSubmenuEvent();

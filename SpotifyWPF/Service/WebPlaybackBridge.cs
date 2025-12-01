@@ -34,6 +34,7 @@ namespace SpotifyWPF.Service
 
         public event Action<PlayerState>? OnPlayerStateChanged;
         public event Action<string>? OnReadyDeviceId;
+        public event Action<string>? OnAccountError;
 
         /// <summary>
         /// Handle web resource requests - allows loading external resources like Spotify SDK
@@ -154,7 +155,8 @@ namespace SpotifyWPF.Service
                     // Initialize the player with access token
                     // CRITICAL: Get fresh token to ensure it's valid for Web Playback SDK
                     LoggingService.LogToFile("🔑 Using provided access token for player initialization\n");
-                    var initScript = $"window.initializePlayer('{accessToken}');";
+                    // Use JSON serialization to escape token safely for JavaScript injection
+                    var initScript = $"window.initializePlayer({System.Text.Json.JsonSerializer.Serialize(accessToken)});";
                     LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Calling initializePlayer script\n");
 
                     if (_webView != null && _webView.CoreWebView2 != null)
@@ -245,6 +247,7 @@ namespace SpotifyWPF.Service
         /// </summary>
         public async Task PlayAsync(IEnumerable<string> uris, string? deviceId = null)
         {
+            try { LoggingService.LogToFile($"[WEB_PLAY_CALL] PlayAsync called with device={deviceId} uris=[{string.Join(',', uris)}]\n"); } catch { }
             if (!_isInitialized) throw new InvalidOperationException("Bridge not initialized");
 
             var urisArray = uris.ToArray();
@@ -258,10 +261,12 @@ namespace SpotifyWPF.Service
                         // CRITICAL: Enable audio context first for modern browsers
                         await _webView.CoreWebView2.ExecuteScriptAsync("window.enableSpotifyAudio && window.enableSpotifyAudio()");
 
+                        try { LoggingService.LogToFile("[WEB_PLAY_CALL] Executing JS play (in WebPlaybackBridge.PlayAsync)\n"); } catch { }
                         var urisJson = JsonSerializer.Serialize(urisArray);
                         var escapedJson = urisJson.Replace("\\", "\\\\").Replace("'", "\\'");
                         var script = $"window.spotifyBridge.play({escapedJson})";
 
+                        try { LoggingService.LogToFile("[WEB_PLAY_CALL] Called JS play script\n"); } catch { }
                         var result = await _webView.CoreWebView2.ExecuteScriptAsync(script);
                         System.Diagnostics.Debug.WriteLine($"🎵 Play command sent: {result}");
                     }
@@ -441,12 +446,14 @@ namespace SpotifyWPF.Service
         {
             try
             {
+                try { LoggingService.LogToFile($"[WEB_MSG] OnWebMessageReceived: {e.TryGetWebMessageAsString()}\n"); } catch { }
                 LoggingService.LogToFile($"=== OnWebMessageReceived CALLED ===\n");
                 var message = e.TryGetWebMessageAsString();
                 LoggingService.LogToFile($"WebPlaybackBridge received message: {message}\n");
 
-                if (string.IsNullOrEmpty(message)) 
+                if (string.IsNullOrEmpty(message))
                 {
+                    try { LoggingService.LogToFile($"[WEB_MSG] Bridged message empty or null: '{message}'\n"); } catch { }
                     LoggingService.LogToFile("Message is null or empty!\n");
                     return;
                 }
@@ -468,6 +475,15 @@ namespace SpotifyWPF.Service
                                 LoggingService.LogToFile($"🎵 WebPlaybackBridge received device ID: {deviceId}\n");
                                 _webPlaybackDeviceId = deviceId;
                                 OnReadyDeviceId?.Invoke(deviceId);
+                            }
+                            break;
+                            
+                        case "account_error":
+                            if (messageJson.TryGetProperty("message", out var errorMessageProperty))
+                            {
+                                var errorMessage = errorMessageProperty.GetString() ?? string.Empty;
+                                LoggingService.LogToFile($"🚨 WebPlaybackBridge received account error: {errorMessage}\n");
+                                OnAccountError?.Invoke(errorMessage);
                             }
                             break;
                             
@@ -630,6 +646,7 @@ namespace SpotifyWPF.Service
                 // 4. Clear event handlers to prevent memory leaks
                 OnPlayerStateChanged = null;
                 OnReadyDeviceId = null;
+                OnAccountError = null;
             }
 
             // 5. Reset state variables

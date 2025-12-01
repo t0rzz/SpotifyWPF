@@ -18,8 +18,20 @@ using System.Text;
 
 namespace SpotifyWPF.Service
 {
+    /// <summary>
+    /// Exception thrown when Spotify API rate limits are exceeded
+    /// </summary>
+    public class RateLimitException : Exception
+    {
+        public RateLimitException(string message, Exception? innerException = null)
+            : base(message, innerException)
+        {
+        }
+    }
+
     public class Spotify : ISpotify, IDisposable
     {
+        private readonly ITokenProvider _tokenProvider;
         private readonly ISettingsProvider _settingsProvider;
         private readonly ILoggingService _loggingService;
 
@@ -43,10 +55,11 @@ namespace SpotifyWPF.Service
 
         public PrivateUser? CurrentUser => _privateProfile;
 
-        public Spotify(ISettingsProvider settingsProvider, ILoggingService loggingService)
+        public Spotify(ISettingsProvider settingsProvider, ILoggingService loggingService, ITokenProvider tokenProvider)
         {
             _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
+            _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
 
             // Check if port is already in use
             var port = int.Parse(_settingsProvider.SpotifyRedirectPort);
@@ -57,7 +70,7 @@ namespace SpotifyWPF.Service
             }
 
             _server = new EmbedIOAuthServer(
-                new Uri($"http://localhost:{_settingsProvider.SpotifyRedirectPort}"),
+                new Uri($"http://127.0.0.1:{_settingsProvider.SpotifyRedirectPort}"),
                 int.Parse(_settingsProvider.SpotifyRedirectPort));
 
             _server.AuthorizationCodeReceived += OnAuthorizationCodeReceived;
@@ -371,6 +384,13 @@ namespace SpotifyWPF.Service
             return me?.DisplayName ?? me?.Id;
         }
 
+        // Returns the current user's subscription type ("premium" or "free") if available
+        public async Task<string?> GetUserSubscriptionTypeAsync()
+        {
+            var me = await GetPrivateProfileAsync().ConfigureAwait(false);
+            return me?.Product;
+        }
+
         // Returns a local cached file path to the user's profile image. Downloads once and caches under LocalAppData/SpotifyWPF/cache
         public async Task<string?> GetProfileImageCachedPathAsync()
         {
@@ -429,6 +449,8 @@ namespace SpotifyWPF.Service
             var hash = sha.ComputeHash(bytes);
             return string.Concat(hash.Select(b => b.ToString("x2")));
         }
+
+        private readonly object _apiLock = new object();
 
         // Metodo pubblico usato per verificare/ripristinare l'autenticazione basandosi sul token salvato
         public async Task<bool> EnsureAuthenticatedAsync()
@@ -492,10 +514,18 @@ namespace SpotifyWPF.Service
                 return false;
             }
 
-            if (Api == null)
+            lock (_apiLock)
             {
-                Api = new SpotifyClient(access);
-                _loggingService.LogInfo("Created new Spotify API client");
+                if (Api == null)
+                {
+                    Api = new SpotifyClient(access);
+                    _loggingService.LogInfo("Created new Spotify API client");
+                    try
+                    {
+                        _tokenProvider.UpdateToken(access);
+                    }
+                    catch { }
+                }
             }
 
             _loggingService.LogInfo("Authentication verified successfully");
@@ -524,6 +554,12 @@ namespace SpotifyWPF.Service
                     ExpiresAtUtc = expiresAt
                 };
                 _tokenStorage.Save(_currentToken);
+                // Notify subscribers that the access token was updated so they can update their SDKs
+                try
+                {
+                    _tokenProvider.UpdateToken(refreshed.AccessToken);
+                }
+                catch { }
 
                 _loggingService.LogInfo($"Refreshed token saved (expires: {expiresAt})");
                 System.Diagnostics.Debug.WriteLine($"🔁 Refresh succeeded. New expiry: {expiresAt:o} (buffer: 5 minutes)");
@@ -617,7 +653,7 @@ namespace SpotifyWPF.Service
         private static readonly HttpClient _http = new HttpClient();
 
         // Centralized 429 (Rate Limit) handling for Spotify Web API calls using the SpotifyAPI.Web client
-        private static async Task<T> ExecuteApiWith429Async<T>(Func<Task<T>> action, int maxRetries = 2)
+        private static async Task<T> ExecuteApiWith429Async<T>(Func<Task<T>> action, int maxRetries = 0)
         {
             int attempt = 0;
             while (true)
@@ -638,12 +674,17 @@ namespace SpotifyWPF.Service
                         await Task.Delay(delayMs).ConfigureAwait(false);
                         continue;
                     }
+                    // If we exhausted retries or it's not a 429, check if it's a rate limit error
+                    if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    {
+                        throw new RateLimitException($"Spotify API rate limit exceeded. Please wait before trying again.", apiEx);
+                    }
                     throw; // rethrow others
                 }
             }
         }
 
-        private static async Task ExecuteApiWith429Async(Func<Task> action, int maxRetries = 2)
+        private static async Task ExecuteApiWith429Async(Func<Task> action, int maxRetries = 0)
         {
             await ExecuteApiWith429Async<object>(async () => { await action().ConfigureAwait(false); return new object(); }, maxRetries).ConfigureAwait(false);
         }
@@ -677,7 +718,7 @@ namespace SpotifyWPF.Service
         }
 
         // Centralized sender for raw HTTP calls with 429 backoff and auth header
-        private async Task<HttpResponseMessage> SendAsyncWithRetry(string url, HttpMethod method, string? jsonBody, bool includeAuthBearer, int maxRetries = 2)
+        private async Task<HttpResponseMessage> SendAsyncWithRetry(string url, HttpMethod method, string? jsonBody, bool includeAuthBearer, int maxRetries = 0)
         {
             int attempt = 0;
             while (true)
@@ -786,33 +827,45 @@ namespace SpotifyWPF.Service
                 Limit = limit
             };
 
-            var page = await Api.Playlists.CurrentUsers(req).ConfigureAwait(false);
-            result.Href = page.Href;
-            result.Limit = page.Limit ?? limit;
-            result.Offset = page.Offset ?? offset;
-            result.Total = page.Total ?? 0;
-            result.Next = page.Next;
-            result.Previous = page.Previous;
-            var items = new List<PlaylistDto>();
-            if (page.Items != null)
+            try
             {
-                foreach (var p in page.Items)
+                var page = await Api.Playlists.CurrentUsers(req).ConfigureAwait(false);
+                result.Href = page.Href;
+                result.Limit = page.Limit ?? limit;
+                result.Offset = page.Offset ?? offset;
+                result.Total = page.Total ?? 0;
+                result.Next = page.Next;
+                result.Previous = page.Previous;
+                var items = new List<PlaylistDto>();
+                if (page.Items != null)
                 {
-                    if (p == null || string.IsNullOrEmpty(p.Id)) continue;
-                    items.Add(new PlaylistDto
+                    foreach (var p in page.Items)
                     {
-                        Id = p.Id,
-                        Name = p.Name,
-                        OwnerName = p.Owner?.DisplayName ?? p.Owner?.Id,
-                        OwnerId = p.Owner?.Id,
-                        TracksTotal = p.Tracks?.Total ?? 0,
-                        IsPublic = p.Public,
-                        SnapshotId = p.SnapshotId,
-                        Href = p.Href
-                    });
+                        if (p == null || string.IsNullOrEmpty(p.Id)) continue;
+                        items.Add(new PlaylistDto
+                        {
+                            Id = p.Id,
+                            Name = p.Name,
+                            OwnerName = p.Owner?.DisplayName ?? p.Owner?.Id,
+                            OwnerId = p.Owner?.Id,
+                            TracksTotal = p.Tracks?.Total ?? 0,
+                            IsPublic = p.Public,
+                            SnapshotId = p.SnapshotId,
+                            Href = p.Href
+                        });
+                    }
                 }
+                result.Items = items;
             }
-            result.Items = items;
+            catch (APIException apiEx)
+            {
+                if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    throw new RateLimitException($"Spotify API rate limit exceeded while getting playlists. Please wait before trying again.", apiEx);
+                }
+                throw;
+            }
+
             return result;
         }
 
@@ -868,26 +921,69 @@ namespace SpotifyWPF.Service
             return result;
         }
 
+        private IReadOnlyList<Device>? _cachedDevices;
+        private DateTime _devicesLastFetched = DateTime.MinValue;
+        private readonly object _devicesLock = new object();
+
+        private CurrentlyPlayingContext? _cachedPlayback;
+        private DateTime _playbackLastFetched = DateTime.MinValue;
+        private readonly object _playbackLock = new object();
+
         // ====== Devices / Playback ======
         public async Task<IReadOnlyList<Device>> GetDevicesAsync()
         {
+            // Cache devices for 30 seconds to avoid excessive API calls
+            if ((DateTime.Now - _devicesLastFetched) < TimeSpan.FromSeconds(30) && _cachedDevices != null)
+            {
+                return _cachedDevices;
+            }
+
             if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
             {
                 return Array.Empty<Device>();
             }
-            var devices = await ExecuteApiWith429Async(() => Api.Player.GetAvailableDevices()).ConfigureAwait(false);
-            if (devices?.Devices != null) return devices.Devices;
-            return Array.Empty<Device>();
+
+            lock (_devicesLock)
+            {
+                // Double-check after lock
+                if ((DateTime.Now - _devicesLastFetched) < TimeSpan.FromSeconds(30) && _cachedDevices != null)
+                {
+                    return _cachedDevices;
+                }
+
+                var devices = ExecuteApiWith429Async(() => Api.Player.GetAvailableDevices(), maxRetries: 3).ConfigureAwait(false).GetAwaiter().GetResult();
+                _cachedDevices = devices?.Devices ?? new List<Device>();
+                _devicesLastFetched = DateTime.Now;
+                return _cachedDevices;
+            }
         }
 
         public async Task<CurrentlyPlayingContext?> GetCurrentPlaybackAsync()
         {
+            // Cache playback for 2 seconds to reduce API calls during rapid polling
+            if ((DateTime.Now - _playbackLastFetched) < TimeSpan.FromSeconds(2) && _cachedPlayback != null)
+            {
+                return _cachedPlayback;
+            }
+
             if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
             {
                 return null;
             }
-            var ctx = await ExecuteApiWith429Async(() => Api.Player.GetCurrentPlayback()).ConfigureAwait(false);
-            return ctx;
+
+            lock (_playbackLock)
+            {
+                // Double-check after lock
+                if ((DateTime.Now - _playbackLastFetched) < TimeSpan.FromSeconds(2) && _cachedPlayback != null)
+                {
+                    return _cachedPlayback;
+                }
+
+                var ctx = ExecuteApiWith429Async(() => Api.Player.GetCurrentPlayback(), maxRetries: 3).ConfigureAwait(false).GetAwaiter().GetResult();
+                _cachedPlayback = ctx;
+                _playbackLastFetched = DateTime.Now;
+                return _cachedPlayback;
+            }
         }
 
         public async Task TransferPlaybackAsync(IEnumerable<string> deviceIds, bool play)
@@ -912,7 +1008,7 @@ namespace SpotifyWPF.Service
             var req = new PlayerTransferPlaybackRequest(ids) { Play = play };
             try
             {
-                await ExecuteApiWith429Async(() => Api.Player.TransferPlayback(req)).ConfigureAwait(false);
+                await ExecuteApiWith429Async(() => Api.Player.TransferPlayback(req), maxRetries: 3).ConfigureAwait(false);
                 _loggingService.LogInfo("TransferPlaybackAsync: API call successful");
             }
             catch (APIException apiEx)
@@ -948,9 +1044,27 @@ namespace SpotifyWPF.Service
             };
             var json = Newtonsoft.Json.JsonConvert.SerializeObject(payload);
 
-            using var res = await SendAsyncWithRetry(url, HttpMethod.Put, json, includeAuthBearer: true).ConfigureAwait(false);
-            if (res.StatusCode == HttpStatusCode.NoContent) { res.Dispose(); return true; }
+            try
+            {
+                _loggingService.LogInfo($"PlayTrackOnDeviceAsync: Sending play for track {trackId} to device: {deviceId}\n");
+            }
+            catch { }
+
+            using var res = await SendAsyncWithRetry(url, HttpMethod.Put, json, includeAuthBearer: true, maxRetries: 3).ConfigureAwait(false);
+            if (res.StatusCode == HttpStatusCode.NoContent) { res.Dispose();
+                try { _loggingService.LogInfo($"PlayTrackOnDeviceAsync: HTTP 204 success for track {trackId} on device {deviceId}\n"); } catch { }
+                return true; }
             var ok = res.IsSuccessStatusCode;
+            try { _loggingService.LogInfo($"PlayTrackOnDeviceAsync: response={res.StatusCode} ok={ok} for track {trackId} on device {deviceId}\n"); } catch { }
+            if (!ok)
+            {
+                try
+                {
+                    var content = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    try { _loggingService.LogInfo($"PlayTrackOnDeviceAsync: response body: {content}\n"); } catch { }
+                }
+                catch { }
+            }
             res.Dispose();
             return ok;
         }
@@ -1145,6 +1259,12 @@ namespace SpotifyWPF.Service
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
             using var res = await _http.SendAsync(req).ConfigureAwait(false);
+
+            if (res.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            {
+                throw new RateLimitException($"Spotify API rate limit exceeded while getting followed artists. Please wait before trying again.");
+            }
+
             res.EnsureSuccessStatusCode();
             var json = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
 
@@ -1644,14 +1764,10 @@ namespace SpotifyWPF.Service
 
                 if (response.StatusCode == (HttpStatusCode)429 && attempt <= maxAttempts)
                 {
-                    var retryAfterSeconds = response.Headers.RetryAfter?.Delta?.TotalSeconds
-                                            ?? RateLimitHelper.TryExtractRetryAfterSeconds(responseBody)
-                                            ?? Math.Pow(2, attempt);
-
-                    var delaySeconds = Math.Min(retryAfterSeconds, 60);
-                    _loggingService.LogWarning($"Spotify rate limit during {operationDescription}. Retrying in {delaySeconds:F0}s (attempt {attempt}/{maxAttempts}).");
-                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken).ConfigureAwait(false);
-                    continue;
+                    // Do not retry on 429 - throw immediately to avoid flooding
+                    var rateLimitMessage = $"Rate limit exceeded during {operationDescription}. Status {(int)response.StatusCode} {response.ReasonPhrase}. Body: {responseBody}";
+                    _loggingService.LogError(rateLimitMessage);
+                    throw new HttpRequestException(rateLimitMessage);
                 }
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized && attempt <= maxAttempts)
@@ -2162,9 +2278,22 @@ namespace SpotifyWPF.Service
             return result;
         }
 
+        private readonly Dictionary<string, (List<TrackDto> Tracks, DateTime Fetched)> _albumTracksCache = new();
+        private readonly object _albumTracksLock = new object();
+
         public async Task<List<TrackDto>> GetAlbumTracksAsync(string albumId)
         {
             ValidateSpotifyId(albumId, nameof(albumId));
+
+            // Check cache first
+            lock (_albumTracksLock)
+            {
+                if (_albumTracksCache.TryGetValue(albumId, out var cached) &&
+                    (DateTime.Now - cached.Fetched) < TimeSpan.FromHours(1)) // Cache for 1 hour
+                {
+                    return cached.Tracks;
+                }
+            }
 
             if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
             {
@@ -2199,6 +2328,12 @@ namespace SpotifyWPF.Service
                     }
                 }
 
+                // Cache the result
+                lock (_albumTracksLock)
+                {
+                    _albumTracksCache[albumId] = (tracks, DateTime.Now);
+                }
+
                 return tracks;
             }
             catch (Exception ex)
@@ -2208,9 +2343,25 @@ namespace SpotifyWPF.Service
             }
         }
 
+        private PagingDto<AlbumDto>? _cachedNewReleases;
+        private DateTime _newReleasesLastFetched = DateTime.MinValue;
+        private readonly object _newReleasesLock = new object();
+
         public async Task<PagingDto<AlbumDto>> GetNewReleasesPageAsync(int offset, int limit)
         {
             ValidatePaginationParameters(offset, limit, nameof(GetNewReleasesPageAsync));
+
+            // For simplicity, only cache the first page (offset=0)
+            if (offset == 0 && (DateTime.Now - _newReleasesLastFetched) < TimeSpan.FromMinutes(30))
+            {
+                lock (_newReleasesLock)
+                {
+                    if (_cachedNewReleases != null)
+                    {
+                        return _cachedNewReleases;
+                    }
+                }
+            }
 
             var result = new PagingDto<AlbumDto>();
             if (!await EnsureAuthenticatedAsync().ConfigureAwait(false) || Api == null)
@@ -2261,6 +2412,16 @@ namespace SpotifyWPF.Service
                     }
                 }
                 result.Items = items;
+
+                // Cache the first page
+                if (offset == 0)
+                {
+                    lock (_newReleasesLock)
+                    {
+                        _cachedNewReleases = result;
+                        _newReleasesLastFetched = DateTime.Now;
+                    }
+                }
 
                 return result;
             }

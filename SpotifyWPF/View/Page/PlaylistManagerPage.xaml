@@ -525,7 +525,7 @@
                                     <DataGridTextColumn Header="Track Name" Binding="{Binding Name}" Width="230"/>
                                     <DataGridTextColumn Header="Artist" Binding="{Binding Artists}" Width="150"/>
                                     <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="60"/>
-                                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationMs}" Width="80"/>
+                                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationFormatted}" Width="80"/>
                                     <DataGridTemplateColumn Header="Remove" Width="60">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>

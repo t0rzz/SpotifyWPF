@@ -101,6 +101,12 @@
             player.addListener('account_error', ({ message }) => {
                 console.error('Account Error:', message);
                 updateStatus('Account Error: ' + message);
+                
+                // Send account error to C# so it can dispose/unload the player
+                postMessage({
+                    type: 'account_error',
+                    message: message
+                });
             });
 
             player.addListener('playback_error', ({ message }) => {

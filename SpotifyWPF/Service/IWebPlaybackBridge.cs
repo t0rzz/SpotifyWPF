@@ -10,7 +10,7 @@ namespace SpotifyWPF.Service
     /// </summary>
     public interface IWebPlaybackBridge
     {
-        /// <summary>
+    Task UpdateTokenAsync(string newAccessToken);
         /// Initialize the WebView2 with the player HTML and access token
         /// </summary>
         /// <param name="accessToken">Spotify access token</param>
@@ -70,5 +70,10 @@ namespace SpotifyWPF.Service
         /// Event fired when Web Playback SDK reports ready with device ID
         /// </summary>
         event Action<string>? OnReadyDeviceId;
+
+        /// <summary>
+        /// Event fired when Web Playback SDK reports account error (non-premium user)
+        /// </summary>
+        event Action<string>? OnAccountError;
     }
 }

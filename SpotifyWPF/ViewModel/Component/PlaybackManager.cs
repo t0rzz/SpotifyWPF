@@ -13,7 +13,7 @@ namespace SpotifyWPF.ViewModel.Component
     /// <summary>
     /// Component responsible for all playback control operations
     /// </summary>
-    public class PlaybackManager
+    public class PlaybackManager : System.ComponentModel.INotifyPropertyChanged
     {
         private readonly ISpotify _spotify;
         private readonly IWebPlaybackBridge _webPlaybackBridge;
@@ -69,7 +69,7 @@ namespace SpotifyWPF.ViewModel.Component
             set
             {
                 _currentTrack = value;
-                // Property change notification handled by PlayerViewModel
+                OnPropertyChanged(nameof(CurrentTrack));
             }
         }
 
@@ -79,7 +79,7 @@ namespace SpotifyWPF.ViewModel.Component
             set
             {
                 _isPlaying = value;
-                // Property change notification handled by PlayerViewModel
+                OnPropertyChanged(nameof(IsPlaying));
             }
         }
 
@@ -89,7 +89,7 @@ namespace SpotifyWPF.ViewModel.Component
             set
             {
                 _positionMs = value;
-                // Property change notification handled by PlayerViewModel
+                OnPropertyChanged(nameof(PositionMs));
             }
         }
 
@@ -136,6 +136,17 @@ namespace SpotifyWPF.ViewModel.Component
         public DateTimeOffset PendingPlayUntil => _pendingPlayUntil;
 
         #endregion
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+        protected void OnPropertyChanged(string propName)
+        {
+            try
+            {
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propName));
+            }
+            catch { }
+        }
 
         #region Playback Control Methods
 
@@ -743,6 +754,9 @@ namespace SpotifyWPF.ViewModel.Component
                     return;
                 }
 
+                // Ensure devices list is fresh for accurate active device detection
+                try { await _deviceManager.RefreshDevicesAsync(); } catch { }
+
                 // Try to get web device id quickly if missing
                 if (string.IsNullOrEmpty(webPlaybackDeviceId))
                 {
@@ -788,11 +802,53 @@ namespace SpotifyWPF.ViewModel.Component
                 var activeDevice = devices.FirstOrDefault(d => d.IsActive);
                 if (activeDevice != null && !string.IsNullOrEmpty(activeDevice.Id) && !string.IsNullOrEmpty(track.Id))
                 {
-                    var ok = await _spotify.PlayTrackOnDeviceAsync(activeDevice.Id, track.Id);
-                    if (ok)
+                        LoggingService.LogToFile($"[PLAY_CALL] Attempting PlayTrackOnDeviceAsync on device: {activeDevice.Id} track: {track.Id}\n");
+                    try
                     {
-                        IsPlaying = true;
-                        LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully on active device\n");
+                        var ok = await _spotify.PlayTrackOnDeviceAsync(activeDevice.Id, track.Id);
+                        LoggingService.LogToFile($"[PLAY_CALL] PlayTrackOnDeviceAsync result for device {activeDevice.Id}: {ok}\n");
+                        if (ok)
+                        {
+                            // Immediately set playback state so UI can update without waiting for polling
+                            CurrentTrack = track;
+                            PositionMs = 0;
+                            IsPlaying = true;
+                            LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully on active device\n");
+                            // Quick refresh to ensure UI learns about active device and updates player state
+                            try { await _deviceManager.RefreshDevicesAsync(); } catch { }
+                                try
+                                {
+                                    var payload = new SpotifyWPF.ViewModel.Messages.PlaybackUpdatePayload
+                                    {
+                                        DeviceId = activeDevice?.Id,
+                                        TrackId = track.Id
+                                    };
+                                    GalaSoft.MvvmLight.Messenger.Default.Send(payload, SpotifyWPF.ViewModel.MessageType.PlaybackUpdated);
+                                }
+                            catch { }
+                            return;
+                        }
+                    }
+                    catch (SpotifyWPF.Service.RateLimitException rateEx)
+                    {
+                        LoggingService.LogToFile($"[PLAY_CALL] Rate limit exceeded on active device {activeDevice.Id}: {rateEx.Message}\n");
+                        // Show user-friendly message and stop trying
+                        int? retryAfter = null;
+                        if (rateEx.InnerException is APIException apiEx)
+                        {
+                            retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                        }
+                        var message = retryAfter.HasValue ?
+                            $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to play tracks again." :
+                            "Spotify API rate limit exceeded. Please wait a moment before trying to play tracks again.";
+                        await App.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            System.Windows.MessageBox.Show(
+                                message,
+                                "Rate Limit Exceeded",
+                                System.Windows.MessageBoxButton.OK,
+                                System.Windows.MessageBoxImage.Warning);
+                        });
                         return;
                     }
                 }
@@ -807,20 +863,104 @@ namespace SpotifyWPF.ViewModel.Component
                 try
                 {
                     var playback = await _spotify.GetCurrentPlaybackAsync();
-                    if (playback?.Device != null && !string.IsNullOrEmpty(playback.Device.Id) && !string.IsNullOrEmpty(track.Id))
+                    var playbackDeviceId = playback?.Device?.Id;
+                    if (!string.IsNullOrEmpty(playbackDeviceId) && !string.IsNullOrEmpty(track.Id))
                     {
-                        var ok = await _spotify.PlayTrackOnDeviceAsync(playback.Device.Id, track.Id);
+                        LoggingService.LogToFile($"[PLAY_CALL] Attempting PlayTrackOnDeviceAsync on device (from API): {playbackDeviceId} track: {track.Id}\n");
+                        var ok = await _spotify.PlayTrackOnDeviceAsync(playbackDeviceId!, track.Id);
+                        LoggingService.LogToFile($"[PLAY_CALL] PlayTrackOnDeviceAsync result for device {playbackDeviceId}: {ok}\n");
                         if (ok)
                         {
+                            CurrentTrack = track;
+                            PositionMs = 0;
                             IsPlaying = true;
                             LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully on API playback device\n");
+                            try { await _deviceManager.RefreshDevicesAsync(); } catch { }
+                            try
+                            {
+                                // Notify UI that playback started for immediate refresh; include device/track payload
+                                var payload = new SpotifyWPF.ViewModel.Messages.PlaybackUpdatePayload
+                                {
+                                    DeviceId = playback?.Device?.Id,
+                                    TrackId = track.Id
+                                };
+                                GalaSoft.MvvmLight.Messenger.Default.Send(payload, SpotifyWPF.ViewModel.MessageType.PlaybackUpdated);
+                            }
+                            catch { }
                             return;
+                        }
+                        else
+                        {
+                            try
+                            {
+                                LoggingService.LogToFile($"[PLAY_CALL] PlayTrackOnDeviceAsync failed for {playbackDeviceId}. Trying TransferPlaybackAsync(play=true) and retry...\n");
+                                await _spotify.TransferPlaybackAsync(new[] { playbackDeviceId! }, true);
+                                try { await Task.Delay(350, ct); } catch { }
+                                var ok2 = await _spotify.PlayTrackOnDeviceAsync(playbackDeviceId!, track.Id);
+                                LoggingService.LogToFile($"[PLAY_CALL] Retry PlayTrackOnDeviceAsync result for device {playbackDeviceId}: {ok2}\n");
+                                if (ok2)
+                                {
+                                    CurrentTrack = track;
+                                    PositionMs = 0;
+                                    IsPlaying = true;
+                                    LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully on API playback device after transfer fallback\n");
+                                    try { await _deviceManager.RefreshDevicesAsync(); } catch { }
+                                    try { GalaSoft.MvvmLight.Messenger.Default.Send(new SpotifyWPF.ViewModel.Messages.PlaybackUpdatePayload { DeviceId = playbackDeviceId, TrackId = track.Id }, SpotifyWPF.ViewModel.MessageType.PlaybackUpdated); } catch { }
+                                    return;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LoggingService.LogToFile($"[PLAY_CALL] TransferPlaybackAsync fallback failed: {ex.Message}\n");
+                                if (ex is SpotifyWPF.Service.RateLimitException rateEx)
+                                {
+                                    // Show user-friendly message for rate limit
+                                    int? retryAfter = null;
+                                    if (rateEx.InnerException is APIException apiEx)
+                                    {
+                                        retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                                    }
+                                    var message = retryAfter.HasValue ?
+                                        $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to play tracks again." :
+                                        "Spotify API rate limit exceeded. Please wait a moment before trying to play tracks again.";
+                                    await App.Current.Dispatcher.InvokeAsync(() =>
+                                    {
+                                        System.Windows.MessageBox.Show(
+                                            message,
+                                            "Rate Limit Exceeded",
+                                            System.Windows.MessageBoxButton.OK,
+                                            System.Windows.MessageBoxImage.Warning);
+                                    });
+                                    return;
+                                }
+                            }
                         }
                     }
                 }
                 catch (Exception apiEx)
                 {
                     LoggingService.LogToFile($"ORCHESTRATE ❌ Error getting playback from API: {apiEx.Message}\n");
+                    if (apiEx is SpotifyWPF.Service.RateLimitException rateEx)
+                    {
+                        // Show user-friendly message for rate limit
+                        int? retryAfter = null;
+                        if (rateEx.InnerException is APIException innerApiEx)
+                        {
+                            retryAfter = GetRetryAfterSeconds(innerApiEx.Response?.Headers);
+                        }
+                        var message = retryAfter.HasValue ?
+                            $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to play tracks again." :
+                            "Spotify API rate limit exceeded. Please wait a moment before trying to play tracks again.";
+                        await App.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            System.Windows.MessageBox.Show(
+                                message,
+                                "Rate Limit Exceeded",
+                                System.Windows.MessageBoxButton.OK,
+                                System.Windows.MessageBoxImage.Warning);
+                        });
+                        return;
+                    }
                 }
 
                 if (ct.IsCancellationRequested)
@@ -840,6 +980,27 @@ namespace SpotifyWPF.ViewModel.Component
                     catch (Exception txEx)
                     {
                         LoggingService.LogToFile($"ORCHESTRATE ⚠️ Transfer (play=false) failed: {txEx.Message}\n");
+                        if (txEx is SpotifyWPF.Service.RateLimitException rateEx)
+                        {
+                            // Show user-friendly message for rate limit
+                            int? retryAfter = null;
+                            if (rateEx.InnerException is APIException apiEx)
+                            {
+                                retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                            }
+                            var message = retryAfter.HasValue ?
+                                $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to play tracks again." :
+                                "Spotify API rate limit exceeded. Please wait a moment before trying to play tracks again.";
+                            await App.Current.Dispatcher.InvokeAsync(() =>
+                            {
+                                System.Windows.MessageBox.Show(
+                                    message,
+                                    "Rate Limit Exceeded",
+                                    System.Windows.MessageBoxButton.OK,
+                                    System.Windows.MessageBoxImage.Warning);
+                            });
+                            return;
+                        }
                     }
 
                     try { await Task.Delay(350, ct); } catch { }
@@ -850,11 +1011,16 @@ namespace SpotifyWPF.ViewModel.Component
                         return;
                     }
 
+                    LoggingService.LogToFile($"[PLAY_CALL] Attempting PlayTrackOnDeviceAsync on WEB device: {webPlaybackDeviceId} track: {track.Id}\n");
                     var ok = await _spotify.PlayTrackOnDeviceAsync(webPlaybackDeviceId, track.Id);
+                    LoggingService.LogToFile($"[PLAY_CALL] PlayTrackOnDeviceAsync result for WEB device {webPlaybackDeviceId}: {ok}\n");
                     if (ok)
                     {
-                        IsPlaying = true;
+                            CurrentTrack = track;
+                            PositionMs = 0;
+                            IsPlaying = true;
                         LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully after Web device transfer\n");
+                        try { await _deviceManager.RefreshDevicesAsync(); } catch { }
                         return;
                     }
                     else
@@ -873,6 +1039,27 @@ namespace SpotifyWPF.ViewModel.Component
                     catch (Exception txEx2)
                     {
                         LoggingService.LogToFile($"ORCHESTRATE ⚠️ Transfer retry (play=true) failed: {txEx2.Message}\n");
+                        if (txEx2 is SpotifyWPF.Service.RateLimitException rateEx)
+                        {
+                            // Show user-friendly message for rate limit
+                            int? retryAfter = null;
+                            if (rateEx.InnerException is APIException apiEx)
+                            {
+                                retryAfter = GetRetryAfterSeconds(apiEx.Response?.Headers);
+                            }
+                            var message = retryAfter.HasValue ?
+                                $"Spotify API rate limit exceeded. Please wait {retryAfter.Value} seconds before trying to play tracks again." :
+                                "Spotify API rate limit exceeded. Please wait a moment before trying to play tracks again.";
+                            await App.Current.Dispatcher.InvokeAsync(() =>
+                            {
+                                System.Windows.MessageBox.Show(
+                                    message,
+                                    "Rate Limit Exceeded",
+                                    System.Windows.MessageBoxButton.OK,
+                                    System.Windows.MessageBoxImage.Warning);
+                            });
+                            return;
+                        }
                     }
 
                     if (ct.IsCancellationRequested)
@@ -887,6 +1074,7 @@ namespace SpotifyWPF.ViewModel.Component
                     {
                         IsPlaying = true;
                         LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started successfully after retry transfer\n");
+                        try { await _deviceManager.RefreshDevicesAsync(); } catch { }
                         return;
                     }
                     else
@@ -919,10 +1107,13 @@ namespace SpotifyWPF.ViewModel.Component
                         // Fix threading issue: dispatch to UI thread
                         await App.Current.Dispatcher.InvokeAsync(async () =>
                         {
+                            try { LoggingService.LogToFile($"[WEB_CALL] Calling WebPlaybackBridge.PlayAsync for URI {track.Uri}\n"); } catch { }
                             await _webPlaybackBridge.PlayAsync(new[] { track.Uri });
+                            try { LoggingService.LogToFile($"[WEB_CALL] WebPlaybackBridge.PlayAsync invoked for URI {track.Uri}\n"); } catch { }
                         });
                         IsPlaying = true;
                         LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started via JS bridge\n");
+                        try { await _deviceManager.RefreshDevicesAsync(); } catch { }
                     }
                     catch (Exception jsEx)
                     {
@@ -994,28 +1185,20 @@ namespace SpotifyWPF.ViewModel.Component
                 var inc = (int)Math.Max(0, Math.Min(2000, delta.TotalMilliseconds));
                 var newPos = PositionMs + inc;
 
-                // If we hit or passed the end while still playing (auto-advance/repeat), wrap to 0
+                // If we hit or passed the end while still playing (auto-advance/repeat), snap to the duration
+                // but do not immediately wrap to 0. The authoritative state will be refreshed by polling/bridge
+                // and will perform the actual track change or reset when appropriate. This avoids flicker and
+                // incorrect immediate resets while audio is still playing.
                 if (newPos >= (CurrentTrack.DurationMs - 20))
                 {
-                    // Reset to start and fetch fresh state to get the next track/position
-                    PositionMs = 0;
+                    PositionMs = CurrentTrack.DurationMs;
                     _lastUiProgressUpdate = now;
-                    // Fire-and-forget a quick state refresh so artwork/title/progress update promptly
-                    _ = Task.Run(() =>
-                    {
-                        try
-                        {
-                            // RefreshPlayerStateAsync will be called by PlayerViewModel
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Error refreshing player state: {ex.Message}");
-                        }
-                    });
+                    _loggingService.LogDebug($"[UI_PROGRESS] Snapped PositionMs to Duration: {PositionMs}ms (Duration:{CurrentTrack.DurationMs}ms)");
                     return;
                 }
 
                 PositionMs = newPos;
+                _loggingService.LogDebug($"[UI_PROGRESS] Advanced PositionMs by {inc}ms -> {newPos} (Duration:{CurrentTrack?.DurationMs}ms)");
             }
             catch { }
         }
@@ -1075,8 +1258,14 @@ namespace SpotifyWPF.ViewModel.Component
             {
                 // 🛑 SMART POLLING: Skip polling during active playback to avoid disrupting real-time updates
                 // But resume polling if Web Player is no longer the active device (playback transferred elsewhere)
-                bool isWebPlayerActive = !string.IsNullOrEmpty(_deviceManager.WebPlaybackDeviceId) &&
-                                       _deviceManager.Devices.Any(d => d.IsActive && d.Id == _deviceManager.WebPlaybackDeviceId);
+                var webId = _deviceManager.WebPlaybackDeviceId;
+                var devices = _deviceManager.Devices;
+                bool isWebPlayerActive = false;
+                if (!string.IsNullOrEmpty(webId) && devices != null)
+                {
+                    // Use local device collection and explicit checks so the compiler can prove non-nullability
+                    isWebPlayerActive = devices.Any(d => d.IsActive && string.Equals(d.Id, webId, StringComparison.Ordinal));
+                }
 
                 if (IsPlaying && CurrentTrack != null && !string.IsNullOrEmpty(CurrentTrack.Id) && isWebPlayerActive)
                 {
@@ -1092,6 +1281,19 @@ namespace SpotifyWPF.ViewModel.Component
                 });
             }
             catch { }
+        }
+
+        private int? GetRetryAfterSeconds(IReadOnlyDictionary<string, string>? headers)
+        {
+            if (headers == null) return null;
+            if (headers.TryGetValue("Retry-After", out var value))
+            {
+                if (int.TryParse(value, out var seconds))
+                {
+                    return seconds;
+                }
+            }
+            return null;
         }
 
         #endregion

@@ -12,6 +12,7 @@
 
     <UserControl.Resources>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:BooleanToVisibilityConverterShow x:Key="BooleanToVisibilityConverterShow"/>
         <ContextMenu x:Key="PlaylistsContextMenu" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}">
             <ContextMenu.Template>
                 <ControlTemplate TargetType="ContextMenu">
@@ -92,6 +93,14 @@
                     </Ellipse.Fill>
                 </Ellipse>
                 <TextBlock Text="{Binding GreetingText}" FontSize="16" FontWeight="SemiBold" Margin="8,0,0,0"/>
+                <!-- FREE Badge (Spotify-style) -->
+                <Border Visibility="{Binding IsFreeUser, Converter={StaticResource BooleanToVisibilityConverterShow}}"
+                        Background="#1DB954" CornerRadius="12" Margin="8,-2,0,0" Padding="8,2"
+                        BorderBrush="#1DB954" BorderThickness="1"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="FREE" FontSize="10" FontWeight="Bold" Foreground="White"
+                               VerticalAlignment="Center"/>
+                </Border>
             </StackPanel>
         </Border>
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,8,8,0">
@@ -287,6 +296,7 @@
                                                     <!-- Proxy to expose the row's DataContext (track) within this ContextMenu -->
                                                     <view:BindingProxy x:Key="RowProxy" Data="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                                     <conv:MultiJoinConverter x:Key="MultiJoin"/>
+                                                    <conv:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
                                                     <Style x:Key="TracksMenuItemParent" TargetType="MenuItem" BasedOn="{x:Null}">
                                                         <Setter Property="OverridesDefaultStyle" Value="True"/>
                                                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -382,7 +392,8 @@
                                                     </Style>
                                                 </ContextMenu.Resources>
                                                 <MenuItem StaysOpenOnClick="False" x:Name="PlayToMenuItemPlaylists" Header="Play to" Style="{StaticResource TracksMenuItemParent}"
-                                                          Tag="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=PlacementTarget.DataContext.Id}">
+                                                          Tag="{Binding RelativeSource={RelativeSource AncestorType=ContextMenu}, Path=PlacementTarget.DataContext.Id}"
+                                                          IsEnabled="{Binding PlacementTarget.Tag.IsFreeUser, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource InverseBooleanConverter}}">
                                                     <!-- Submenu opens without extra commands; devices refresh when menu opens at ViewModel level if needed -->
                                                     <MenuItem.ItemsSource>
                                                         <Binding RelativeSource="{RelativeSource AncestorType=ContextMenu}" Path="PlacementTarget.Tag.Devices"/>

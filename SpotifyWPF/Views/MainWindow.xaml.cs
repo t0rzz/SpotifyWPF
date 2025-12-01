@@ -1,13 +1,17 @@
+using System.Windows.Data;
 using System;
 using System.IO;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.ComponentModel;
+using System.Windows.Media.Imaging;
 using System.Windows.Input;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using SpotifyWPF.Service;
+using SpotifyWPF.Service.MessageBoxes;
 using SpotifyWPF.ViewModel;
 using SpotifyWPF.View;
 using GalaSoft.MvvmLight;
@@ -210,6 +214,13 @@ namespace SpotifyWPF.Views
                 }
             }
 
+            // Stop local HTTP host for player
+            try
+            {
+                WebPlaybackHost.Stop();
+            }
+            catch { }
+
             // Dispose PlayerViewModel
             if (_playerViewModel is IDisposable disposablePlayer)
             {
@@ -253,6 +264,28 @@ namespace SpotifyWPF.Views
                         this.Hide();
                     }
                     e.Cancel = true;
+                }
+                else
+                {
+                    // Ensure tray icon is cleaned up so the app doesn't remain in background
+                    try
+                    {
+                        if (_playerViewModel?.TrayIconManager != null)
+                        {
+                            // Dispose the tray manager explicitly before closing if user doesn't want minimize-to-tray
+                            _playerViewModel.TrayIconManager.Dispose();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error disposing tray manager during close: {ex.Message}");
+                    }
+                    // Ensure application exits: sometimes native tray or WebView threads keep the process alive
+                    try
+                    {
+                        System.Windows.Application.Current.Shutdown();
+                    }
+                    catch { }
                 }
             }
             catch (Exception ex)
@@ -332,8 +365,10 @@ namespace SpotifyWPF.Views
                 }
                 
                 // Create PlayerViewModel
-                var spotify = locator.Main.GetSpotifyService();
-                _playerViewModel = new PlayerViewModel(spotify, _webPlaybackBridge, _loggingService!);
+                    var spotify = locator.Main.GetSpotifyService();
+                    var tokenProvider = GalaSoft.MvvmLight.Ioc.SimpleIoc.Default.GetInstance<ITokenProvider>();
+                    var subscriptionDialogService = GalaSoft.MvvmLight.Ioc.SimpleIoc.Default.GetInstance<ISubscriptionDialogService>();
+                    _playerViewModel = new PlayerViewModel(spotify, _webPlaybackBridge, _loggingService!, tokenProvider, subscriptionDialogService);
                 LoggingService.LogToFile("MainWindow: PlayerViewModel created\n");
                 
                 // Set player on MainViewModel
@@ -345,10 +380,61 @@ namespace SpotifyWPF.Views
                 LoggingService.LogToFile($"MainWindow: Access token obtained: {!string.IsNullOrEmpty(accessToken)}\n");
                 if (!string.IsNullOrEmpty(accessToken))
                 {
+                    // Start a lightweight local HTTP host for the player to ensure SDP/Web Playback SDK origin is trusted
+                    try { WebPlaybackHost.Start(); } catch { }
                     var playerHtmlPath = GetPlayerHtmlPath();
                     LoggingService.LogToFile($"MainWindow: Player HTML path: {playerHtmlPath}\n");
                     await _playerViewModel.InitializeAsync(accessToken, playerHtmlPath);
                     LoggingService.LogToFile("MainWindow: PlayerViewModel initialized successfully\n");
+
+                        // ✅ Hook album art UI events so we can log when the Image control receives the source
+                        try
+                        {
+                            var albumImage = this.FindName("PlayerAlbumImage") as Image;
+                            if (albumImage != null)
+                            {
+                                                        try
+                                                        {
+                                                            LoggingService.LogToFile($"[ALBUM_UI] Initial albumImage.Source={albumImage.Source?.GetType().FullName ?? "<null>"}\n");
+                                                            var be = BindingOperations.GetBindingExpression(albumImage, Image.SourceProperty);
+                                                            LoggingService.LogToFile($"[ALBUM_UI] Initial Binding: {be?.ParentBinding?.Path?.Path ?? "<none>"}\n");
+                                                        }
+                                                        catch (Exception ex)
+                                                        {
+                                                            LoggingService.LogToFile($"[ALBUM_UI] Error reading initial binding: {ex.Message}\n");
+                                                        }
+                                LoggingService.LogToFile($"[ALBUM_UI] Hooking album image events\n");
+
+                                albumImage.ImageFailed += PlayerAlbumImage_ImageFailed;
+
+                                var dpd = DependencyPropertyDescriptor.FromProperty(Image.SourceProperty, typeof(Image));
+                                if (dpd != null)
+                                {
+                                    dpd.AddValueChanged(albumImage, PlayerAlbumImage_SourceChanged);
+                                }
+                                albumImage.TargetUpdated += PlayerAlbumImage_TargetUpdated;
+                                // Listen to ViewModel property change for diagnostics
+                                var vm = locator.Main?.Player;
+                                if (vm != null)
+                                {
+                                    // Capture the image control in the closure so we can compare VM->UI
+                                    var theImg = albumImage;
+                                    vm.PropertyChanged += (s, evt) =>
+                                    {
+                                        if (evt.PropertyName == "CurrentAlbumArtImage")
+                                        {
+                                            var uiSource = theImg?.Source as BitmapImage;
+                                            LoggingService.LogToFile($"[ALBUM_UI] PlayerViewModel.CurrentAlbumArtImage changed. VMHasImage={(vm.CurrentAlbumArtImage != null ? "true" : "false")}, UI Source={(uiSource?.UriSource?.ToString() ?? "<null>")}\n");
+                                        }
+                                    };
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LoggingService.LogToFile($"[ALBUM_UI] Error hooking album image events: {ex.Message}\n");
+                        }
+
                 }
                 else
                 {
@@ -376,6 +462,12 @@ namespace SpotifyWPF.Views
             var projectDir = Path.GetDirectoryName(binDir);
             var playerPath = Path.Combine(projectDir!, "Assets", "player.html");
             
+            // Prefer local HTTP host if available so Web Playback SDK registers origin correctly
+            if (!string.IsNullOrEmpty(WebPlaybackHost.Url))
+            {
+                return WebPlaybackHost.Url!;
+            }
+
             if (File.Exists(playerPath))
             {
                 return $"file:///{playerPath.Replace('\\', '/')}";
@@ -553,6 +645,72 @@ namespace SpotifyWPF.Views
 
             // Update ViewModel position (throttled seeking handled in ViewModel)
             _playerViewModel.PositionMs = (int)e.NewValue;
+        }
+
+        /// <summary>
+        /// Log when the album image binding target changes so we can detect when UI actually shows an image
+        /// </summary>
+        private void PlayerAlbumImage_SourceChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                var img = sender as Image;
+                var src = img?.Source;
+                string srcStr = "<null>";
+                if (src == null) srcStr = "<null>";
+                else if (src is BitmapImage bi) srcStr = bi.UriSource?.ToString() ?? bi.GetType().Name;
+                else srcStr = src.GetType().FullName ?? src.GetType().Name;
+                var sourceLog = "[ALBUM_UI] PlayerAlbumImage.SourceChanged -> " + (srcStr ?? "<null>") + "\n";
+                LoggingService.LogToFile(sourceLog);
+
+                var vm = _locator?.Main?.Player as PlayerViewModel;
+                if (vm != null)
+                {
+                    var hasVmImg = vm.CurrentAlbumArtImage != null ? "true" : "false";
+                    var trackArt = vm.CurrentTrack?.AlbumArtUri?.ToString() ?? "<null>";
+                    string logMessage = string.Format("[ALBUM_UI] VM State: CurrentAlbumArtImageSet={0}, CurrentTrack.AlbumArtUri={1}\n", hasVmImg, trackArt);
+                    LoggingService.LogToFile(logMessage);
+                }
+            }
+            catch (Exception ex)
+            {
+                var err = "[ALBUM_UI] PlayerAlbumImage_SourceChanged error: " + ex.Message + "\n";
+                LoggingService.LogToFile(err);
+            }
+        }
+
+        /// <summary>
+        /// Log when the album art image fails to load
+        /// </summary>
+        private void PlayerAlbumImage_ImageFailed(object? sender, ExceptionRoutedEventArgs e)
+        {
+            try
+            {
+                var img = sender as Image;
+                var src = img?.Source as BitmapImage;
+                var srcUri = src?.UriSource?.ToString() ?? "<null>";
+                string exceptionMsg = e.ErrorException?.Message ?? "<null>";
+                string logMessage = string.Format("[ALBUM_UI] PlayerAlbumImage.ImageFailed: source={0} exception={1}\n", srcUri, exceptionMsg);
+                LoggingService.LogToFile(logMessage);
+            }
+            catch (Exception ex)
+            {
+                var err = "[ALBUM_UI] ImageFailed handler error: " + ex.Message + "\n";
+                LoggingService.LogToFile(err);
+            }
+        }
+
+        private void PlayerAlbumImage_TargetUpdated(object? sender, DataTransferEventArgs e)
+        {
+            try
+            {
+                LoggingService.LogToFile($"[ALBUM_UI] PlayerAlbumImage.TargetUpdated event fired (Binding updated)\n");
+            }
+            catch (Exception ex)
+            {
+                var err = "[ALBUM_UI] PlayerAlbumImage_TargetUpdated error: " + ex.Message + "\n";
+                LoggingService.LogToFile(err);
+            }
         }
 
     // Volume slider now uses binding directly (Player.Volume with UpdateSourceTrigger=PropertyChanged)

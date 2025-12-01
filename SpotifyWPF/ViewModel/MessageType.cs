@@ -4,5 +4,9 @@
     {
         LoginSuccessful,
         AuthenticationRequired
+        ,
+        DevicesUpdated
+        ,
+        PlaybackUpdated
     }
 }

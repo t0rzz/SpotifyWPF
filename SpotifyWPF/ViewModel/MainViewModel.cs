@@ -62,6 +62,16 @@ namespace SpotifyWPF.ViewModel
             MessengerInstance.Register<object>(this, MessageType.LoginSuccessful, LoginSuccessful);
             MessengerInstance.Register<object>(this, MessageType.AuthenticationRequired, OnAuthenticationRequired);
 
+            // Refresh devices menu whenever DeviceManager broadcasts a change
+            MessengerInstance.Register<object>(this, MessageType.DevicesUpdated, _ =>
+            {
+                // Trigger a best-effort async refresh; this avoids waiting when called from background threads
+                _ = Task.Run(async () =>
+                {
+                    try { await RefreshDevicesMenuAsync().ConfigureAwait(false); } catch { }
+                });
+            });
+
             MenuItems = new ObservableCollection<MenuItemViewModel>
             {
                 new MenuItemViewModel("File")
@@ -563,7 +573,37 @@ namespace SpotifyWPF.ViewModel
                                 };
                                 root.MenuItems.Add(newItem);
                                 System.Diagnostics.Debug.WriteLine($"LoadDevicesMenuAsync: Added new device '{deviceName}' to menu");
+                                System.Diagnostics.Debug.WriteLine($"LoadDevicesMenuAsync: Device list contains API device: {d.Id}");
                             }
+                        }
+
+                        // If DeviceManager reported a web playback device that isn't yet returned by the API, ensure it appears in the menu
+                        try
+                        {
+                            var appPlayer = Player;
+                            var webDeviceId = appPlayer?.WebPlaybackDeviceId;
+                            if (!string.IsNullOrEmpty(webDeviceId) && (devices == null || !devices.Any(x => x.Id == webDeviceId))
+                                && (appPlayer?.Devices == null || !appPlayer.Devices.Any(d => d.Id == webDeviceId)))
+                            {
+                                // Add a placeholder menu item for the web player
+                                var webDeviceName = "Web Player";
+                                if (!root.MenuItems.Any(mi => mi.Id == webDeviceId))
+                                {
+                                    var newItem = new MenuItemViewModel(webDeviceName,
+                                        new GalaSoft.MvvmLight.Command.RelayCommand<MenuItemViewModel>(async _ => await OnPickDeviceAsync(webDeviceId)))
+                                    {
+                                        Id = webDeviceId,
+                                        IsChecked = false,
+                                        IconGlyph = "\uE7F8" // PC icon
+                                    };
+                                    root.MenuItems.Add(newItem);
+                                    System.Diagnostics.Debug.WriteLine($"LoadDevicesMenuAsync: Added Web Player placeholder to menu: {webDeviceId}");
+                                }
+                            }
+                        }
+                        catch(Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"LoadDevicesMenuAsync: warning while adding web device placeholder: {ex.Message}");
                         }
                     }
                     else
@@ -626,7 +666,9 @@ namespace SpotifyWPF.ViewModel
             if (string.IsNullOrWhiteSpace(deviceId)) return;
             try
             {
-                await _spotify.TransferPlaybackAsync(new[] { deviceId }, true).ConfigureAwait(false);
+                // Use Player's SelectDeviceByIdAsync which includes subscription checking
+                await Player?.SelectDeviceByIdAsync(deviceId);
+
                 // Try to confirm active device with a short poll, as Spotify may update state asynchronously
                 var becameActive = await WaitForActiveDeviceAsync(deviceId, attempts: 6, delayMs: 500).ConfigureAwait(false);
                 if (becameActive)

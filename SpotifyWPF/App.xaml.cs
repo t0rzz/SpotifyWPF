@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using System.Diagnostics;
 
 namespace SpotifyWPF
 {
@@ -36,6 +37,52 @@ namespace SpotifyWPF
 
             // Write a very early startup marker
             try { WriteMarker("App ctor reached."); } catch { /* ignore */ }
+
+            // Set up debug logging to file
+            try
+            {
+                var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var logsFolder = Path.Combine(appData, Constants.AppDataFolderName, Constants.LogsFolderName);
+                Directory.CreateDirectory(logsFolder);
+                var debugLogPath = Path.Combine(logsFolder, "debug.log");
+                
+                string? deleteError = null;
+                try
+                {
+                    if (File.Exists(debugLogPath))
+                    {
+                        File.Delete(debugLogPath);
+                    }
+                }
+                catch (Exception deleteEx)
+                {
+                    deleteError = deleteEx.Message;
+                }
+                
+                Trace.Listeners.Add(new TextWriterTraceListener(debugLogPath));
+                Trace.AutoFlush = true;
+                
+                if (deleteError != null)
+                {
+                    Trace.WriteLine($"Failed to delete previous debug.log: {deleteError}");
+                }
+                else if (!File.Exists(debugLogPath))
+                {
+                    Trace.WriteLine("Previous debug.log deleted on startup");
+                }
+                
+                Trace.WriteLine($"Debug logging started at {DateTime.UtcNow:o}");
+            }
+            catch (Exception setupEx)
+            {
+                // Try to log the setup failure to a fallback location
+                try
+                {
+                    var fallbackPath = Path.Combine(Path.GetTempPath(), "SpotifyWPF_debug_setup_error.log");
+                    File.WriteAllText(fallbackPath, $"Debug logging setup failed at {DateTime.UtcNow:o}: {setupEx.Message}");
+                }
+                catch { /* ignore */ }
+            }
         }
 
         protected override void OnStartup(StartupEventArgs e)

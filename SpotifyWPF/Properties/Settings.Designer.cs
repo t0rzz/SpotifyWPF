@@ -25,7 +25,7 @@ namespace SpotifyWPF.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("137da97fe5de4e8c839d69d41c637364")]
+        [global::System.Configuration.DefaultSettingValueAttribute("ff1afc68cbe44b549de01c7b5ecad972")]
         public string SpotifyClientId {
             get {
                 return ((string)(this["SpotifyClientId"]));
@@ -74,6 +74,30 @@ namespace SpotifyWPF.Properties {
             }
             set {
                 this["MinimizeToTrayOnClose"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string UserSpotifyClientId {
+            get {
+                return ((string)(this["UserSpotifyClientId"]));
+            }
+            set {
+                this["UserSpotifyClientId"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string UserSpotifyRedirectPort {
+            get {
+                return ((string)(this["UserSpotifyRedirectPort"]));
+            }
+            set {
+                this["UserSpotifyRedirectPort"] = value;
             }
         }
     }

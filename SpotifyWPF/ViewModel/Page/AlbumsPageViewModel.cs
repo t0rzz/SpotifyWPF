@@ -306,9 +306,22 @@ namespace SpotifyWPF.ViewModel.Page
                     offsets.Enqueue(off);
                 }
 
-                // Calculate workers (conservative approach)
+                // Calculate workers (respecting max threads setting)
                 var pagesRemaining = (int)Math.Ceiling((total - nextStart) / (double)limit);
-                var computedWorkers = Math.Max(1, Math.Min(pagesRemaining, 4)); // Max 4 workers for albums
+                
+                // Get max threads from settings
+                int maxThreads = 3; // Default fallback
+                try
+                {
+                    maxThreads = (int)Properties.Settings.Default["MaxThreadsForOperations"];
+                    if (maxThreads < 1) maxThreads = 1;
+                }
+                catch
+                {
+                    maxThreads = 3;
+                }
+                
+                var computedWorkers = Math.Min(pagesRemaining, maxThreads);
                 System.Diagnostics.Debug.WriteLine($"Starting concurrent album fetch with {computedWorkers} worker(s). Total expected={total}, page size={limit}");
 
                 var workers = new List<Task>();

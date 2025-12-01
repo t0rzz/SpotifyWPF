@@ -6,6 +6,10 @@
 
         string SpotifyRedirectPort { get; }
 
+        string UserSpotifyClientId { get; }
+
+        string UserSpotifyRedirectPort { get; }
+
         int MaxThreadsForOperations { get; }
 
         string DefaultMarket { get; }

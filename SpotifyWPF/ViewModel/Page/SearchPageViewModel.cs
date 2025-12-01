@@ -7,6 +7,7 @@ using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using SpotifyAPI.Web;
 using SpotifyWPF.Service;
+using SpotifyWPF.Service.MessageBoxes;
 using SpotifyWPF.ViewModel.Component;
 // ReSharper disable AsyncVoidLambda
 
@@ -15,6 +16,7 @@ namespace SpotifyWPF.ViewModel.Page
     public class SearchPageViewModel : ViewModelBase
     {
         private readonly ISpotify _spotify;
+        private readonly ISubscriptionDialogService _subscriptionDialogService;
 
         private Visibility _progressVisibility = Visibility.Hidden;
 
@@ -78,13 +80,14 @@ namespace SpotifyWPF.ViewModel.Page
 
         private readonly IList<IDataGridViewModel> _tabs = new List<IDataGridViewModel>();
 
-        public SearchPageViewModel(ISpotify spotify)
+        public SearchPageViewModel(ISpotify spotify, ISubscriptionDialogService subscriptionDialogService)
         {
             _spotify = spotify;
+            _subscriptionDialogService = subscriptionDialogService;
 
             SearchCommand = new RelayCommand(async () => await Search(), () => !string.IsNullOrWhiteSpace(SearchTerms));
 
-            TracksDataGridViewModel = new TracksDataGridViewModel(_spotify);
+            TracksDataGridViewModel = new TracksDataGridViewModel(_spotify, _subscriptionDialogService);
             TracksDataGridViewModel.PageLoaded += (obj, args) =>
             {
                 TracksResultsTitle = $"Tracks ({TracksDataGridViewModel.Items.Count}/{TracksDataGridViewModel.Total})";
