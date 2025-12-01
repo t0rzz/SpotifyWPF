@@ -193,16 +193,34 @@
                                        Margin="0,0,0,10"/>
 
                             <TextBlock Style="{StaticResource InfoTextStyle}"
-                                       Text="• Web Playback SDK integration"
+                                       Text="• Complete playlist management (create, edit, delete)"
                                        FontSize="12"/>
                             <TextBlock Style="{StaticResource InfoTextStyle}"
-                                       Text="• Device transfer support"
+                                       Text="• Advanced search with track filtering and sorting"
                                        FontSize="12"/>
                             <TextBlock Style="{StaticResource InfoTextStyle}"
-                                       Text="• Enhanced status bar"
+                                       Text="• Albums browsing and management"
                                        FontSize="12"/>
                             <TextBlock Style="{StaticResource InfoTextStyle}"
-                                       Text="• Real-time playback control"
+                                       Text="• Web Playback SDK integration with custom player"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Multi-device playback control and transfer"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Real-time playback status and controls"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Enhanced status bar with device indicators"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• OAuth 2.0 authentication with PKCE"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Settings management and configuration"
+                                       FontSize="12"/>
+                            <TextBlock Style="{StaticResource InfoTextStyle}"
+                                       Text="• Subscription and premium feature management"
                                        FontSize="12"/>
                         </StackPanel>
                     </Border>
