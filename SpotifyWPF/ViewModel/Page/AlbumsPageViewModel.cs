@@ -535,8 +535,11 @@ namespace SpotifyWPF.ViewModel.Page
                 }
 
                 var album = _mapper.Map<Album>(albumDto);
-                Albums.Add(album);
-                _albumIds.Add(albumDto.Id);
+                if (album != null)
+                {
+                    Albums.Add(album);
+                    _albumIds.Add(albumDto.Id);
+                }
             }
         }
     }

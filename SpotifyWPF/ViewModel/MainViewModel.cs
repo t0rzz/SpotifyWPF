@@ -667,7 +667,10 @@ namespace SpotifyWPF.ViewModel
             try
             {
                 // Use Player's SelectDeviceByIdAsync which includes subscription checking
-                await Player?.SelectDeviceByIdAsync(deviceId);
+                if (Player != null)
+                {
+                    await Player.SelectDeviceByIdAsync(deviceId);
+                }
 
                 // Try to confirm active device with a short poll, as Spotify may update state asynchronously
                 var becameActive = await WaitForActiveDeviceAsync(deviceId, attempts: 6, delayMs: 500).ConfigureAwait(false);
@@ -776,7 +779,8 @@ namespace SpotifyWPF.ViewModel
             try
             {
                 // 2. Dispose Player ViewModel (most complex resource)
-                if (Player != null && Player is IDisposable disposablePlayer)
+                var disposablePlayer = Player as IDisposable;
+                if (disposablePlayer != null)
                 {
                     disposablePlayer.Dispose();
                 }
