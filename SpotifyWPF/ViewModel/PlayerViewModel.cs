@@ -1619,7 +1619,7 @@ namespace SpotifyWPF.ViewModel
         /// <summary>
         /// Initialize the player with access token
         /// </summary>
-        public async Task InitializeAsync(string accessToken, string playerHtmlPath)
+        public Task InitializeAsync(string accessToken, string playerHtmlPath)
         {
             try
             {
@@ -1669,6 +1669,8 @@ namespace SpotifyWPF.ViewModel
                 LoggingService.LogToFile($"PlayerViewModel.InitializeAsync error: {ex.Message}\n");
                 LoggingService.LogToFile($"Stack trace: {ex.StackTrace}\n");
             }
+
+            return Task.CompletedTask;
         }
 
         /// <summary>
