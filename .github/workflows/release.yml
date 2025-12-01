@@ -190,13 +190,37 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "TAG=v$VERSION" >> $GITHUB_ENV
 
+      - name: Get commit message
+        id: commit
+        run: |
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B | head -1)
+          echo "COMMIT_MESSAGE<<EOF" >> $GITHUB_ENV
+          echo "$COMMIT_MESSAGE" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.sha }}
           name: SpotifyWPF v${{ env.VERSION }}
-          generate_release_notes: true
+          body: |
+            ## Release Notes
+
+            **Latest Commit:** ${{ env.COMMIT_MESSAGE }}
+
+            ### Changes in this release:
+            - AutoMapper upgraded to v15.1.0 with commercial licensing
+            - OAuth authentication fixes
+            - All NuGet packages updated to latest versions
+            - Compilation warnings resolved
+            - Production-ready codebase
+
+            ### Downloads:
+            - Windows ZIP archive
+            - Portable Windows EXE (single-file)
+            - Signed MSIX package for Windows
+            - macOS DMG installer
           draft: false
           prerelease: false
           files: |
