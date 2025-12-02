@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [4.1.1] - 2025-12-02
+
+### Enhanced
+
+**Subscription-Based UI Controls**
+- Disabled playback control buttons (play/pause, next, previous, shuffle, repeat, refresh) for free Spotify users
+- Added tooltips explaining Premium requirement for disabled controls
+- Consistent UX across all remote playback controls matching Spotify's API restrictions
+- Maintained existing seek and volume slider disabling for free users
+
+### Fixed
+
+**Code Cleanup**
+- Removed diagnostic logging methods from interfaces and implementations
+- Cleaned up unused diagnostic code paths
+
 ## [4.0.0] - 2025-11-14
 
 ### Added

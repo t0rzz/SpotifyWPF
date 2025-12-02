@@ -373,6 +373,8 @@
                                         Minimum="0" 
                                         Maximum="{Binding Player.CurrentTrackDurationMs}"
                                         Value="{Binding Player.PositionMs, Mode=TwoWay}"
+                                        IsEnabled="{Binding Player.IsSeekEnabled}"
+                                        ToolTip="{Binding Player.SeekTooltip}"
                                         PreviewMouseLeftButtonDown="PositionSlider_PreviewMouseLeftButtonDown"
                                         PreviewMouseLeftButtonUp="PositionSlider_PreviewMouseLeftButtonUp"
                                         ValueChanged="PositionSlider_ValueChanged"
@@ -391,6 +393,8 @@
                                 <Button Style="{StaticResource ShuffleButtonStyle}" 
                                         Width="40" Height="40" Margin="0,0,8,0"
                                         Command="{Binding Player.ToggleShuffleCommand}"
+                                        IsEnabled="{Binding Player.IsPlaybackEnabled}"
+                                        ToolTip="{Binding Player.IsPlaybackEnabled, Converter={x:Static local:PlaybackEnabledTooltipConverter.Instance}}"
                                         AutomationProperties.Name="Shuffle">
                                     <TextBlock Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="16"
                                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
@@ -400,6 +404,8 @@
                                 <Button Style="{StaticResource ControlButtonStyle}" 
                                         Width="48" Height="48" Margin="0,0,8,0"
                                         Command="{Binding Player.PrevCommand}"
+                                        IsEnabled="{Binding Player.IsPlaybackEnabled}"
+                                        ToolTip="{Binding Player.IsPlaybackEnabled, Converter={x:Static local:PlaybackEnabledTooltipConverter.Instance}}"
                                         AutomationProperties.Name="Previous Track">
                                     <TextBlock Text="&#xE892;" FontFamily="Segoe MDL2 Assets" FontSize="20"/>
                                 </Button>
@@ -407,6 +413,8 @@
                                 <!-- Play/Pause -->
                                 <Button Style="{StaticResource PlayButtonStyle}" 
                                         Command="{Binding Player.PlayPauseCommand}"
+                                        IsEnabled="{Binding Player.IsPlaybackEnabled}"
+                                        ToolTip="{Binding Player.IsPlaybackEnabled, Converter={x:Static local:PlaybackEnabledTooltipConverter.Instance}}"
                                         Margin="0,0,8,0"
                                         AutomationProperties.Name="{Binding Player.IsPlaying, Converter={x:Static local:PlayPauseAccessibilityConverter.Instance}}">
                                     <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="36">
@@ -424,6 +432,8 @@
                                 <Button Style="{StaticResource ControlButtonStyle}" 
                                         Width="48" Height="48" Margin="0,0,8,0"
                                         Command="{Binding Player.NextCommand}"
+                                        IsEnabled="{Binding Player.IsPlaybackEnabled}"
+                                        ToolTip="{Binding Player.IsPlaybackEnabled, Converter={x:Static local:PlaybackEnabledTooltipConverter.Instance}}"
                                         AutomationProperties.Name="Next Track">
                                     <TextBlock Text="&#xE893;" FontFamily="Segoe MDL2 Assets" FontSize="20"/>
                                 </Button>
@@ -432,6 +442,8 @@
                                 <Button Style="{StaticResource RepeatButtonStyle}" 
                                         Width="40" Height="40"
                                         Command="{Binding Player.CycleRepeatCommand}"
+                                        IsEnabled="{Binding Player.IsPlaybackEnabled}"
+                                        ToolTip="{Binding Player.IsPlaybackEnabled, Converter={x:Static local:PlaybackEnabledTooltipConverter.Instance}}"
                                         AutomationProperties.Name="Repeat">
                                     <TextBlock Text="&#xE8EE;" FontFamily="Segoe MDL2 Assets" FontSize="16"
                                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
@@ -445,6 +457,8 @@
                     <Slider Style="{StaticResource ModernSliderStyle}"
                         Width="120" Minimum="0" Maximum="1"
                         Value="{Binding Player.Volume, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        IsEnabled="{Binding Player.IsVolumeEnabled}"
+                        ToolTip="{Binding Player.VolumeTooltip}"
                         PreviewMouseLeftButtonDown="VolumeSlider_PreviewMouseLeftButtonDown"
                         AutomationProperties.Name="Volume"/>
                                 </StackPanel>
@@ -453,7 +467,8 @@
                                 <Button Style="{StaticResource ControlButtonStyle}" 
                                         Width="40" Height="40" Margin="16,0,0,0"
                                         Command="{Binding Player.RefreshCommand}"
-                                        ToolTip="Refresh player state"
+                                        IsEnabled="{Binding Player.IsPlaybackEnabled}"
+                                        ToolTip="{Binding Player.IsPlaybackEnabled, Converter={x:Static local:PlaybackEnabledTooltipConverter.Instance}}"
                                         AutomationProperties.Name="Refresh">
                                     <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="16"
                                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>

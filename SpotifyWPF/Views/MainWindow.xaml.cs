@@ -611,10 +611,13 @@ namespace SpotifyWPF.Views
                 var percentage = position.X / slider.ActualWidth;
                 var newValue = (int)(percentage * slider.Maximum);
                 
+                LoggingService.LogToFile($"[SLIDER_SEEK] PositionSlider_PreviewMouseLeftButtonDown: position.X={position.X:F1}, slider.Width={slider.ActualWidth:F1}, percentage={percentage:F3}, newValue={newValue}ms\n");
+                
                 // Update position optimistically
                 _playerViewModel.PositionMs = newValue;
                 
                 // Send immediate seek command
+                LoggingService.LogToFile($"[SLIDER_SEEK] Executing SeekCommand with {newValue}ms\n");
                 _playerViewModel.SeekCommand.Execute(newValue);
             }
         }
@@ -629,7 +632,10 @@ namespace SpotifyWPF.Views
             var slider = sender as Slider;
             if (slider != null)
             {
+                LoggingService.LogToFile($"[SLIDER_SEEK] PositionSlider_PreviewMouseLeftButtonUp: final value={slider.Value:F0}ms\n");
+                
                 // Send final seek command
+                LoggingService.LogToFile($"[SLIDER_SEEK] Executing final SeekCommand with {(int)slider.Value}ms\n");
                 _playerViewModel.SeekCommand.Execute((int)slider.Value);
             }
             
@@ -643,6 +649,8 @@ namespace SpotifyWPF.Views
         {
             if (_playerViewModel == null || !_playerViewModel.IsDraggingSlider) return;
 
+            LoggingService.LogToFile($"[SLIDER_SEEK] PositionSlider_ValueChanged: {e.OldValue:F0}ms -> {e.NewValue:F0}ms (dragging)\n");
+            
             // Update ViewModel position (throttled seeking handled in ViewModel)
             _playerViewModel.PositionMs = (int)e.NewValue;
         }
@@ -736,6 +744,7 @@ namespace SpotifyWPF.Views
                 if (percent > 1) percent = 1;
 
                 var newValue = slider.Minimum + percent * (slider.Maximum - slider.Minimum);
+                LoggingService.LogToFile($"[SLIDER_VOLUME] VolumeSlider_PreviewMouseLeftButtonDown: position.X={pt.X:F1}, slider.Width={slider.ActualWidth:F1}, percent={percent:F3}, newValue={newValue:F3}\n");
                 slider.Value = newValue;
 
                 // Prevent default small-step behavior so the value jumps directly where clicked

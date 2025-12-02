@@ -117,10 +117,17 @@ namespace SpotifyWPF.ViewModel.Page
 
             // Playlist Generator commands
             GenerateRandomPlaylistCommand = new RelayCommand(async () => await GenerateRandomPlaylistAsync());
-            SaveGeneratedPlaylistCommand = new RelayCommand<GeneratedPlaylistDto>(SaveGeneratedPlaylist);
+            SaveGeneratedPlaylistCommand = new RelayCommand<GeneratedPlaylistDto>(SaveGeneratedPlaylist, CanSaveGeneratedPlaylist);
             ViewGeneratedPlaylistCommand = new RelayCommand<GeneratedPlaylistDto>(ViewGeneratedPlaylist);
             RemoveTrackFromGeneratedPlaylistCommand = new RelayCommand<TrackDto>(RemoveTrackFromGeneratedPlaylist);
             DeleteGeneratedPlaylistCommand = new RelayCommand<GeneratedPlaylistDto>(DeleteGeneratedPlaylist);
+        }
+
+        private bool CanLoadArtistTracks(SearchResultDto searchResult)
+        {
+            bool canExecute = searchResult != null && searchResult.Type == "artist" && !string.IsNullOrEmpty(searchResult.Id);
+            System.Diagnostics.Debug.WriteLine($"CanLoadArtistTracks: {canExecute} (searchResult: {searchResult?.Name}, Type: {searchResult?.Type})");
+            return canExecute;
         }
 
         // Properties
@@ -444,11 +451,9 @@ namespace SpotifyWPF.ViewModel.Page
         public RelayCommand<TrackDto> MoveTrackDownCommand { get; }
         public RelayCommand<SearchResultDto> LoadArtistTracksCommand { get; }
 
-        private bool CanLoadArtistTracks(SearchResultDto searchResult)
+        private bool CanSaveGeneratedPlaylist(GeneratedPlaylistDto playlist)
         {
-            bool canExecute = searchResult != null && searchResult.Type == "artist" && !string.IsNullOrEmpty(searchResult.Id);
-            System.Diagnostics.Debug.WriteLine($"CanLoadArtistTracks: {canExecute} (searchResult: {searchResult?.Name}, Type: {searchResult?.Type})");
-            return canExecute;
+            return playlist != null && playlist.Tracks.Count > 0;
         }
 
         private bool CanSelectPlaylist(PlaylistDto playlist)

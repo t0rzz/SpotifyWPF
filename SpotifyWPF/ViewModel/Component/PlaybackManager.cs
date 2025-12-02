@@ -157,16 +157,22 @@ namespace SpotifyWPF.ViewModel.Component
         {
             try
             {
+                _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] ExecutePlayPauseAsync called, IsPlaying={IsPlaying}");
+
                 // Always start with a fresh devices snapshot
                 await _deviceManager.RefreshDevicesAsync();
 
                 if (IsPlaying)
                 {
+                    _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Currently playing, attempting to pause");
+
                     // If no active device, avoid calling Pause on API/bridge; just update UI and exit quickly
                     var hasActiveDevice = devices.Any(d => d.IsActive);
+                    _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Has active device: {hasActiveDevice}");
                     if (!hasActiveDevice)
                     {
                         System.Diagnostics.Debug.WriteLine("⏸ PlayPause: No active device detected; skipping Pause call.");
+                        _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] No active device, updating UI only");
                         IsPlaying = false;
                         _pauseRequestedAt = DateTimeOffset.UtcNow;
                         return;
@@ -176,23 +182,31 @@ namespace SpotifyWPF.ViewModel.Component
                     var selectedDevice = devices.FirstOrDefault(d => d.IsActive);
                     var useWebBridgeQuick = selectedDevice != null && !string.IsNullOrEmpty(webPlaybackDeviceId) && selectedDevice.Id == webPlaybackDeviceId;
 
+                    _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Selected device: {selectedDevice?.Name ?? "none"} (ID: {selectedDevice?.Id ?? "none"}), Use Web Bridge: {useWebBridgeQuick}");
+
                     // Optimistic UI update first for snappy feel
                     IsPlaying = false;
                     _pauseRequestedAt = DateTimeOffset.UtcNow;
 
                     System.Diagnostics.Debug.WriteLine($"⏸ PlayPause: Pausing via {(useWebBridgeQuick ? "WebPlaybackBridge" : "Spotify API")} (selected={selectedDevice?.Id}, webId={webPlaybackDeviceId})");
+                    _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Attempting pause via {(useWebBridgeQuick ? "WebPlaybackBridge" : "Spotify API")}");
                     try
                     {
                         if (useWebBridgeQuick)
                         {
+                            _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Calling WebPlaybackBridge.PauseAsync()");
                             await _webPlaybackBridge.PauseAsync();
+                            _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] WebPlaybackBridge.PauseAsync() completed");
                         }
                         else
                         {
                             var active = devices.FirstOrDefault(d => d.IsActive);
                             var targetDeviceId = active?.Id ?? selectedDevice?.Id ?? webPlaybackDeviceId;
+                            _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Calling Spotify.PauseCurrentPlaybackAsync(device: {targetDeviceId})");
                             await _spotify.PauseCurrentPlaybackAsync(targetDeviceId);
+                            _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Spotify.PauseCurrentPlaybackAsync() completed");
                         }
+                        _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Pause command completed successfully");
                     }
                     catch (Exception pauseEx)
                     {
@@ -208,8 +222,11 @@ namespace SpotifyWPF.ViewModel.Component
                 }
                 else
                 {
+                    _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Currently paused, attempting to resume");
+
                     // If there is no active device, promote the in-app Web Playback device as active first
                     var hasActive = devices.Any(d => d.IsActive);
+                    _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] Has active device: {hasActive}");
                     if (!hasActive)
                     {
                         // Wait briefly for the Web Playback device id if not yet known
@@ -223,6 +240,7 @@ namespace SpotifyWPF.ViewModel.Component
                         }
 
                         var ensured = await _deviceManager.EnsureAppDeviceActiveAsync();
+                        _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] EnsureAppDeviceActive result: {ensured}");
                         System.Diagnostics.Debug.WriteLine($"🎯 EnsureAppDeviceActive before Resume result: {ensured}");
                         // Refresh snapshot after potential transfer
                         await _deviceManager.RefreshDevicesAsync();
@@ -263,9 +281,11 @@ namespace SpotifyWPF.ViewModel.Component
                         catch { try { await _webPlaybackBridge.ResumeAsync(); } catch { } }
                     }
                 }
+                _loggingService.LogDebug($"[PLAYPAUSE_EXECUTE] ExecutePlayPauseAsync completed");
             }
             catch (Exception ex)
             {
+                _loggingService.LogError($"[PLAYPAUSE_EXECUTE] PlayPause error: {ex.Message}", ex);
                 System.Diagnostics.Debug.WriteLine($"PlayPause error: {ex.Message}");
             }
         }
@@ -372,30 +392,40 @@ namespace SpotifyWPF.ViewModel.Component
                 {
                     // Start/restart the throttle timer
                     _timerManager.RestartSeekThrottleTimer();
+                    _loggingService.LogDebug($"[SEEK_THROTTLE] Seek throttled: {now - _lastSeekSent}ms since last seek");
                     return;
                 }
 
                 _lastSeekSent = now;
+                _loggingService.LogDebug($"[SEEK_EXECUTE] Executing seek to {positionMs}ms");
 
                 // Decide control path based on active device
                 await _deviceManager.RefreshDevicesAsync();
                 var active = devices.FirstOrDefault(d => d.IsActive);
                 var useWebBridge = active != null && !string.IsNullOrEmpty(webPlaybackDeviceId) && active.Id == webPlaybackDeviceId;
 
+                _loggingService.LogDebug($"[SEEK_EXECUTE] Active device: {active?.Name ?? "none"} (ID: {active?.Id ?? "none"}), Use Web Bridge: {useWebBridge}");
+
                 if (useWebBridge)
                 {
+                    _loggingService.LogDebug($"[SEEK_EXECUTE] Using WebPlaybackBridge.SeekAsync({positionMs}ms)");
                     await _webPlaybackBridge.SeekAsync(positionMs);
+                    _loggingService.LogDebug($"[SEEK_EXECUTE] WebPlaybackBridge.SeekAsync completed");
                 }
                 else
                 {
+                    _loggingService.LogDebug($"[SEEK_EXECUTE] Using Spotify.SeekCurrentPlaybackAsync({positionMs}ms, device: {active?.Id ?? "current"})");
                     await _spotify.SeekCurrentPlaybackAsync(positionMs, active?.Id);
+                    _loggingService.LogDebug($"[SEEK_EXECUTE] Spotify.SeekCurrentPlaybackAsync completed");
                 }
 
                 // Update UI immediately for responsiveness
                 PositionMs = positionMs;
+                _loggingService.LogDebug($"[SEEK_EXECUTE] Seek execution completed successfully");
             }
             catch (Exception ex)
             {
+                _loggingService.LogError($"[SEEK_EXECUTE] Seek error: {ex.Message}", ex);
                 System.Diagnostics.Debug.WriteLine($"Seek error: {ex.Message}");
                 try
                 {
@@ -418,10 +448,13 @@ namespace SpotifyWPF.ViewModel.Component
                 var clamped = Math.Max(0.0, Math.Min(1.0, volume));
                 if (clamped > 0 && clamped < 0.005) clamped = 0.0;
 
+                _loggingService.LogDebug($"[VOLUME_EXECUTE] Executing volume change to {clamped:F3}");
+
                 // Throttle to prevent flooding the bridge and API while dragging
                 var now = DateTime.UtcNow;
                 if ((now - _lastVolumeSent) < TimeSpan.FromMilliseconds(80) && Math.Abs(clamped - _volume) < 0.01)
                 {
+                    _loggingService.LogDebug($"[VOLUME_THROTTLE] Volume change throttled: {now - _lastVolumeSent}ms since last, delta={Math.Abs(clamped - _volume):F3}");
                     return;
                 }
 
@@ -431,10 +464,13 @@ namespace SpotifyWPF.ViewModel.Component
                 // Always apply to Web Playback SDK (local bridge) for immediate UX when app is the device
                 try
                 {
+                    _loggingService.LogDebug($"[VOLUME_EXECUTE] Setting volume on WebPlaybackBridge: {clamped:F3}");
                     await _webPlaybackBridge.SetVolumeAsync(_volume);
+                    _loggingService.LogDebug($"[VOLUME_EXECUTE] WebPlaybackBridge.SetVolumeAsync completed");
                 }
                 catch (Exception bridgeEx)
                 {
+                    _loggingService.LogDebug($"[VOLUME_EXECUTE] WebPlaybackBridge volume error (non-fatal): {bridgeEx.Message}");
                     System.Diagnostics.Debug.WriteLine($"SetVolume bridge error (non-fatal): {bridgeEx.Message}");
                 }
 
@@ -445,18 +481,27 @@ namespace SpotifyWPF.ViewModel.Component
                 if (active != null && !string.IsNullOrEmpty(active.Id))
                 {
                     var percent = (int)Math.Round(_volume * 100);
+                    _loggingService.LogDebug($"[VOLUME_EXECUTE] Setting volume via API: {percent}% on device {active.Id} ({active.Name})");
                     try
                     {
                         await _spotify.SetVolumePercentOnDeviceAsync(active.Id, percent);
+                        _loggingService.LogDebug($"[VOLUME_EXECUTE] Spotify.SetVolumePercentOnDeviceAsync completed");
                     }
                     catch (Exception apiEx)
                     {
+                        _loggingService.LogDebug($"[VOLUME_EXECUTE] API volume error (non-fatal): {apiEx.Message}");
                         System.Diagnostics.Debug.WriteLine($"SetVolume API error (non-fatal): {apiEx.Message}");
                     }
                 }
+                else
+                {
+                    _loggingService.LogDebug($"[VOLUME_EXECUTE] No active device found for API volume control");
+                }
+                _loggingService.LogDebug($"[VOLUME_EXECUTE] Volume execution completed");
             }
             catch (Exception ex)
             {
+                _loggingService.LogError($"[VOLUME_EXECUTE] SetVolume error: {ex.Message}", ex);
                 System.Diagnostics.Debug.WriteLine($"SetVolume error: {ex.Message}");
             }
         }
@@ -1193,12 +1238,12 @@ namespace SpotifyWPF.ViewModel.Component
                 {
                     PositionMs = CurrentTrack.DurationMs;
                     _lastUiProgressUpdate = now;
-                    _loggingService.LogDebug($"[UI_PROGRESS] Snapped PositionMs to Duration: {PositionMs}ms (Duration:{CurrentTrack.DurationMs}ms)");
+                    // _loggingService.LogDebug($"[UI_PROGRESS] Snapped PositionMs to Duration: {PositionMs}ms (Duration:{CurrentTrack.DurationMs}ms)");
                     return;
                 }
 
                 PositionMs = newPos;
-                _loggingService.LogDebug($"[UI_PROGRESS] Advanced PositionMs by {inc}ms -> {newPos} (Duration:{CurrentTrack?.DurationMs}ms)");
+                // _loggingService.LogDebug($"[UI_PROGRESS] Advanced PositionMs by {inc}ms -> {newPos} (Duration:{CurrentTrack?.DurationMs}ms)");
             }
             catch { }
         }
@@ -1269,7 +1314,7 @@ namespace SpotifyWPF.ViewModel.Component
 
                 if (IsPlaying && CurrentTrack != null && !string.IsNullOrEmpty(CurrentTrack.Id) && isWebPlayerActive)
                 {
-                    _loggingService.LogDebug($"[SMART_POLL] ⏸️ Skipping API poll during active playback of '{CurrentTrack.Title}' on Web Player");
+                    // _loggingService.LogDebug($"[SMART_POLL] ⏸️ Skipping API poll during active playback of '{CurrentTrack.Title}' on Web Player");
                     return;
                 }
 

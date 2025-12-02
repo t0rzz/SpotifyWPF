@@ -68,4 +68,26 @@ namespace SpotifyWPF.Views
             throw new NotImplementedException();
         }
     }
+
+    /// <summary>
+    /// Converts IsPlaybackEnabled boolean to tooltip text
+    /// </summary>
+    public class PlaybackEnabledTooltipConverter : IValueConverter
+    {
+        public static readonly PlaybackEnabledTooltipConverter Instance = new PlaybackEnabledTooltipConverter();
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool isEnabled)
+            {
+                return isEnabled ? string.Empty : "Playback controls require Spotify Premium";
+            }
+            return string.Empty;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

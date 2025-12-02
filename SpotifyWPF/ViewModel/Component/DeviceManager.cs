@@ -42,7 +42,7 @@ namespace SpotifyWPF.ViewModel.Component
                 if (_selectedDevice != value)
                 {
                     _selectedDevice = value;
-                    _loggingService.LogDebug($"[DEVICE_MANAGER] SelectedDevice changed to: {_selectedDevice?.Name ?? "<null>"} ({_selectedDevice?.Id ?? "<null>"})");
+                    // _loggingService.LogDebug($"[DEVICE_MANAGER] SelectedDevice changed to: {_selectedDevice?.Name ?? "<null>"} ({_selectedDevice?.Id ?? "<null>"})");
                     // Ensure property change is raised on UI thread for view-binding consumers
                     try
                     {

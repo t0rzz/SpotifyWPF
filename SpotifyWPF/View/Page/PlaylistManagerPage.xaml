@@ -278,7 +278,7 @@
                                             <Button Grid.Column="1" Content="Save to Spotify" 
                                                    Command="{Binding SaveGeneratedPlaylistCommand}"
                                                    CommandParameter="{Binding SelectedGeneratedPlaylist}"
-                                                   Background="#FF1DB954" Foreground="White"
+                                                   Background="#FF1DB954" Foreground="Black"
                                                    Width="120" Height="35"
                                                    Margin="10,0,0,0"/>
                                         </Grid>

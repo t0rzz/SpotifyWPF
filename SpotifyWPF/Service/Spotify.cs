@@ -986,6 +986,8 @@ namespace SpotifyWPF.Service
             }
         }
 
+
+
         public async Task TransferPlaybackAsync(IEnumerable<string> deviceIds, bool play)
         {
             ValidateCollection(deviceIds, nameof(deviceIds));
@@ -1079,6 +1081,13 @@ namespace SpotifyWPF.Service
             var url = $"https://api.spotify.com/v1/me/player/volume?volume_percent={volumePercent}&device_id={Uri.EscapeDataString(deviceId)}";
             using var res = await SendAsyncWithRetry(url, HttpMethod.Put, jsonBody: null, includeAuthBearer: true).ConfigureAwait(false);
             var ok = res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.NoContent;
+            try
+            {
+                var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                LoggingService.LogToFile($"[RAW_HTTP] [SET_VOLUME] status={(int)res.StatusCode} ({res.StatusCode}) device={deviceId} volume={volumePercent} body={body}\n");
+                _loggingService.LogDebug($"[RAW_HTTP] [SET_VOLUME] status={(int)res.StatusCode} device={deviceId} volume={volumePercent}");
+            }
+            catch { }
             res.Dispose();
             return ok;
         }
@@ -1125,9 +1134,18 @@ namespace SpotifyWPF.Service
             if (!string.IsNullOrWhiteSpace(deviceId)) url += $"&device_id={Uri.EscapeDataString(deviceId)}";
             using var res = await SendAsyncWithRetry(url, HttpMethod.Put, jsonBody: null, includeAuthBearer: true).ConfigureAwait(false);
             var ok = res.IsSuccessStatusCode || res.StatusCode == HttpStatusCode.NoContent;
+            try
+            {
+                var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                LoggingService.LogToFile($"[RAW_HTTP] [SEEK] status={(int)res.StatusCode} ({res.StatusCode}) device={(deviceId ?? "current")} pos={positionMs} body={body}\n");
+                _loggingService.LogDebug($"[RAW_HTTP] [SEEK] status={(int)res.StatusCode} device={(deviceId ?? "current")} pos={positionMs}");
+            }
+            catch { }
             res.Dispose();
             return ok;
         }
+
+
 
         public async Task<bool> SetShuffleAsync(bool state, string? deviceId = null)
         {

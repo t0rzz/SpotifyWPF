@@ -68,6 +68,9 @@ namespace SpotifyWPF.ViewModel
         // ImageSource created by ViewModel for album art and used by the UI priority binding
         private ImageSource? _currentAlbumArtImage;
 
+        // User's subscription type
+        private string _userSubscriptionType = string.Empty;
+
         public PlayerViewModel(ISpotify spotify, IWebPlaybackBridge webPlaybackBridge, ILoggingService loggingService, ITokenProvider tokenProvider, ISubscriptionDialogService subscriptionDialogService)
         {
             _instanceCount++;
@@ -577,6 +580,36 @@ namespace SpotifyWPF.ViewModel
             }
         }
 
+        /// <summary>
+        /// User's subscription type
+        /// </summary>
+        public string UserSubscriptionType => _userSubscriptionType;
+
+        /// <summary>
+        /// Whether seek controls are enabled (requires premium)
+        /// </summary>
+        public bool IsSeekEnabled => string.Equals(_userSubscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Whether volume controls are enabled (requires premium)
+        /// </summary>
+        public bool IsVolumeEnabled => string.Equals(_userSubscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Whether playback controls are enabled (requires premium)
+        /// </summary>
+        public bool IsPlaybackEnabled => string.Equals(_userSubscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Tooltip for seek slider
+        /// </summary>
+        public string SeekTooltip => IsSeekEnabled ? string.Empty : "Seek control requires Spotify Premium";
+
+        /// <summary>
+        /// Tooltip for volume slider
+        /// </summary>
+        public string VolumeTooltip => IsVolumeEnabled ? string.Empty : "Volume control requires Spotify Premium";
+
         #endregion
 
         #region Commands
@@ -820,7 +853,7 @@ namespace SpotifyWPF.ViewModel
         {
             try
             {
-                _loggingService.LogDebug($"[STATE_UPDATE] Incoming state: playing={state.IsPlaying}, pos={state.PositionMs}ms, dur={state.DurationMs}ms, track={state.TrackName}");
+                // _loggingService.LogDebug($"[STATE_UPDATE] Incoming state: playing={state.IsPlaying}, pos={state.PositionMs}ms, dur={state.DurationMs}ms, track={state.TrackName}");
                 // 🎵 CRITICAL: Capture shuffle state BEFORE any updates from incoming state
                 // This ensures we detect shuffle auto-advance correctly when tracks end
                 bool shuffleWasEnabledAtStart = IsShuffled;
@@ -1044,7 +1077,7 @@ namespace SpotifyWPF.ViewModel
                 // 🟢 SMART POLLING: Resume API polling when playback stops
                 if (wasPlaying && !IsPlaying)
                 {
-                    _loggingService.LogDebug($"[SMART_POLL] ▶️ Resuming API polling after playback stopped");
+                    // _loggingService.LogDebug($"[SMART_POLL] ▶️ Resuming API polling after playback stopped");
                     _timerManager.StartStatePollTimer();
                 }
                 
@@ -1146,7 +1179,7 @@ namespace SpotifyWPF.ViewModel
                         var trackChanged = CurrentTrack == null || CurrentTrack.Id != incomingId;
                         if (trackChanged && CurrentTrack != null)
                         {
-                            _loggingService.LogDebug($"[SMART_POLL] 🔄 Resuming API polling after track changed from '{CurrentTrack.Title}'");
+                            // _loggingService.LogDebug($"[SMART_POLL] 🔄 Resuming API polling after track changed from '{CurrentTrack.Title}'");
                             _timerManager.StartStatePollTimer();
                         }
 
@@ -1252,7 +1285,7 @@ namespace SpotifyWPF.ViewModel
                     // Resume API polling when disconnected
                     if (true)
                     {
-                        _loggingService.LogDebug($"[SMART_POLL] ▶️ Resuming API polling after disconnection");
+                        // _loggingService.LogDebug($"[SMART_POLL] ▶️ Resuming API polling after disconnection");
                         _timerManager.StartStatePollTimer();
                     }
                     
@@ -1641,6 +1674,19 @@ namespace SpotifyWPF.ViewModel
                         // Refresh devices after WebPlayback is ready
                         await _deviceManager.RefreshDevicesAsync();
                         LoggingService.LogToFile("PlayerViewModel: Devices refreshed in background\n");
+#if DEBUG
+                        try
+                        {
+                            var subscription = await _spotify.GetUserSubscriptionTypeAsync();
+                            _userSubscriptionType = subscription ?? string.Empty;
+                            try { LoggingService.LogToFile($"[SUBSCRIPTION_TYPE] {DateTime.UtcNow:o} - Subscription: {subscription ?? "(unknown)"}\n"); } catch { }
+                            _loggingService.LogInfo($"[SUBSCRIPTION_TYPE] {subscription}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _loggingService.LogDebug($"Failed to log subscription type: {ex.Message}");
+                        }
+#endif
                     }
                     catch (Exception ex)
                     {
@@ -1967,14 +2013,14 @@ namespace SpotifyWPF.ViewModel
                             // If API shows different track or no track, don't update UI - let WebView2 control it
                             if (string.IsNullOrEmpty(apiTrackId) || apiTrackId != CurrentTrack.Id)
                             {
-                                _loggingService.LogDebug($"[API_POLL] 🛑 Suppressing API update during active Web Player playback - API track: '{apiTrackForCheck?.Name ?? "null"}' vs Current: '{CurrentTrack.Title}'");
+                                // _loggingService.LogDebug($"[API_POLL] 🛑 Suppressing API update during active Web Player playback - API track: '{apiTrackForCheck?.Name ?? "null"}' vs Current: '{CurrentTrack.Title}'");
                                 return;
                             }
 
                             // If API shows paused but we're actively playing, don't update UI
                             if (!playback.IsPlaying && IsPlaying)
                             {
-                                _loggingService.LogDebug($"[API_POLL] 🛑 Suppressing API paused state during active Web Player playback");
+                                // _loggingService.LogDebug($"[API_POLL] 🛑 Suppressing API paused state during active Web Player playback");
                                 return;
                             }
                         }
@@ -2063,13 +2109,13 @@ namespace SpotifyWPF.ViewModel
                         _loggingService.LogDebug($"[INIT_DEBUG] 📊 Detailed initial state - Shuffle: {ps.Shuffled}, Repeat: {ps.RepeatMode}, Position: {ps.PositionMs}ms, Duration: {ps.DurationMs}ms");
 
                         // Log API poll details for debugging
-                        _loggingService.LogDebug($"[API_POLL] API state: TrackId={ps.TrackId}, TrackName={ps.TrackName}, IsPlaying={ps.IsPlaying}, PositionMs={ps.PositionMs}");
+                        // _loggingService.LogDebug($"[API_POLL] API state: TrackId={ps.TrackId}, TrackName={ps.TrackName}, IsPlaying={ps.IsPlaying}, PositionMs={ps.PositionMs}");
 
                         // Suppress API updates that would revert to old track shortly after play command
                         if (DateTimeOffset.UtcNow - _lastPlayCommandAt < TimeSpan.FromSeconds(10) && 
                             CurrentTrack != null && !string.IsNullOrEmpty(ps.TrackId) && ps.TrackId != CurrentTrack.Id)
                         {
-                            _loggingService.LogDebug($"[API_POLL] Suppressing API update - API shows different track '{ps.TrackName}' vs current '{CurrentTrack.Title}' shortly after play command ({(DateTimeOffset.UtcNow - _lastPlayCommandAt).TotalSeconds:F1}s ago)");
+                            // _loggingService.LogDebug($"[API_POLL] Suppressing API update - API shows different track '{ps.TrackName}' vs current '{CurrentTrack.Title}' shortly after play command ({(DateTimeOffset.UtcNow - _lastPlayCommandAt).TotalSeconds:F1}s ago)");
                             return;
                         }
 
