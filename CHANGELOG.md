@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [4.1.3] - 2026-01-07
+
+### Fixed
+
+- Fixed crash when loading followed artists with 403 Forbidden error
+- Added proper error handling for permission denied (403) and session expired (401) errors
+- App now shows user-friendly dialog suggesting logout/login when OAuth scope permissions are missing
+- Prevented app from becoming stuck after authorization errors
+- Added `ForbiddenException` class for better error differentiation
+
 ## [4.1.2] - 2026-01-06
 
 ### Fixed

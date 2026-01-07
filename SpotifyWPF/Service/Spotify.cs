@@ -29,6 +29,21 @@ namespace SpotifyWPF.Service
         }
     }
 
+    /// <summary>
+    /// Exception thrown when Spotify API returns 403 Forbidden, typically due to missing OAuth scopes.
+    /// The user may need to log out and log back in to re-authorize with the required scopes.
+    /// </summary>
+    public class ForbiddenException : Exception
+    {
+        public string? RequiredScope { get; }
+
+        public ForbiddenException(string message, string? requiredScope = null, Exception? innerException = null)
+            : base(message, innerException)
+        {
+            RequiredScope = requiredScope;
+        }
+    }
+
     public class Spotify : ISpotify, IDisposable
     {
         private readonly ITokenProvider _tokenProvider;
@@ -863,6 +878,23 @@ namespace SpotifyWPF.Service
                 {
                     throw new RateLimitException($"Spotify API rate limit exceeded while getting playlists. Please wait before trying again.", apiEx);
                 }
+                if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    throw new ForbiddenException(
+                        "Access denied: You may need to log out and log back in to grant permission to view playlists. " +
+                        "This happens when the app requires new permissions that weren't requested during your initial login.",
+                        "playlist-read-private",
+                        apiEx);
+                }
+                if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    // Token might be invalid or expired - clear it to force re-authentication
+                    _tokenStorage.Clear();
+                    _currentToken = null;
+                    Api = null;
+                    throw new UnauthorizedAccessException(
+                        "Your session has expired. Please log in again.", apiEx);
+                }
                 throw;
             }
 
@@ -1281,6 +1313,24 @@ namespace SpotifyWPF.Service
             if (res.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
             {
                 throw new RateLimitException($"Spotify API rate limit exceeded while getting followed artists. Please wait before trying again.");
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                throw new ForbiddenException(
+                    "Access denied: You may need to log out and log back in to grant permission to view followed artists. " +
+                    "This happens when the app requires new permissions that weren't requested during your initial login.",
+                    "user-follow-read");
+            }
+
+            if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                // Token might be invalid or expired - clear it to force re-authentication
+                _tokenStorage.Clear();
+                _currentToken = null;
+                Api = null;
+                throw new UnauthorizedAccessException(
+                    "Your session has expired. Please log in again.");
             }
 
             res.EnsureSuccessStatusCode();

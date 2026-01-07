@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -103,6 +104,37 @@ namespace SpotifyWPF.ViewModel.Page
                     try
                     {
                         await LoadPlaylistsAsync(_loadPlaylistsCts.Token);
+                    }
+                    catch (SpotifyWPF.Service.ForbiddenException forbiddenEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Forbidden error loading playlists: {forbiddenEx.Message}");
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            System.Windows.MessageBox.Show(
+                                forbiddenEx.Message + "\n\nPlease use Help → Logout, then log in again to fix this issue.",
+                                "Permission Denied",
+                                System.Windows.MessageBoxButton.OK,
+                                System.Windows.MessageBoxImage.Warning);
+                        });
+                        Status = "Permission denied - please log out and log in again";
+                    }
+                    catch (UnauthorizedAccessException unauthEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Unauthorized error loading playlists: {unauthEx.Message}");
+                        await Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            System.Windows.MessageBox.Show(
+                                unauthEx.Message,
+                                "Session Expired",
+                                System.Windows.MessageBoxButton.OK,
+                                System.Windows.MessageBoxImage.Warning);
+                        });
+                        Status = "Session expired - please log in again";
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error loading playlists: {ex.Message}");
+                        // Don't show message for regular errors as LoadPlaylistsAsync has its own retry logic
                     }
                     finally
                     {
@@ -1413,6 +1445,58 @@ namespace SpotifyWPF.ViewModel.Page
                 FollowedArtists.Clear();
                 await LoadFollowedArtistsAsync(_loadArtistsCts.Token);
             }
+            catch (SpotifyWPF.Service.ForbiddenException forbiddenEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"Forbidden error loading artists: {forbiddenEx.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        forbiddenEx.Message + "\n\nPlease use Help → Logout, then log in again to fix this issue.",
+                        "Permission Denied",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                });
+                Status = "Permission denied - please log out and log in again";
+            }
+            catch (UnauthorizedAccessException unauthEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"Unauthorized error loading artists: {unauthEx.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        unauthEx.Message,
+                        "Session Expired",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                });
+                Status = "Session expired - please log in again";
+            }
+            catch (HttpRequestException httpEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"HTTP error loading artists: {httpEx.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        $"Failed to load followed artists: {httpEx.Message}\n\nPlease check your internet connection and try again.",
+                        "Network Error",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Error);
+                });
+                Status = "Network error loading artists";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Unexpected error loading artists: {ex.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        $"An unexpected error occurred while loading followed artists: {ex.Message}",
+                        "Error",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Error);
+                });
+                Status = "Error loading artists";
+            }
             finally
             {
                 _loadArtistsCts?.Dispose();
@@ -1569,6 +1653,22 @@ namespace SpotifyWPF.ViewModel.Page
                         catch (APIException apiEx)
                         {
                             System.Diagnostics.Debug.WriteLine($"Followed artists page fetch failed: {apiEx.Message}");
+                            // Let the outer handler deal with specific status codes
+                            if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.Forbidden ||
+                                apiEx.Response?.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                            {
+                                throw; // Re-throw to be handled by StartLoadFollowedArtistsAsync
+                            }
+                        }
+                        catch (SpotifyWPF.Service.ForbiddenException)
+                        {
+                            // Let the outer handler deal with this
+                            throw;
+                        }
+                        catch (UnauthorizedAccessException)
+                        {
+                            // Let the outer handler deal with this
+                            throw;
                         }
                         catch (Exception ex)
                         {
