@@ -99,7 +99,7 @@ namespace SpotifyWPF.ViewModel.Component
         /// <summary>
         /// Refresh available devices from Spotify API
         /// </summary>
-        public async Task RefreshDevicesAsync()
+        public async Task RefreshDevicesAsync(bool notifySubscribers = true)
         {
             if (_isRefreshingDevices) return;
             _isRefreshingDevices = true;
@@ -208,14 +208,17 @@ namespace SpotifyWPF.ViewModel.Component
                     SelectedDevice = active;
                 }
 
-                // Notify interested parties (UI/menu) that devices changed
-                // Let MainViewModel know the device menu should be refreshed (also used for diagnostics)
-                try
+                if (notifySubscribers)
                 {
-                    // Use VM shim to send a global message for device list changes
-                    GalaSoft.MvvmLight.Messenger.Default.Send<object>(new object(), SpotifyWPF.ViewModel.MessageType.DevicesUpdated);
+                    // Notify interested parties (UI/menu) that devices changed
+                    // Let MainViewModel know the device menu should be refreshed (also used for diagnostics)
+                    try
+                    {
+                        // Use VM shim to send a global message for device list changes
+                        GalaSoft.MvvmLight.Messenger.Default.Send<object>(new object(), SpotifyWPF.ViewModel.MessageType.DevicesUpdated);
+                    }
+                    catch { }
                 }
-                catch { }
             }
             catch (Exception ex)
             {
