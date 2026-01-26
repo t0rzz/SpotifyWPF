@@ -231,5 +231,3 @@ jobs:
             SpotifyWPF.MSIX/msix-signing.cer
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
