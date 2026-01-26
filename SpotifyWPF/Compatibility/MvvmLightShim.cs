@@ -40,6 +40,11 @@ namespace GalaSoft.MvvmLight
             var tk = token?.ToString() ?? string.Empty;
             _inner.Send<T, string>(message, tk);
         }
+
+        public void Unregister(object recipient)
+        {
+            _inner.UnregisterAll(recipient);
+        }
     }
 }
 
