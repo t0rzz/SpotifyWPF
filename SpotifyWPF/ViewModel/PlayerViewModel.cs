@@ -2476,8 +2476,7 @@ namespace SpotifyWPF.ViewModel
 
                 try
                 {
-                    MessengerInstance.Unregister<object>(this, MessageType.DevicesUpdated);
-                    MessengerInstance.Unregister<SpotifyWPF.ViewModel.Messages.PlaybackUpdatePayload>(this, MessageType.PlaybackUpdated);
+                    MessengerInstance.Unregister(this);
                 }
                 catch { }
 
