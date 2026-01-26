@@ -140,7 +140,7 @@ namespace SpotifyWPF.ViewModel
 
             // Subscribe to Web Playback events — delegate state processing to PlayerStateService
             _playerStateService = new Component.PlayerStateService(_deviceManager, _timerManager, _loggingService, UpdateUIFromPlayerState);
-            _webPlaybackBridge.OnPlayerStateChanged += state => _playerStateService.ProcessIncomingState(state);
+            _webPlaybackBridge.OnPlayerStateChanged += OnPlayerStateChanged;
             _playerStateService.OnProcessedState += PlayerStateService_OnProcessedState;
             _playerUiAdapter = new Component.PlayerUIAdapter(_loggingService);
             _playerUiAdapter.AlbumArtReady += img =>
@@ -180,7 +180,7 @@ namespace SpotifyWPF.ViewModel
                         try
                         {
                             _loggingService.LogDebug("[MSG] DevicesUpdated received — triggering quick state refresh");
-                            await _deviceManager.RefreshDevicesAsync();
+                            await _deviceManager.RefreshDevicesAsync(notifySubscribers: false);
                             await RefreshPlayerStateAsync();
                         }
                         catch (Exception ex)
@@ -2461,6 +2461,7 @@ namespace SpotifyWPF.ViewModel
                 {
                     if (_webPlaybackBridge != null)
                     {
+                        _webPlaybackBridge.OnPlayerStateChanged -= OnPlayerStateChanged;
                         _webPlaybackBridge.OnAccountError -= OnAccountError;
                     }
                 }
@@ -2472,6 +2473,21 @@ namespace SpotifyWPF.ViewModel
                     _tokenProvider.AccessTokenRefreshed -= OnAccessTokenRefreshed;
                 }
                 catch { }
+
+                try
+                {
+                    MessengerInstance.Unregister(this);
+                }
+                catch { }
+
+                try
+                {
+                    _deviceManager?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _loggingService?.LogError($"Error disposing DeviceManager in PlayerViewModel.Dispose: {ex.Message}", ex);
+                }
             }
 
             _disposed = true;

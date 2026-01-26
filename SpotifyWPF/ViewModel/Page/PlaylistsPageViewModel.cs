@@ -1137,9 +1137,17 @@ namespace SpotifyWPF.ViewModel.Page
 
         public async Task LoadPlaylistsAsync(CancellationToken cancellationToken = default)
         {
-            if (_spotify.Api == null)
+            if (!await _spotify.EnsureAuthenticatedAsync().ConfigureAwait(false) || _spotify.Api == null)
             {
                 System.Diagnostics.Debug.WriteLine("You must be logged in to load playlists.");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        "You must be logged in to load playlists. Please log in and try again.",
+                        "Login Required",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Information);
+                });
                 return;
             }
 
@@ -1231,6 +1239,10 @@ namespace SpotifyWPF.ViewModel.Page
                         }
                         catch (Exception ex)
                         {
+                            if (ex is SpotifyWPF.Service.ForbiddenException or UnauthorizedAccessException)
+                            {
+                                throw;
+                            }
                             System.Diagnostics.Debug.WriteLine($"Page fetch attempt {attempt} at offset {offset} failed: {ex.Message}");
                             if (ex is SpotifyWPF.Service.RateLimitException rateEx)
                             {
@@ -1368,6 +1380,10 @@ namespace SpotifyWPF.ViewModel.Page
                                 }
                                 catch (Exception ex)
                                 {
+                                    if (ex is SpotifyWPF.Service.ForbiddenException or UnauthorizedAccessException)
+                                    {
+                                        throw;
+                                    }
                                     System.Diagnostics.Debug.WriteLine($"Page fetch attempt {attempt} at offset {off} failed: {ex.Message}");
                                     if (ex is SpotifyWPF.Service.RateLimitException rateEx)
                                     {
@@ -1420,6 +1436,58 @@ namespace SpotifyWPF.ViewModel.Page
                 {
                     System.Diagnostics.Debug.WriteLine($"Completed concurrent fetchers. Loaded {finalCount}/{total} playlists.");
                 }
+            }
+            catch (SpotifyWPF.Service.ForbiddenException forbiddenEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"Forbidden error loading playlists: {forbiddenEx.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        forbiddenEx.Message + "\n\nPlease use Help → Logout, then log in again to fix this issue.",
+                        "Permission Denied",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                });
+                Status = "Permission denied - please log out and log in again";
+            }
+            catch (UnauthorizedAccessException unauthEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"Unauthorized error loading playlists: {unauthEx.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        unauthEx.Message,
+                        "Session Expired",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Warning);
+                });
+                Status = "Session expired - please log in again";
+            }
+            catch (HttpRequestException httpEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"HTTP error loading playlists: {httpEx.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        $"Failed to load playlists: {httpEx.Message}\n\nPlease check your internet connection and try again.",
+                        "Network Error",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Error);
+                });
+                Status = "Network error loading playlists";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Unexpected error loading playlists: {ex.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    System.Windows.MessageBox.Show(
+                        $"An unexpected error occurred while loading playlists: {ex.Message}",
+                        "Error",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Error);
+                });
+                Status = "Error loading playlists";
             }
             finally
             {
