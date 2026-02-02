@@ -217,7 +217,15 @@ chmod +x build_dmg.sh
 ### CI/CD
 The repository includes GitHub Actions workflows that automatically build both platforms. All builds are triggered on pushes to `main`/`master` branches and releases are automatically created with cross-platform artifacts.
 
-## 📋 Recent Changes (v4.0.0)
+## 📋 Recent Changes
+
+### v4.1.5 - 2026-02-02
+- Fix: Throttled device refresh handlers to prevent Spotify API rate limiting
+- Fix: Robust async-safe image loading and caching to prevent cross-thread errors and improve virtualization behavior
+- Fix: Convert track durations to human-readable `m:ss` (and `h:mm:ss` where applicable) in Search → Tracks
+- Fix: Resolved nullable analyzer warnings in `ImageUrlToBitmapConverter`
+
+### v4.0.0 - 2025-11-14
 
 ### Cross-Platform Features
 - **Enhanced Windows User Experience**: Global media key support, system tray functionality, and improved window management

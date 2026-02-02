@@ -54,6 +54,10 @@ namespace SpotifyWPF.ViewModel
     // Semaphore to prevent concurrent track operations (race condition fix)
     private readonly SemaphoreSlim _trackOperationSemaphore = new SemaphoreSlim(1, 1);
 
+    // Throttle DevicesUpdated handler to prevent API flooding
+    private DateTime _lastDevicesUpdatedHandled = DateTime.MinValue;
+    private static readonly TimeSpan DevicesUpdatedThrottleInterval = TimeSpan.FromSeconds(2);
+
     // TaskCompletionSource for waiting on Web Playback SDK device ready
     private TaskCompletionSource<string>? _webDeviceReadyTcs;
 
@@ -174,6 +178,15 @@ namespace SpotifyWPF.ViewModel
             {
                 MessengerInstance.Register<object>(this, MessageType.DevicesUpdated, _ =>
                 {
+                    // Throttle: ignore if called too recently
+                    var now = DateTime.UtcNow;
+                    if ((now - _lastDevicesUpdatedHandled) < DevicesUpdatedThrottleInterval)
+                    {
+                        _loggingService.LogDebug("[MSG] DevicesUpdated throttled — skipping");
+                        return;
+                    }
+                    _lastDevicesUpdatedHandled = now;
+
                     // Fire-and-forget quick refresh; exceptions are safe to ignore here
                     _ = Task.Run(async () =>
                     {

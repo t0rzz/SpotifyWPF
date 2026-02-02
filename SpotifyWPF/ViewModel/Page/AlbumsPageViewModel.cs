@@ -552,6 +552,7 @@ namespace SpotifyWPF.ViewModel.Page
                 if (album != null)
                 {
                     Albums.Add(album);
+                    System.Diagnostics.Debug.WriteLine($"[Albums] Added album: '{album.Name}' Id={album.Id} ImageUrl='{album.ImageUrl}'");
                     _albumIds.Add(albumDto.Id);
                 }
             }

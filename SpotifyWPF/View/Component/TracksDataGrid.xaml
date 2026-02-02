@@ -13,6 +13,7 @@
 
     <UserControl.Resources>
         <localConverter:ArtistsToStringConverter x:Key="ArtistsToStringConverter"/>
+        <conv:MillisecondsToTimeConverter x:Key="MillisecondsToTimeConverter"/>
     </UserControl.Resources>
 
     <DockPanel>
@@ -196,7 +197,7 @@
                 <DataGridTextColumn Header="Name" Binding="{Binding Name}"/>
                 <DataGridTextColumn Header="Artist(s)" Binding="{Binding Artists}"/>
                 <DataGridTextColumn Header="Album" Binding="{Binding AlbumName}"/>
-                <DataGridTextColumn Header="Duration (ms)" Binding="{Binding DurationMs}"/>
+                <DataGridTextColumn Header="Duration" Binding="{Binding DurationMs, Converter={StaticResource MillisecondsToTimeConverter}}"/>
             </DataGrid.Columns>
         </DataGrid>
     </DockPanel>

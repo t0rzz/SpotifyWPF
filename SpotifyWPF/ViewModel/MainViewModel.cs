@@ -31,6 +31,10 @@ namespace SpotifyWPF.ViewModel
         private bool _isRefreshingDevicesMenu;
         private bool _isPlayerInitialized;
 
+        // Throttle DevicesUpdated handler to prevent API flooding
+        private DateTime _lastDevicesUpdatedHandled = DateTime.MinValue;
+        private static readonly TimeSpan DevicesUpdatedThrottleInterval = TimeSpan.FromSeconds(2);
+
         private ViewModelBase? _currentPage;
         private PlayerViewModel? _player;
 
@@ -62,9 +66,18 @@ namespace SpotifyWPF.ViewModel
             MessengerInstance.Register<object>(this, MessageType.LoginSuccessful, LoginSuccessful);
             MessengerInstance.Register<object>(this, MessageType.AuthenticationRequired, OnAuthenticationRequired);
 
-            // Refresh devices menu whenever DeviceManager broadcasts a change
+            // Refresh devices menu whenever DeviceManager broadcasts a change (with throttling)
             MessengerInstance.Register<object>(this, MessageType.DevicesUpdated, _ =>
             {
+                // Throttle: ignore if called too recently to prevent API flooding
+                var now = DateTime.UtcNow;
+                if ((now - _lastDevicesUpdatedHandled) < DevicesUpdatedThrottleInterval)
+                {
+                    System.Diagnostics.Debug.WriteLine("[MainVM] DevicesUpdated throttled — skipping");
+                    return;
+                }
+                _lastDevicesUpdatedHandled = now;
+
                 // Trigger a best-effort async refresh; this avoids waiting when called from background threads
                 _ = Task.Run(async () =>
                 {

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [4.1.5] - 2026-02-02
+
+### Fixed
+
+- Throttled device refresh handlers to prevent Spotify API rate limiting (APITooManyRequestsException)
+- Fixed album artwork loading to be async-safe and cached, preventing cross-thread InvalidOperationExceptions during virtualization
+- Display track duration in human-friendly format (`m:ss` / `h:mm:ss`) in Search → Tracks
+- Addressed nullable analyzer warnings in `ImageUrlToBitmapConverter`
+
 ## [4.1.3] - 2026-01-07
 
 ### Fixed
