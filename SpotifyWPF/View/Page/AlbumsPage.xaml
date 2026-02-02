@@ -12,7 +12,10 @@
 
     <UserControl.Resources>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:BooleanToVisibilityConverterShow x:Key="BooleanToVisibilityConverterShow"/>
         <conv:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+        <conv:BooleanToVisibilityConverterInverse x:Key="BooleanToVisibilityConverterInverse"/>
+        <conv:ImageUrlToBitmapConverter x:Key="ImageUrlToBitmapConverter"/>
         <ContextMenu x:Key="AlbumsContextMenu" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}">
             <ContextMenu.Template>
                 <ControlTemplate TargetType="ContextMenu">
@@ -91,6 +94,22 @@
                     </Ellipse.Fill>
                 </Ellipse>
                 <TextBlock Text="{Binding GreetingText}" FontSize="16" FontWeight="SemiBold" Margin="8,0,0,0"/>
+                <!-- FREE Badge (Spotify-style) -->
+                <Border Visibility="{Binding IsFreeUser, Converter={StaticResource BooleanToVisibilityConverterShow}}"
+                        Background="#1DB954" CornerRadius="12" Margin="8,-2,0,0" Padding="8,2"
+                        BorderBrush="#1DB954" BorderThickness="1"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="FREE" FontSize="10" FontWeight="Bold" Foreground="White"
+                               VerticalAlignment="Center"/>
+                </Border>
+                <!-- PREMIUM Badge -->
+                <Border Visibility="{Binding IsFreeUser, Converter={StaticResource BooleanToVisibilityConverterInverse}}"
+                        Background="#191414" CornerRadius="12" Margin="8,-2,0,0" Padding="8,2"
+                        BorderBrush="#707070" BorderThickness="1"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="PREMIUM" FontSize="10" FontWeight="Bold" Foreground="White"
+                               VerticalAlignment="Center"/>
+                </Border>
             </StackPanel>
         </Border>
 
@@ -179,7 +198,7 @@
                         <DataGridTemplateColumn Header="Cover" Width="60">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <Image Source="{Binding ImageUrl}" Width="50" Height="50" Stretch="UniformToFill"/>
+                                    <Image Source="{Binding ImageUrl, Converter={StaticResource ImageUrlToBitmapConverter}}" Width="50" Height="50" Stretch="UniformToFill"/>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>

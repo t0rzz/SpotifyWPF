@@ -13,6 +13,8 @@
     <UserControl.Resources>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <conv:BooleanToVisibilityConverterShow x:Key="BooleanToVisibilityConverterShow"/>
+        <conv:BooleanToVisibilityConverterInverse x:Key="BooleanToVisibilityConverterInverse"/>
+        <conv:ImageUrlToBitmapConverter x:Key="ImageUrlToBitmapConverter"/>
         <ContextMenu x:Key="PlaylistsContextMenu" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" Padding="4" OverridesDefaultStyle="True" FocusVisualStyle="{x:Null}">
             <ContextMenu.Template>
                 <ControlTemplate TargetType="ContextMenu">
@@ -99,6 +101,14 @@
                         BorderBrush="#1DB954" BorderThickness="1"
                         VerticalAlignment="Center">
                     <TextBlock Text="FREE" FontSize="10" FontWeight="Bold" Foreground="White"
+                               VerticalAlignment="Center"/>
+                </Border>
+                <!-- PREMIUM Badge -->
+                <Border Visibility="{Binding IsFreeUser, Converter={StaticResource BooleanToVisibilityConverterInverse}}"
+                        Background="#191414" CornerRadius="12" Margin="8,-2,0,0" Padding="8,2"
+                        BorderBrush="#707070" BorderThickness="1"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="PREMIUM" FontSize="10" FontWeight="Bold" Foreground="White"
                                VerticalAlignment="Center"/>
                 </Border>
             </StackPanel>

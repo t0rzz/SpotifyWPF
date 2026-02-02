@@ -203,6 +203,13 @@ namespace SpotifyWPF.ViewModel.Page
 
         // Context menu commands
         public string GreetingText { get; private set; } = "Hey there";
+        private bool _isFreeUser;
+        public bool IsFreeUser
+        {
+            get => _isFreeUser;
+            private set { _isFreeUser = value; RaisePropertyChanged(); }
+        }
+
         public string? ProfileImagePath { get; private set; }
 
         private async Task LoadAlbumsAsync()
@@ -455,10 +462,17 @@ namespace SpotifyWPF.ViewModel.Page
             {
                 var name = await _spotify.GetUserDisplayNameAsync().ConfigureAwait(false);
                 var imgPath = await _spotify.GetProfileImageCachedPathAsync().ConfigureAwait(false);
+                var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
+
+                // Normalize name and subscription
+                var trimmedName = string.IsNullOrWhiteSpace(name) ? null : name?.Trim();
+                var isFree = subscriptionType?.ToLowerInvariant() != "premium";
+
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    GreetingText = string.IsNullOrWhiteSpace(name) ? "Hey there" : $"Hey {name}";
+                    GreetingText = string.IsNullOrWhiteSpace(trimmedName) ? "Hey there" : $"Hey {trimmedName}";
                     ProfileImagePath = imgPath ?? string.Empty;
+                    IsFreeUser = isFree;
                 });
             }
             catch { }
