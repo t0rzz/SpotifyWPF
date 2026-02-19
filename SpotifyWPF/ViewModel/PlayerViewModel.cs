@@ -1643,7 +1643,7 @@ namespace SpotifyWPF.ViewModel
                         await App.Current.Dispatcher.InvokeAsync(async () =>
                         {
                             await _webPlaybackBridge.PlayAsync(new[] { track.Uri });
-                        });
+                        }).Task.Unwrap();
                         IsPlaying = true;
                         LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started via JS bridge\n");
                     }

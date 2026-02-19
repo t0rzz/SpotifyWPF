@@ -114,12 +114,18 @@ namespace SpotifyWPF.ViewModel
                     RaisePropertyChanged(nameof(MaxThreadsForOperations));
                 }
 
+                var normalizedRedirectPort = string.Empty;
+                if (!TryNormalizeRedirectPort(_userSpotifyRedirectPort, out normalizedRedirectPort))
+                {
+                    return false;
+                }
+
                 // Save to application settings
                 Properties.Settings.Default["MaxThreadsForOperations"] = _maxThreadsForOperations;
                 Properties.Settings.Default["DefaultMarket"] = _defaultMarket ?? string.Empty;
                 Properties.Settings.Default["MinimizeToTrayOnClose"] = _minimizeToTrayOnClose;
                 Properties.Settings.Default["UserSpotifyClientId"] = _userSpotifyClientId ?? string.Empty;
-                Properties.Settings.Default["UserSpotifyRedirectPort"] = _userSpotifyRedirectPort ?? string.Empty;
+                Properties.Settings.Default["UserSpotifyRedirectPort"] = normalizedRedirectPort;
                 Properties.Settings.Default.Save();
 
                 return true;
@@ -128,6 +134,31 @@ namespace SpotifyWPF.ViewModel
             {
                 return false;
             }
+        }
+
+        private static bool TryNormalizeRedirectPort(string? value, out string normalizedPort)
+        {
+            normalizedPort = string.Empty;
+            var trimmed = value?.Trim() ?? string.Empty;
+
+            // Empty is allowed: app will use the default configured port.
+            if (trimmed.Length == 0)
+            {
+                return true;
+            }
+
+            if (!int.TryParse(trimmed, out var parsedPort))
+            {
+                return false;
+            }
+
+            if (parsedPort < 1 || parsedPort > 65535)
+            {
+                return false;
+            }
+
+            normalizedPort = parsedPort.ToString();
+            return true;
         }
     }
 }

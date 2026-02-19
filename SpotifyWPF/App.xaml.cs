@@ -1,10 +1,12 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using System.Diagnostics;
+using System.Text;
 
 namespace SpotifyWPF
 {
@@ -19,7 +21,9 @@ namespace SpotifyWPF
         {
             // Check for single instance
             string appPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string mutexName = "SpotifyWPF_SingleInstance_" + appPath.GetHashCode().ToString();
+            var appPathBytes = Encoding.UTF8.GetBytes(appPath.ToLowerInvariant());
+            var pathHash = Convert.ToHexString(SHA256.HashData(appPathBytes));
+            string mutexName = @"Local\SpotifyWPF_SingleInstance_" + pathHash;
             _mutex = new System.Threading.Mutex(true, mutexName, out bool createdNew);
             if (!createdNew)
             {

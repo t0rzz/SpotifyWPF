@@ -372,10 +372,10 @@ namespace SpotifyWPF.ViewModel
                 if (mainWindow != null)
                 {
                     LoggingService.LogToFile("MainViewModel: Calling mainWindow.InitializePlayerAfterLoginAsync()\n");
-                    await Application.Current.Dispatcher.InvokeAsync(async () =>
-                    {
-                        await mainWindow.InitializePlayerAfterLoginAsync();
-                    });
+                    await Application.Current.Dispatcher
+                        .InvokeAsync(() => mainWindow.InitializePlayerAfterLoginAsync())
+                        .Task
+                        .Unwrap();
                     LoggingService.LogToFile("MainViewModel: mainWindow.InitializePlayerAfterLoginAsync() completed\n");
                     
                     // Mark as initialized

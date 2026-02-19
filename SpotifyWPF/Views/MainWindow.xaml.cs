@@ -54,6 +54,18 @@ namespace SpotifyWPF.Views
             this.StateChanged += MainWindow_StateChanged;
         }
 
+        private static async Task InvokeOnUiThreadAsync(Func<Task> action)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                await action().ConfigureAwait(false);
+                return;
+            }
+
+            await dispatcher.InvokeAsync(action).Task.Unwrap().ConfigureAwait(false);
+        }
+
         /// <summary>
         /// Initialize WebView2 once for the lifetime of the application
         /// </summary>
@@ -64,7 +76,7 @@ namespace SpotifyWPF.Views
                 LoggingService.LogToFile("InitializeWebView2Async: Starting WebView2 initialization in Loaded event\n");
 
                 // Ensure WebView2 operations are performed on the UI thread
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     LoggingService.LogToFile("InitializeWebView2Async: WebView2 initialization: Checking if already initialized\n");
                     // Check if WebView2 is already initialized

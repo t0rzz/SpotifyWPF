@@ -1155,7 +1155,7 @@ namespace SpotifyWPF.ViewModel.Component
                             try { LoggingService.LogToFile($"[WEB_CALL] Calling WebPlaybackBridge.PlayAsync for URI {track.Uri}\n"); } catch { }
                             await _webPlaybackBridge.PlayAsync(new[] { track.Uri });
                             try { LoggingService.LogToFile($"[WEB_CALL] WebPlaybackBridge.PlayAsync invoked for URI {track.Uri}\n"); } catch { }
-                        });
+                        }).Task.Unwrap();
                         IsPlaying = true;
                         LoggingService.LogToFile("ORCHESTRATE ✅ Click-to-play started via JS bridge\n");
                         try { await _deviceManager.RefreshDevicesAsync(); } catch { }
@@ -1323,7 +1323,7 @@ namespace SpotifyWPF.ViewModel.Component
                 {
                     await _deviceManager.RefreshDevicesAsync();
                     // RefreshPlayerStateAsync will be called by PlayerViewModel
-                });
+                }).Task.Unwrap();
             }
             catch { }
         }

@@ -64,7 +64,7 @@ struct AboutView: View {
                         .multilineTextAlignment(.center)
 
                     // Version info
-                    Text("Version: 4.0.0")
+                    Text("Version: 4.1.6")
                         .font(.system(size: 13))
                         .foregroundColor(Color(NSColor.secondaryLabelColor))
 

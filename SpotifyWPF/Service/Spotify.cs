@@ -61,6 +61,7 @@ namespace SpotifyWPF.Service
         private readonly TokenStorage _tokenStorage = new TokenStorage();
         private TokenInfo? _currentToken;
         private DateTime _lastAuthCheck = DateTime.MinValue;
+        private readonly int _redirectPort;
 
         // Coordina una sola ri-autenticazione per volta tra più worker
         private readonly SemaphoreSlim _authSemaphore = new SemaphoreSlim(1, 1);
@@ -76,17 +77,22 @@ namespace SpotifyWPF.Service
             _loggingService = loggingService ?? throw new ArgumentNullException(nameof(loggingService));
             _tokenProvider = tokenProvider ?? throw new ArgumentNullException(nameof(tokenProvider));
 
-            // Check if port is already in use
-            var port = int.Parse(_settingsProvider.SpotifyRedirectPort);
-            if (IsPortInUse(port))
+            if (!TryParseRedirectPort(_settingsProvider.SpotifyRedirectPort, out _redirectPort))
             {
-                _loggingService.LogWarning($"OAuth port {port} is already in use - this may cause authorization issues");
-                System.Diagnostics.Debug.WriteLine($"Warning: OAuth port {port} is already in use");
+                _redirectPort = 4002;
+                _loggingService.LogWarning($"Invalid OAuth redirect port configuration. Falling back to {_redirectPort}.");
+            }
+
+            // Check if port is already in use
+            if (IsPortInUse(_redirectPort))
+            {
+                _loggingService.LogWarning($"OAuth port {_redirectPort} is already in use - this may cause authorization issues");
+                System.Diagnostics.Debug.WriteLine($"Warning: OAuth port {_redirectPort} is already in use");
             }
 
             _server = new EmbedIOAuthServer(
-                new Uri($"http://127.0.0.1:{_settingsProvider.SpotifyRedirectPort}"),
-                int.Parse(_settingsProvider.SpotifyRedirectPort));
+                new Uri($"http://127.0.0.1:{_redirectPort}"),
+                _redirectPort);
 
             _server.AuthorizationCodeReceived += OnAuthorizationCodeReceived;
             _server.ErrorReceived += OnErrorReceived;
@@ -115,6 +121,22 @@ namespace SpotifyWPF.Service
                 // Port is available
             }
             return false;
+        }
+
+        private static bool TryParseRedirectPort(string? portValue, out int parsedPort)
+        {
+            parsedPort = 0;
+            if (string.IsNullOrWhiteSpace(portValue))
+            {
+                return false;
+            }
+
+            if (!int.TryParse(portValue.Trim(), out parsedPort))
+            {
+                return false;
+            }
+
+            return parsedPort is >= 1 and <= 65535;
         }
 
         private static void InvokeOnUiThread(Action? action)
@@ -249,7 +271,7 @@ namespace SpotifyWPF.Service
             try
             {
                 await _server.Start().ConfigureAwait(false);
-                _loggingService.LogInfo($"OAuth server started on port {_settingsProvider.SpotifyRedirectPort}");
+                _loggingService.LogInfo($"OAuth server started on port {_redirectPort}");
             }
             catch (Exception ex)
             {
@@ -470,14 +492,25 @@ namespace SpotifyWPF.Service
         // Metodo pubblico usato per verificare/ripristinare l'autenticazione basandosi sul token salvato
         public async Task<bool> EnsureAuthenticatedAsync()
         {
-            // Cache authentication check for 10 seconds to avoid excessive API calls
-            if ((DateTime.Now - _lastAuthCheck) < TimeSpan.FromSeconds(10) && Api != null)
+            bool FinalizeResult(bool result)
             {
-                return true;
+                _lastAuthCheck = DateTime.UtcNow;
+                return result;
+            }
+
+            var nowUtc = DateTime.UtcNow;
+
+            // Cache authentication check for 10 seconds to avoid excessive API calls.
+            // The cache is valid only when we still hold a non-expired token and an API client.
+            if ((nowUtc - _lastAuthCheck) < TimeSpan.FromSeconds(10))
+            {
+                var tokenStillValid = _currentToken != null
+                    && !string.IsNullOrWhiteSpace(_currentToken.AccessToken)
+                    && _currentToken.ExpiresAtUtc > nowUtc.AddMinutes(Constants.TokenExpirationBufferMinutes);
+                return Api != null && tokenStillValid;
             }
 
             _loggingService.LogDebug("Checking authentication status");
-            _lastAuthCheck = DateTime.Now;
 
             // Usa cache in memoria se disponibile
             var token = _currentToken;
@@ -490,11 +523,12 @@ namespace SpotifyWPF.Service
             if (token == null)
             {
                 _loggingService.LogWarning("No token found in storage");
-                return false;
+                Api = null;
+                return FinalizeResult(false);
             }
 
             // Se il token sta per scadere o è scaduto, prova refresh
-            if (token.ExpiresAtUtc <= DateTime.UtcNow.AddMinutes(5))
+            if (token.ExpiresAtUtc <= DateTime.UtcNow.AddMinutes(Constants.TokenExpirationBufferMinutes))
             {
                 var timeUntilExpiry = token.ExpiresAtUtc - DateTime.UtcNow;
                 _loggingService.LogInfo($"Token expiring soon: {timeUntilExpiry.TotalMinutes:F1} minutes remaining");
@@ -505,20 +539,23 @@ namespace SpotifyWPF.Service
                     if (!ok) 
                     {
                         _loggingService.LogWarning("Token refresh failed");
-                        return false;
+                        Api = null;
+                        return FinalizeResult(false);
                     }
                     token = _currentToken;
                     if (token == null) 
                     {
                         _loggingService.LogWarning("No token after refresh");
-                        return false;
+                        Api = null;
+                        return FinalizeResult(false);
                     }
                     _loggingService.LogInfo("Token refreshed successfully");
                 }
                 else
                 {
                     _loggingService.LogWarning("No refresh token available");
-                    return false;
+                    Api = null;
+                    return FinalizeResult(false);
                 }
             }
 
@@ -526,7 +563,8 @@ namespace SpotifyWPF.Service
             if (string.IsNullOrWhiteSpace(access))
             {
                 _loggingService.LogWarning("Token has no access token");
-                return false;
+                Api = null;
+                return FinalizeResult(false);
             }
 
             lock (_apiLock)
@@ -544,7 +582,7 @@ namespace SpotifyWPF.Service
             }
 
             _loggingService.LogInfo("Authentication verified successfully");
-            return true;
+            return FinalizeResult(true);
         }
 
         private async Task<bool> TryRefreshAsync(string refreshToken, int attempt = 1)

@@ -86,6 +86,7 @@ This repository contains **two implementations** of the same core Spotify manage
 
 ### Security & Integration
 - OAuth 2.0 authentication
+- Encrypted local token storage (Windows DPAPI)
 - Automatic token refresh
 - Smart API rate limiting with retries
 - Comprehensive error handling
@@ -218,6 +219,14 @@ chmod +x build_dmg.sh
 The repository includes GitHub Actions workflows that automatically build both platforms. All builds are triggered on pushes to `main`/`master` branches and releases are automatically created with cross-platform artifacts.
 
 ## 📋 Recent Changes
+
+### v4.1.6 - 2026-02-19
+- Security: OAuth access/refresh tokens are now stored encrypted at rest (Windows DPAPI, per-user scope)
+- Fix: Deterministic single-instance mutex naming to prevent duplicate app instances caused by unstable hash-based names
+- Fix: Correct async dispatcher awaits in player initialization/playback paths to prevent race conditions
+- Fix: Web Playback bridge now navigates using the provided player URL/path directly (no fragile runtime path climbing)
+- Fix: Added robust redirect-port validation/fallback to prevent startup crashes from invalid user settings
+- Maintenance: Unified cross-platform version metadata (WPF/MSIX/macOS) to `4.1.6`
 
 ### v4.1.5 - 2026-02-02
 - Fix: Throttled device refresh handlers to prevent Spotify API rate limiting

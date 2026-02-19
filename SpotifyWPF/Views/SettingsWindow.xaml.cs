@@ -32,6 +32,14 @@ namespace SpotifyWPF.Views
                 DialogResult = true;
                 Close();
             }
+            else
+            {
+                MessageBox.Show(
+                    "Unable to save settings. Check that Redirect Port is empty or between 1 and 65535.",
+                    "Invalid Settings",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)

@@ -36,6 +36,18 @@ namespace SpotifyWPF.Service
         public event Action<string>? OnReadyDeviceId;
         public event Action<string>? OnAccountError;
 
+        private static async Task InvokeOnUiThreadAsync(Func<Task> action)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                await action().ConfigureAwait(false);
+                return;
+            }
+
+            await dispatcher.InvokeAsync(action).Task.Unwrap().ConfigureAwait(false);
+        }
+
         /// <summary>
         /// Handle web resource requests - allows loading external resources like Spotify SDK
         /// </summary>
@@ -53,11 +65,11 @@ namespace SpotifyWPF.Service
             {
                 LoggingService.LogToFile("WebPlaybackBridge.InitializeAsync - Already initialized, updating token only\n");
                 // If already initialized, just update the token on UI thread
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
-                        var initScript = $"window.initializePlayer('{accessToken}');";
+                        var initScript = $"window.initializePlayer({JsonSerializer.Serialize(accessToken)});";
                         var initResult = await _webView.CoreWebView2.ExecuteScriptAsync(initScript);
                         LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Token updated: {initResult}\n");
                     }
@@ -70,7 +82,7 @@ namespace SpotifyWPF.Service
             try
             {
                 // Ensure all WebView2 operations are performed on the UI thread
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     // Wait for CoreWebView2 to be available if it's not already
                     if (_webView == null || _webView.CoreWebView2 == null)
@@ -121,23 +133,20 @@ namespace SpotifyWPF.Service
                     LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Navigating to: {localHtmlPath}\n");
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
-                        try
+                        var navigationTarget = localHtmlPath;
+                        if (string.IsNullOrWhiteSpace(navigationTarget))
                         {
-                            // Navigate directly to the file URL for now to avoid virtual host mapping issues
-                            var assemblyDir = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!;
-                            var binDir = Path.GetDirectoryName(assemblyDir)!;
-                            var debugDir = Path.GetDirectoryName(binDir)!;
-                            var projectDir = Path.GetDirectoryName(debugDir)!;
-                            var playerHtmlPath = Path.Combine(projectDir, "Assets", "player.html");
-                            var fileUrl = $"file:///{playerHtmlPath.Replace("\\", "/")}";
-                            LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Navigating to: {fileUrl}\n");
-                            _webView.CoreWebView2.Navigate(fileUrl);
+                            throw new ArgumentException("localHtmlPath cannot be null or empty.", nameof(localHtmlPath));
                         }
-                        catch
+
+                        if (!Uri.TryCreate(navigationTarget, UriKind.Absolute, out _))
                         {
-                            // Fallback to file URL
-                            _webView.CoreWebView2.Navigate(localHtmlPath);
+                            var fullPath = Path.GetFullPath(navigationTarget);
+                            navigationTarget = $"file:///{fullPath.Replace("\\", "/")}";
                         }
+
+                        LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync - Final navigation target: {navigationTarget}\n");
+                        _webView.CoreWebView2.Navigate(navigationTarget);
                     }
 
                     // Wait for navigation to complete (or just delay for file URLs)
@@ -186,7 +195,7 @@ namespace SpotifyWPF.Service
 
             try
             {
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
@@ -225,11 +234,12 @@ namespace SpotifyWPF.Service
 
             try
             {
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
-                        var script = $"window.spotifyBridge && window.spotifyBridge.updateToken && window.spotifyBridge.updateToken('{newAccessToken}')";
+                        var escapedToken = JsonSerializer.Serialize(newAccessToken);
+                        var script = $"window.spotifyBridge && window.spotifyBridge.updateToken && window.spotifyBridge.updateToken({escapedToken})";
                         var result = await _webView.CoreWebView2.ExecuteScriptAsync(script);
                         System.Diagnostics.Debug.WriteLine($"🔑 Token update result: {result}");
                     }
@@ -254,7 +264,7 @@ namespace SpotifyWPF.Service
 
             try
             {
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
@@ -288,7 +298,7 @@ namespace SpotifyWPF.Service
 
             try
             {
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
@@ -315,7 +325,7 @@ namespace SpotifyWPF.Service
 
             try
             {
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
@@ -342,7 +352,7 @@ namespace SpotifyWPF.Service
 
             try
             {
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
@@ -367,7 +377,7 @@ namespace SpotifyWPF.Service
 
             try
             {
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
@@ -396,7 +406,7 @@ namespace SpotifyWPF.Service
             try
             {
                 PlayerState? result = null;
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await InvokeOnUiThreadAsync(async () =>
                 {
                     if (_webView != null && _webView.CoreWebView2 != null)
                     {
@@ -535,7 +545,7 @@ namespace SpotifyWPF.Service
 
         private async Task WaitForNavigationComplete()
         {
-            var completionSource = new TaskCompletionSource<bool>();
+            var completionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             
             void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
             {
@@ -543,7 +553,7 @@ namespace SpotifyWPF.Service
                 {
                     _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
                 }
-                completionSource.SetResult(e.IsSuccess);
+                completionSource.TrySetResult(e.IsSuccess);
             }
             
             if (_webView != null && _webView.CoreWebView2 != null)
@@ -553,7 +563,7 @@ namespace SpotifyWPF.Service
             
             // Wait up to 10 seconds for navigation to complete
             var timeoutTask = Task.Delay(10000);
-            var completedTask = await Task.WhenAny(completionSource.Task, timeoutTask);
+            var completedTask = await Task.WhenAny(completionSource.Task, timeoutTask).ConfigureAwait(false);
             
             if (completedTask == timeoutTask)
             {
@@ -564,7 +574,8 @@ namespace SpotifyWPF.Service
                 throw new TimeoutException("Navigation timed out");
             }
             
-            if (!completionSource.Task.Result)
+            var navigationSucceeded = await completionSource.Task.ConfigureAwait(false);
+            if (!navigationSucceeded)
             {
                 throw new InvalidOperationException("Navigation failed");
             }

@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
 
 namespace SpotifyWPF.Service
 {
@@ -23,7 +22,15 @@ namespace SpotifyWPF.Service
     {
         private readonly ConcurrentQueue<LogEntry> _logEntries = new();
         private const int MaxLogEntries = 1000;
+        private const int MaxUiLogEntries = 100;
+        private const long MaxLogFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+        private const int MaxArchivedLogFiles = 5;
         private static readonly object _fileLock = new object();
+        private static readonly string _defaultLogPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Constants.AppDataFolderName,
+            Constants.LogsFolderName,
+            "debug.log");
 
         public ObservableCollection<LogEntry> LogEntries { get; } = new();
 
@@ -64,23 +71,65 @@ namespace SpotifyWPF.Service
         /// <summary>
         /// Thread-safe file logging to prevent concurrent access issues
         /// </summary>
-        public static void LogToFile(string? message, string filePath = @"d:\spotifywpf\debug.log")
+        public static void LogToFile(string? message, string? filePath = null)
         {
             if (message == null) return;
             try
             {
-                System.Diagnostics.Debug.WriteLine($"LogToFile called with: {message.Trim()}");
+                var targetPath = string.IsNullOrWhiteSpace(filePath) ? _defaultLogPath : filePath;
                 lock (_fileLock)
                 {
-                    File.AppendAllText(filePath, message);
+                    EnsureLogDirectoryAndRotateIfNeeded(targetPath);
+                    File.AppendAllText(targetPath, message);
                 }
-                System.Diagnostics.Debug.WriteLine("LogToFile completed successfully");
             }
             catch (Exception ex)
             {
                 // If file logging fails, fall back to debug output
                 System.Diagnostics.Debug.WriteLine($"File logging failed: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"Original message: {message}");
+            }
+        }
+
+        private static void EnsureLogDirectoryAndRotateIfNeeded(string logPath)
+        {
+            var logDirectory = Path.GetDirectoryName(logPath);
+            if (string.IsNullOrWhiteSpace(logDirectory))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(logDirectory);
+
+            if (!File.Exists(logPath))
+            {
+                return;
+            }
+
+            var fileInfo = new FileInfo(logPath);
+            if (fileInfo.Length < MaxLogFileSizeBytes)
+            {
+                return;
+            }
+
+            var archivedFileName = $"debug-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log";
+            var archivedPath = Path.Combine(logDirectory, archivedFileName);
+            File.Move(logPath, archivedPath, true);
+
+            var oldArchives = new DirectoryInfo(logDirectory)
+                .GetFiles("debug-*.log")
+                .OrderByDescending(f => f.CreationTimeUtc)
+                .Skip(MaxArchivedLogFiles);
+
+            foreach (var oldFile in oldArchives)
+            {
+                try
+                {
+                    oldFile.Delete();
+                }
+                catch
+                {
+                    // Ignore cleanup failures; they should not block logging.
+                }
             }
         }
 
@@ -104,7 +153,7 @@ namespace SpotifyWPF.Service
             {
                 LogEntries.Add(entry);
                 // Keep UI collection manageable
-                while (LogEntries.Count > 100)
+                while (LogEntries.Count > MaxUiLogEntries)
                 {
                     LogEntries.RemoveAt(0);
                 }

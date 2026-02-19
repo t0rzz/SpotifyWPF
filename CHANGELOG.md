@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [4.1.6] - 2026-02-19
+
+### Fixed
+
+- Replaced unstable single-instance mutex naming (`GetHashCode`) with a deterministic SHA-256 based mutex key
+- Secured OAuth token persistence by encrypting stored tokens with Windows DPAPI (`CurrentUser` scope) and added plaintext-to-encrypted migration on read
+- Corrected async dispatcher flow (`InvokeAsync(async ...)`) to await inner tasks and avoid race conditions / swallowed exceptions
+- Fixed Web Playback bridge navigation to respect the provided `localHtmlPath` instead of deriving fragile relative paths at runtime
+- Hardened authentication cache logic to avoid reporting valid auth after failed refresh attempts with stale clients
+- Added robust redirect-port validation/fallback in settings and Spotify service startup to prevent crashes from malformed user config
+- Moved debug logging to `%LocalAppData%\\SpotifyWPF\\logs\\debug.log` with log rotation and archive retention
+
+### Changed
+
+- Synchronized platform versioning to `4.1.6` across WPF, MSIX package metadata, and macOS app metadata
+
 ## [4.1.5] - 2026-02-02
 
 ### Fixed
