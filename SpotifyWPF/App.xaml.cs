@@ -49,6 +49,7 @@ namespace SpotifyWPF
                 var logsFolder = Path.Combine(appData, Constants.AppDataFolderName, Constants.LogsFolderName);
                 Directory.CreateDirectory(logsFolder);
                 var debugLogPath = Path.Combine(logsFolder, "debug.log");
+                Service.LoggingService.ResetSupportErrorLog();
                 
                 string? deleteError = null;
                 try
@@ -200,6 +201,12 @@ namespace SpotifyWPF
                     sw.WriteLine(new string('-', 60));
                     sw.WriteLine(ex.ToString());
                 }
+
+                Service.LoggingService.WriteSupportErrorLog(
+                    $"Unhandled exception captured by {source}. Detailed crash log: {Path.GetFileName(file)}",
+                    ex,
+                    source);
+
                 return file;
             }
             catch

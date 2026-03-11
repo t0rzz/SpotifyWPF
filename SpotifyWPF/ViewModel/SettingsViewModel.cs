@@ -75,6 +75,11 @@ namespace SpotifyWPF.ViewModel
 
         public string DefaultSpotifyRedirectPort => Properties.Settings.Default.SpotifyRedirectPort;
 
+        public string DefaultSpotifyRedirectUri => $"http://127.0.0.1:{DefaultSpotifyRedirectPort}/callback";
+
+        public string RedirectUriGuidance =>
+            "Register the exact redirect URI shown above in the Spotify Developer Dashboard. Do not use localhost.";
+
         public bool IsMaxThreadsValid => _maxThreadsForOperations >= 1 && _maxThreadsForOperations <= 10;
 
         public void LoadSettings()

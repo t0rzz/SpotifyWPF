@@ -460,6 +460,7 @@ namespace SpotifyWPF.Views
             {
                 LoggingService.LogToFile($"MainWindow: Player initialization error: {ex.Message}\n");
                 LoggingService.LogToFile($"MainWindow: Stack trace: {ex.StackTrace}\n");
+                _loggingService?.LogError("Main window player initialization failed.", ex);
             }
         }
 

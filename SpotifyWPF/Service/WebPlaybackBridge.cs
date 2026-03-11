@@ -180,6 +180,7 @@ namespace SpotifyWPF.Service
             catch (Exception ex)
             {
                 LoggingService.LogToFile($"WebPlaybackBridge.InitializeAsync failed: {ex.Message}\n");
+                _loggingService.LogError("Web Playback bridge initialization failed.", ex);
                 throw;
             }
         }
@@ -211,6 +212,7 @@ namespace SpotifyWPF.Service
             catch (Exception ex)
             {
                 LoggingService.LogToFile($"WebPlaybackBridge.ConnectAsync error: {ex.Message}\n");
+                _loggingService.LogError("Web Playback bridge connection failed.", ex);
                 throw;
             }
         }
@@ -248,6 +250,7 @@ namespace SpotifyWPF.Service
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"❌ UpdateToken error: {ex.Message}");
+                _loggingService.LogError("Web Playback bridge token update failed.", ex);
                 throw;
             }
         }

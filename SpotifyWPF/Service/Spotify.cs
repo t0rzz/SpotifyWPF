@@ -46,6 +46,26 @@ namespace SpotifyWPF.Service
 
     public class Spotify : ISpotify, IDisposable
     {
+        private const string DefaultSharedClientId = "ff1afc68cbe44b549de01c7b5ecad972";
+        private static readonly string[] RequestedScopes =
+        {
+            Scopes.UserReadPrivate,
+            Scopes.PlaylistModifyPrivate,
+            Scopes.PlaylistModifyPublic,
+            Scopes.PlaylistReadCollaborative,
+            Scopes.PlaylistReadPrivate,
+            Scopes.UgcImageUpload,
+            Scopes.UserReadPlaybackState,
+            Scopes.UserModifyPlaybackState,
+            "user-follow-read",
+            "user-follow-modify",
+            Scopes.Streaming,
+            Scopes.UserReadEmail,
+            Scopes.UserTopRead,
+            Scopes.UserLibraryRead,
+            Scopes.UserLibraryModify
+        };
+
         private readonly ITokenProvider _tokenProvider;
         private readonly ISettingsProvider _settingsProvider;
         private readonly ILoggingService _loggingService;
@@ -70,6 +90,11 @@ namespace SpotifyWPF.Service
         public ISpotifyClient? Api { get; private set; } = null;
 
         public PrivateUser? CurrentUser => _privateProfile;
+
+        private string CurrentScopeSignature => string.Join(" ", RequestedScopes.OrderBy(scope => scope, StringComparer.Ordinal));
+
+        private bool IsUsingDefaultSharedClientId =>
+            string.Equals(_settingsProvider.SpotifyClientId, DefaultSharedClientId, StringComparison.Ordinal);
 
         public Spotify(ISettingsProvider settingsProvider, ILoggingService loggingService, ITokenProvider tokenProvider)
         {
@@ -151,6 +176,72 @@ namespace SpotifyWPF.Service
             {
                 action();
             }
+        }
+
+        private TokenInfo? LoadCompatibleSavedToken()
+        {
+            var saved = _tokenStorage.Load();
+            if (saved == null)
+            {
+                return null;
+            }
+
+            if (IsTokenCompatible(saved))
+            {
+                return saved;
+            }
+
+            _loggingService.LogWarning("Ignoring cached Spotify token because it was created with a different Client ID or permission set.");
+            _tokenStorage.Clear();
+            _currentToken = null;
+            Api = null;
+            _privateProfile = null;
+            return null;
+        }
+
+        private bool IsTokenCompatible(TokenInfo? token)
+        {
+            if (token == null)
+            {
+                return false;
+            }
+
+            return !string.IsNullOrWhiteSpace(token.ClientId) &&
+                   !string.IsNullOrWhiteSpace(token.ScopeSignature) &&
+                   string.Equals(token.ClientId, _settingsProvider.SpotifyClientId, StringComparison.Ordinal) &&
+                   string.Equals(token.ScopeSignature, CurrentScopeSignature, StringComparison.Ordinal);
+        }
+
+        private TokenInfo BuildTokenInfo(string accessToken, string? refreshToken, int expiresInSeconds)
+        {
+            return new TokenInfo
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                ExpiresAtUtc = DateTime.UtcNow.AddSeconds(expiresInSeconds).AddMinutes(-5),
+                ClientId = _settingsProvider.SpotifyClientId,
+                ScopeSignature = CurrentScopeSignature
+            };
+        }
+
+        private string BuildPermissionRecoveryMessage(string featureDescription, string requiredScope)
+        {
+            var builder = new StringBuilder();
+            builder.Append("Spotify denied permission to ")
+                .Append(featureDescription)
+                .Append(". Try Help → Logout, then log in again so the app can request the latest permissions (")
+                .Append(requiredScope)
+                .Append(").");
+
+            if (IsUsingDefaultSharedClientId)
+            {
+                builder.Append(" If this keeps happening, Spotify may be limiting the shared default Client ID. ")
+                    .Append("Open Settings and configure your own Spotify Client ID with redirect URI http://127.0.0.1:")
+                    .Append(_redirectPort)
+                    .Append("/callback.");
+            }
+
+            return builder.ToString();
         }
 
         #region Input Validation Helpers
@@ -241,7 +332,7 @@ namespace SpotifyWPF.Service
             _loggingService.LogInfo("Starting login process");
 
             // Prova token valido da storage
-            var saved = _tokenStorage.Load();
+            var saved = LoadCompatibleSavedToken();
             if (saved != null && !string.IsNullOrWhiteSpace(saved.AccessToken) && saved.ExpiresAtUtc > DateTime.UtcNow.AddMinutes(5))
             {
                 var timeUntilExpiry = saved.ExpiresAtUtc - DateTime.UtcNow;
@@ -290,31 +381,7 @@ namespace SpotifyWPF.Service
             {
                 CodeChallenge = challenge,
                 CodeChallengeMethod = "S256",
-                Scope = new List<string>
-                {
-                    Scopes.UserReadPrivate,
-                    Scopes.PlaylistModifyPrivate,
-                    Scopes.PlaylistModifyPublic,
-                    Scopes.PlaylistReadCollaborative,
-                    Scopes.PlaylistReadPrivate,
-                    // Required for playlist image upload
-                    Scopes.UgcImageUpload,
-                    // Required for devices and playback control
-                    Scopes.UserReadPlaybackState,
-                    Scopes.UserModifyPlaybackState,
-                    // Required for followed artists read/modify
-                    "user-follow-read",
-                    "user-follow-modify",
-                    // CRITICAL: Required for Web Playback SDK
-                    Scopes.Streaming,
-                    // Required for user identification in Web Playback SDK
-                    Scopes.UserReadEmail,
-                    // Required for top tracks and artists
-                    Scopes.UserTopRead,
-                    // Required for saved albums access
-                    Scopes.UserLibraryRead,
-                    Scopes.UserLibraryModify
-                }
+                Scope = RequestedScopes.ToList()
             };
 
             // Salviamo il verifier in memoria (usato al rientro)
@@ -328,6 +395,7 @@ namespace SpotifyWPF.Service
         private async Task OnErrorReceived(object? sender, string error, string? state)
         {
             await _server.Stop().ConfigureAwait(false);
+            _loggingService.LogWarning($"Spotify OAuth returned an error: {error}");
             var tcs = _reauthTcs;
             if (tcs != null)
             {
@@ -358,15 +426,10 @@ namespace SpotifyWPF.Service
 
             try
             {
-                var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn).AddMinutes(-5);
-                _currentToken = new TokenInfo
-                {
-                    AccessToken = tokenResponse.AccessToken,
-                    RefreshToken = tokenResponse.RefreshToken,
-                    ExpiresAtUtc = expiresAt
-                };
+                _currentToken = BuildTokenInfo(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.ExpiresIn);
                 _tokenStorage.Save(_currentToken);
-                _loggingService.LogInfo($"Token saved to storage (expires: {expiresAt})");
+                _loggingService.LogInfo($"Token saved to storage (expires: {_currentToken.ExpiresAtUtc})");
+                _tokenProvider.UpdateToken(tokenResponse.AccessToken);
             }
             catch (Exception ex)
             {
@@ -516,7 +579,7 @@ namespace SpotifyWPF.Service
             var token = _currentToken;
             if (token == null)
             {
-                token = _tokenStorage.Load();
+                token = LoadCompatibleSavedToken();
                 _currentToken = token;
             }
 
@@ -599,13 +662,10 @@ namespace SpotifyWPF.Service
 
                 Api = new SpotifyClient(refreshed.AccessToken);
 
-                var expiresAt = DateTime.UtcNow.AddSeconds(refreshed.ExpiresIn).AddMinutes(-5); // 5-minute buffer instead of 30 seconds
-                _currentToken = new TokenInfo
-                {
-                    AccessToken = refreshed.AccessToken,
-                    RefreshToken = string.IsNullOrWhiteSpace(refreshed.RefreshToken) ? refreshToken : refreshed.RefreshToken,
-                    ExpiresAtUtc = expiresAt
-                };
+                _currentToken = BuildTokenInfo(
+                    refreshed.AccessToken,
+                    string.IsNullOrWhiteSpace(refreshed.RefreshToken) ? refreshToken : refreshed.RefreshToken,
+                    refreshed.ExpiresIn);
                 _tokenStorage.Save(_currentToken);
                 // Notify subscribers that the access token was updated so they can update their SDKs
                 try
@@ -614,8 +674,8 @@ namespace SpotifyWPF.Service
                 }
                 catch { }
 
-                _loggingService.LogInfo($"Refreshed token saved (expires: {expiresAt})");
-                System.Diagnostics.Debug.WriteLine($"🔁 Refresh succeeded. New expiry: {expiresAt:o} (buffer: 5 minutes)");
+                _loggingService.LogInfo($"Refreshed token saved (expires: {_currentToken.ExpiresAtUtc})");
+                System.Diagnostics.Debug.WriteLine($"🔁 Refresh succeeded. New expiry: {_currentToken.ExpiresAtUtc:o} (buffer: 5 minutes)");
                 return true;
             }
             catch (SpotifyAPI.Web.APIException apiEx)
@@ -918,9 +978,9 @@ namespace SpotifyWPF.Service
                 }
                 if (apiEx.Response?.StatusCode == System.Net.HttpStatusCode.Forbidden)
                 {
+                    _loggingService.LogError("Spotify returned 403 Forbidden while loading playlists.", apiEx);
                     throw new ForbiddenException(
-                        "Access denied: You may need to log out and log back in to grant permission to view playlists. " +
-                        "This happens when the app requires new permissions that weren't requested during your initial login.",
+                        BuildPermissionRecoveryMessage("load your playlists", "playlist-read-private"),
                         "playlist-read-private",
                         apiEx);
                 }
@@ -1355,9 +1415,9 @@ namespace SpotifyWPF.Service
 
             if (res.StatusCode == System.Net.HttpStatusCode.Forbidden)
             {
+                _loggingService.LogError("Spotify returned 403 Forbidden while loading followed artists.");
                 throw new ForbiddenException(
-                    "Access denied: You may need to log out and log back in to grant permission to view followed artists. " +
-                    "This happens when the app requires new permissions that weren't requested during your initial login.",
+                    BuildPermissionRecoveryMessage("load followed artists", "user-follow-read"),
                     "user-follow-read");
             }
 

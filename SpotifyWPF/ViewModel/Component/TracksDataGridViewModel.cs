@@ -28,7 +28,7 @@ namespace SpotifyWPF.ViewModel.Component
             PlayToDeviceCommand = new RelayCommand<string>(async param => 
             {
                 var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
-                if (subscriptionType?.ToLower() != "premium")
+                if (string.Equals(subscriptionType, "free", System.StringComparison.OrdinalIgnoreCase))
                 {
                     System.Diagnostics.Debug.WriteLine($"[TracksDataGrid] PlayToDeviceCommand: User does not have premium subscription (subscriptionType={subscriptionType}), showing modal and blocking access");
                     _subscriptionDialogService.ShowSubscriptionDialog("Premium Feature Required", "Playing music on specific devices requires a Spotify Premium subscription. Upgrade to access this feature.", "Play to Device", "Transfer playback to any of your connected devices");
@@ -39,7 +39,7 @@ namespace SpotifyWPF.ViewModel.Component
             RefreshDevicesCommand = new RelayCommand(async () =>
             {
                 var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
-                if (subscriptionType?.ToLower() == "premium")
+                if (!string.Equals(subscriptionType, "free", System.StringComparison.OrdinalIgnoreCase))
                 {
                     await RefreshDevicesAsync();
                 }

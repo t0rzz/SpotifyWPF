@@ -210,6 +210,20 @@ namespace SpotifyWPF.ViewModel.Page
             private set { _isFreeUser = value; RaisePropertyChanged(); }
         }
 
+        private bool _showFreeBadge;
+        public bool ShowFreeBadge
+        {
+            get => _showFreeBadge;
+            private set { _showFreeBadge = value; RaisePropertyChanged(); }
+        }
+
+        private bool _showPremiumBadge;
+        public bool ShowPremiumBadge
+        {
+            get => _showPremiumBadge;
+            private set { _showPremiumBadge = value; RaisePropertyChanged(); }
+        }
+
         public string? ProfileImagePath { get; private set; }
 
         private async Task LoadAlbumsAsync()
@@ -466,13 +480,16 @@ namespace SpotifyWPF.ViewModel.Page
 
                 // Normalize name and subscription
                 var trimmedName = string.IsNullOrWhiteSpace(name) ? null : name?.Trim();
-                var isFree = subscriptionType?.ToLowerInvariant() != "premium";
+                var isFree = string.Equals(subscriptionType, "free", StringComparison.OrdinalIgnoreCase);
+                var isPremium = string.Equals(subscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     GreetingText = string.IsNullOrWhiteSpace(trimmedName) ? "Hey there" : $"Hey {trimmedName}";
                     ProfileImagePath = imgPath ?? string.Empty;
                     IsFreeUser = isFree;
+                    ShowFreeBadge = isFree;
+                    ShowPremiumBadge = isPremium;
                 });
             }
             catch { }

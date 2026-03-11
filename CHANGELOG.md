@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [4.1.7] - 2026-03-11
+
+### Fixed
+
+- Invalidated cached OAuth tokens when the configured Spotify Client ID or requested scope set changes, preventing stale post-login authorization failures
+- Relaxed Premium gating to block only explicit `free` accounts, avoiding false negatives when Spotify does not return subscription metadata
+- Removed fake fallback top tracks so API failures are surfaced as real errors instead of placeholder content
+- Corrected Spotify redirect guidance to use the exact loopback callback URI (`http://127.0.0.1:{port}/callback`)
+- Added a sanitized `%LocalAppData%\\SpotifyWPF\\logs\\support-errors.log` file for user-facing troubleshooting without leaking tokens
+
+### Changed
+
+- Synchronized platform version metadata to `4.1.7` across WPF, MSIX package metadata, and macOS app metadata
+
 ## [4.1.6] - 2026-02-19
 
 ### Fixed

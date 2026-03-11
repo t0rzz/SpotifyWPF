@@ -288,6 +288,40 @@ namespace SpotifyWPF.ViewModel
             }
         }
 
+        private void UpdateSubscriptionState(string? subscriptionType)
+        {
+            _userSubscriptionType = subscriptionType ?? string.Empty;
+
+            try
+            {
+                if (Application.Current != null && !Application.Current.Dispatcher.CheckAccess())
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        RaisePropertyChanged(nameof(UserSubscriptionType));
+                        RaisePropertyChanged(nameof(IsSeekEnabled));
+                        RaisePropertyChanged(nameof(IsVolumeEnabled));
+                        RaisePropertyChanged(nameof(IsPlaybackEnabled));
+                        RaisePropertyChanged(nameof(SeekTooltip));
+                        RaisePropertyChanged(nameof(VolumeTooltip));
+                    });
+                }
+                else
+                {
+                    RaisePropertyChanged(nameof(UserSubscriptionType));
+                    RaisePropertyChanged(nameof(IsSeekEnabled));
+                    RaisePropertyChanged(nameof(IsVolumeEnabled));
+                    RaisePropertyChanged(nameof(IsPlaybackEnabled));
+                    RaisePropertyChanged(nameof(SeekTooltip));
+                    RaisePropertyChanged(nameof(VolumeTooltip));
+                }
+            }
+            catch (Exception ex)
+            {
+                _loggingService.LogDebug($"Failed to raise subscription property changes: {ex.Message}");
+            }
+        }
+
         private void PlayerStateService_OnProcessedState(SpotifyWPF.Model.ProcessedPlayerState processed)
         {
             try
@@ -598,30 +632,32 @@ namespace SpotifyWPF.ViewModel
         /// </summary>
         public string UserSubscriptionType => _userSubscriptionType;
 
+        private bool HasExplicitFreeSubscription => string.Equals(_userSubscriptionType, "free", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>
         /// Whether seek controls are enabled (requires premium)
         /// </summary>
-        public bool IsSeekEnabled => string.Equals(_userSubscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
+        public bool IsSeekEnabled => !HasExplicitFreeSubscription;
 
         /// <summary>
         /// Whether volume controls are enabled (requires premium)
         /// </summary>
-        public bool IsVolumeEnabled => string.Equals(_userSubscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
+        public bool IsVolumeEnabled => !HasExplicitFreeSubscription;
 
         /// <summary>
         /// Whether playback controls are enabled (requires premium)
         /// </summary>
-        public bool IsPlaybackEnabled => string.Equals(_userSubscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
+        public bool IsPlaybackEnabled => !HasExplicitFreeSubscription;
 
         /// <summary>
         /// Tooltip for seek slider
         /// </summary>
-        public string SeekTooltip => IsSeekEnabled ? string.Empty : "Seek control requires Spotify Premium";
+        public string SeekTooltip => HasExplicitFreeSubscription ? "Seek control requires Spotify Premium" : string.Empty;
 
         /// <summary>
         /// Tooltip for volume slider
         /// </summary>
-        public string VolumeTooltip => IsVolumeEnabled ? string.Empty : "Volume control requires Spotify Premium";
+        public string VolumeTooltip => HasExplicitFreeSubscription ? "Volume control requires Spotify Premium" : string.Empty;
 
         #endregion
 
@@ -1687,23 +1723,22 @@ namespace SpotifyWPF.ViewModel
                         // Refresh devices after WebPlayback is ready
                         await _deviceManager.RefreshDevicesAsync();
                         LoggingService.LogToFile("PlayerViewModel: Devices refreshed in background\n");
-#if DEBUG
                         try
                         {
                             var subscription = await _spotify.GetUserSubscriptionTypeAsync();
-                            _userSubscriptionType = subscription ?? string.Empty;
+                            UpdateSubscriptionState(subscription);
                             try { LoggingService.LogToFile($"[SUBSCRIPTION_TYPE] {DateTime.UtcNow:o} - Subscription: {subscription ?? "(unknown)"}\n"); } catch { }
                             _loggingService.LogInfo($"[SUBSCRIPTION_TYPE] {subscription}");
                         }
                         catch (Exception ex)
                         {
-                            _loggingService.LogDebug($"Failed to log subscription type: {ex.Message}");
+                            _loggingService.LogError("Failed to resolve Spotify subscription type during player initialization.", ex);
                         }
-#endif
                     }
                     catch (Exception ex)
                     {
                         LoggingService.LogToFile($"PlayerViewModel: Error in background WebPlaybackBridge initialization: {ex.Message}\n");
+                        _loggingService.LogError("Background Web Playback initialization failed.", ex);
                     }
                 });
                 
@@ -2280,57 +2315,22 @@ namespace SpotifyWPF.ViewModel
             }
             catch (Exception ex)
             {
+                _loggingService.LogError("Failed to load top tracks from Spotify.", ex);
                 LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: ERROR in LoadUserTopTracksAsync: {ex.Message}\n");
                 LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Exception type: {ex.GetType().FullName}\n");
                 LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Stack trace: {ex.StackTrace}\n");
 
-                // Don't clear tracks on error - instead load some fallback tracks so UI isn't empty
+                // Keep the panel empty on error instead of showing fake tracks.
                 await App.Current.Dispatcher.InvokeAsync(() =>
                 {
                     if (TopTracks.Count == 0)
                     {
-                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Loading fallback tracks due to API error\n");
-
-                        try
-                        {
-                            // Add a few fallback tracks so the UI shows something
-                            TopTracks.Add(new TrackModel
-                            {
-                                Id = "fallback-1",
-                                Title = "API Error - Fallback Track 1",
-                                Artist = "Test Artist",
-                                DurationMs = 180000,
-                                Uri = "spotify:track:fallback1"
-                            });
-
-                            TopTracks.Add(new TrackModel
-                            {
-                                Id = "fallback-2",
-                                Title = "API Error - Fallback Track 2",
-                                Artist = "Test Artist",
-                                DurationMs = 200000,
-                                Uri = "spotify:track:fallback2"
-                            });
-
-                            TopTracks.Add(new TrackModel
-                            {
-                                Id = "fallback-3",
-                                Title = "API Error - Fallback Track 3",
-                                Artist = "Test Artist",
-                                DurationMs = 220000,
-                                Uri = "spotify:track:fallback3"
-                            });
-
-                            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Added {TopTracks.Count} fallback tracks to collection\n");
-                        }
-                        catch (Exception fallbackEx)
-                        {
-                            LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: ERROR loading fallback tracks: {fallbackEx.Message}\n");
-                        }
+                        TopTracks.Clear();
+                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Leaving top tracks empty after API error\n");
                     }
                     else
                     {
-                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Keeping existing {TopTracks.Count} tracks in collection (not loading fallbacks)\n");
+                        LoggingService.LogToFile($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] TOP_TRACKS: Keeping existing {TopTracks.Count} tracks in collection after API error\n");
                     }
                 });
 

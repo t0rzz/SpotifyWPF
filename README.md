@@ -220,6 +220,13 @@ The repository includes GitHub Actions workflows that automatically build both p
 
 ## 📋 Recent Changes
 
+### v4.1.7 - 2026-03-11
+- Fix: Reject cached OAuth tokens when the Spotify Client ID or requested scopes no longer match the running app
+- Fix: Only treat users as non-Premium when Spotify explicitly reports `free`, reducing false playback/device restrictions
+- Fix: Remove placeholder fallback tracks on API failure and surface real diagnostics instead
+- Fix: Correct custom app redirect guidance to `http://127.0.0.1:{port}/callback`
+- Support: Added `%LocalAppData%\\SpotifyWPF\\logs\\support-errors.log`, a sanitized error-only log suitable for collecting from users
+
 ### v4.1.6 - 2026-02-19
 - Security: OAuth access/refresh tokens are now stored encrypted at rest (Windows DPAPI, per-user scope)
 - Fix: Deterministic single-instance mutex naming to prevent duplicate app instances caused by unstable hash-based names

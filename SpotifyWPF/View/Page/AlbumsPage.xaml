@@ -95,7 +95,7 @@
                 </Ellipse>
                 <TextBlock Text="{Binding GreetingText}" FontSize="16" FontWeight="SemiBold" Margin="8,0,0,0"/>
                 <!-- FREE Badge (Spotify-style) -->
-                <Border Visibility="{Binding IsFreeUser, Converter={StaticResource BooleanToVisibilityConverterShow}}"
+                <Border Visibility="{Binding ShowFreeBadge, Converter={StaticResource BooleanToVisibilityConverterShow}}"
                         Background="#1DB954" CornerRadius="12" Margin="8,-2,0,0" Padding="8,2"
                         BorderBrush="#1DB954" BorderThickness="1"
                         VerticalAlignment="Center">
@@ -103,7 +103,7 @@
                                VerticalAlignment="Center"/>
                 </Border>
                 <!-- PREMIUM Badge -->
-                <Border Visibility="{Binding IsFreeUser, Converter={StaticResource BooleanToVisibilityConverterInverse}}"
+                <Border Visibility="{Binding ShowPremiumBadge, Converter={StaticResource BooleanToVisibilityConverterShow}}"
                         Background="#191414" CornerRadius="12" Margin="8,-2,0,0" Padding="8,2"
                         BorderBrush="#707070" BorderThickness="1"
                         VerticalAlignment="Center">

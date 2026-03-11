@@ -11,6 +11,8 @@ namespace SpotifyWPF.Service
         public string? AccessToken { get; set; }
         public string? RefreshToken { get; set; }
         public DateTime ExpiresAtUtc { get; set; }
+        public string? ClientId { get; set; }
+        public string? ScopeSignature { get; set; }
     }
 
     public class TokenStorage

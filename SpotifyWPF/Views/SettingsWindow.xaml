@@ -227,7 +227,14 @@
                                        FontFamily="Segoe UI"
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,15"
-                                       Text="{Binding DefaultSpotifyRedirectPort, StringFormat='Default: {0} (callback: http://localhost:{0}/callback)'}"/>
+                                       Text="{Binding DefaultSpotifyRedirectUri, StringFormat='Default redirect URI: {0}'}"/>
+
+                            <TextBlock FontSize="12"
+                                       Foreground="{DynamicResource SubtleForegroundBrush}"
+                                       FontFamily="Segoe UI"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8"
+                                       Text="{Binding RedirectUriGuidance}"/>
 
                             <TextBlock FontSize="12"
                                        Foreground="{DynamicResource SubtleForegroundBrush}"

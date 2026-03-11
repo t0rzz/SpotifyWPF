@@ -548,6 +548,20 @@ namespace SpotifyWPF.ViewModel.Page
             set { _isFreeUser = value; RaisePropertyChanged(); }
         }
 
+        private bool _showFreeBadge;
+        public bool ShowFreeBadge
+        {
+            get => _showFreeBadge;
+            set { _showFreeBadge = value; RaisePropertyChanged(); }
+        }
+
+        private bool _showPremiumBadge;
+        public bool ShowPremiumBadge
+        {
+            get => _showPremiumBadge;
+            set { _showPremiumBadge = value; RaisePropertyChanged(); }
+        }
+
         private string? _profileImagePath;
         public string? ProfileImagePath
         {
@@ -570,7 +584,11 @@ namespace SpotifyWPF.ViewModel.Page
                     GreetingText = greeting;
                     ProfileImagePath = imgPath;
                     CurrentUserId = profile?.Id;
-                    IsFreeUser = subscriptionType?.ToLower() != "premium";
+                    var isFree = string.Equals(subscriptionType, "free", StringComparison.OrdinalIgnoreCase);
+                    var isPremium = string.Equals(subscriptionType, "premium", StringComparison.OrdinalIgnoreCase);
+                    IsFreeUser = isFree;
+                    ShowFreeBadge = isFree;
+                    ShowPremiumBadge = isPremium;
                 });
             }
             catch { }
@@ -727,7 +745,7 @@ namespace SpotifyWPF.ViewModel.Page
             try
             {
                 var subscriptionType = await _spotify.GetUserSubscriptionTypeAsync().ConfigureAwait(false);
-                if (subscriptionType?.ToLower() == "premium")
+                if (!string.Equals(subscriptionType, "free", StringComparison.OrdinalIgnoreCase))
                 {
                     var list = await _spotify.GetDevicesAsync().ConfigureAwait(false);
                     await Application.Current.Dispatcher.BeginInvoke((Action)(() =>
