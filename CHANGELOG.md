@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [4.1.8] - 2026-03-12
+
+### Fixed
+
+- Corrected WPF player initialization to prefer the local Web Playback host URL before deriving filesystem paths, preventing `ArgumentNullException` crashes in installed builds
+
+### Changed
+
+- Synchronized platform version metadata to `4.1.8` across WPF, MSIX package metadata, and macOS app metadata
+
 ## [4.1.7] - 2026-03-11
 
 ### Fixed
@@ -13,10 +23,6 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Removed fake fallback top tracks so API failures are surfaced as real errors instead of placeholder content
 - Corrected Spotify redirect guidance to use the exact loopback callback URI (`http://127.0.0.1:{port}/callback`)
 - Added a sanitized `%LocalAppData%\\SpotifyWPF\\logs\\support-errors.log` file for user-facing troubleshooting without leaking tokens
-
-### Changed
-
-- Synchronized platform version metadata to `4.1.7` across WPF, MSIX package metadata, and macOS app metadata
 
 ## [4.1.6] - 2026-02-19
 

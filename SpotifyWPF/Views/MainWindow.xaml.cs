@@ -469,31 +469,34 @@ namespace SpotifyWPF.Views
         /// </summary>
         private string GetPlayerHtmlPath()
         {
-            var appDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            var debugDir = Path.GetDirectoryName(appDir);
-            var binDir = Path.GetDirectoryName(debugDir);
-            var projectDir = Path.GetDirectoryName(binDir);
-            var playerPath = Path.Combine(projectDir!, "Assets", "player.html");
-            
             // Prefer local HTTP host if available so Web Playback SDK registers origin correctly
             if (!string.IsNullOrEmpty(WebPlaybackHost.Url))
             {
                 return WebPlaybackHost.Url!;
             }
 
-            if (File.Exists(playerPath))
+            var baseDirectory = AppContext.BaseDirectory;
+            var assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            var currentDirectory = Directory.GetCurrentDirectory();
+            var candidatePaths = new[]
             {
-                return $"file:///{playerPath.Replace('\\', '/')}";
-            }
-            
-            // Fallback: try relative path
-            var relativePath = Path.Combine("Assets", "player.html");
-            if (File.Exists(relativePath))
+                Path.Combine(baseDirectory, "Assets", "player.html"),
+                !string.IsNullOrEmpty(assemblyDirectory) ? Path.Combine(assemblyDirectory, "Assets", "player.html") : null,
+                Path.Combine(currentDirectory, "Assets", "player.html")
+            };
+
+            foreach (var candidatePath in candidatePaths)
             {
-                return $"file:///{Path.GetFullPath(relativePath).Replace('\\', '/')}";
+                if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
+                {
+                    continue;
+                }
+
+                return new Uri(candidatePath).AbsoluteUri;
             }
-            
-            throw new FileNotFoundException("player.html not found");
+
+            var checkedPaths = string.Join(", ", candidatePaths.Where(path => !string.IsNullOrWhiteSpace(path)));
+            throw new FileNotFoundException($"player.html not found. Checked: {checkedPaths}");
         }
 
         /// <summary>

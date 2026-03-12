@@ -220,6 +220,9 @@ The repository includes GitHub Actions workflows that automatically build both p
 
 ## 📋 Recent Changes
 
+### v4.1.8 - 2026-03-12
+- Fix: Prevent installed WPF builds from crashing during player startup when debug-only path discovery returns a null parent directory
+
 ### v4.1.7 - 2026-03-11
 - Fix: Reject cached OAuth tokens when the Spotify Client ID or requested scopes no longer match the running app
 - Fix: Only treat users as non-Premium when Spotify explicitly reports `free`, reducing false playback/device restrictions
